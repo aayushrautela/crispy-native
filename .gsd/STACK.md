@@ -57,4 +57,4 @@
 | Context | Path | Technology |
 |---------|------|------------|
 | Web UI | `../Crispy-webui` | Vite, React, Tailwind, Supabase |
-| Legacy Android | `../app` | Native Android (Kotlin/Gradle) |
+| Legacy Android | `../crispy-android` | Native Android (Kotlin/Gradle) |

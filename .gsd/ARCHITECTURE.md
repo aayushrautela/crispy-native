@@ -74,7 +74,7 @@ graph TD
   - `src/core/api`: Logic for Supabase and Trakt integrations.
   - `supabase_schema.sql`: Database structure reference.
 
-### Legacy Android (`app`)
+### Legacy Android (`../crispy-android`)
 - **Role**: Reference for native Android integrations (likely MPV or ExoPlayer logic).
 - **Key Modules**:
   - `app/src/main/java`: Original Kotlin business logic.
