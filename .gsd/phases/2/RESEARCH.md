@@ -1,63 +1,62 @@
 ---
 phase: 2
-level: 2
+level: 1
 researched_at: 2026-01-18
 ---
 
-# Phase 2 Research: Addon Engine & Provider Layer
+# Phase 2 Research: Testing Strategy
 
 ## Questions Investigated
-1. How to implement the Stremio Addon V3 protocol in React Native?
-2. How to handle CORS and proxying for external addons on Android?
-3. How to aggregate results from multiple addons efficiently?
-4. How to integrate the native torrent engine (jlibtorrent) with the React Native layer?
+1. How to verify the `AddonService` logic without making real network calls?
+2. How to test Zustand store persistence with MMKV?
+3. What is the best way to verify the `DiscoveryContext` orchestration?
 
 ## Findings
 
-### Stremio Addon Protocol (V3)
-The protocol follows a standard structure:
-- **Manifest**: `GET /manifest.json`
-- **Catalog**: `GET /catalog/{type}/{id}/{extra}.json`
-- **Streams**: `GET /stream/{type}/{id}.json`
-- **Subtitles**: `GET /subtitles/{type}/{id}.json`
+### 1. Mocking Stremio Addons
+Since addons are external HTTP services following the Stremio protocol, we should use **Jest** and `jest-mock-axios` (or `msw` for more complex scenarios).
 
-**Recommendation:** Implement a `StremioAddonService` in TypeScript that mimics the `StremioAddonApi.ts` found in `Crispy-webui`. Use `Promise.allSettled` for result aggregation.
+**Recommendation:**
+- Create a `mocker/addons.ts` file that provides valid Stremio Manifest and Catalog JSON responses.
+- Use `axios` interceptors or Jest mocks to return these when `AddonService` is called.
 
-### Native Proxy & Torrent Engine
-The legacy Android app uses `NanoHTTPD` to run a local server (`127.0.0.1:11470`) for two purposes:
-1. **Proxying**: Bypassing CORS for the WebUI/JS layer.
-2. **Torrent Streaming**: Specifically serving jlibtorrent streams with `Range` request support to the video player (MPV).
+### 2. Testing Store Persistence
+The `addonStore` uses `zustand/middleware` with `persist`. 
+**Decision:**
+- Mock the `StorageService` to verify that `setItem` is called when an addon is added.
+- Verify that `getItem` is called during store initialization to hydrate the state.
 
-**Recommendation:** For `crispy-native`, we should port `CrispyServer.kt` and `TorrentService.kt` to a **React Native Native Module**. This module will:
-- Start the local NanoHTTPD server on app launch.
-- Expose a `resolveStream` method to the JS layer.
-- If the stream is a torrent (infoHash), the Native Module starts the `TorrentService` and returns the `localhost` URL.
-
-### Data Deduplication
-The WebUI implementation uses ID-based deduplication for catalog metadata (`metas`). We should follow this pattern in the `ProviderStore` (Zustand).
+### 3. Verification Commands
+The following verification methods are recommended for Phase 2:
+- **Unit Tests**: `src/core/api/AddonService.test.ts`
+- **Unit Tests**: `src/core/stores/addonStore.test.ts`
+- **Manual Proof**: Logging the `manifests` object from `useAddonStore` in a debug screen.
 
 ## Decisions Made
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Addon Fetching | JS Layer (TypeScript) | Flexible, easy to update, and mirrors `stremio-web` logic. |
-| Proxy/Torrent | Native Module (Kotlin) | Required for `jlibtorrent` and `NanoHTTPD` performance and Android background service requirements. |
-| Result Aggregation | Promise.allSettled | Non-blocking, handles partial failures gracefully. |
+| Testing Library | Jest + RNTL | Standard and robust for React Native. |
+| Network Mocking | axios-mock-adapter | Lightweight and fits the current `axios` implementation. |
+| Persistence Mock | Mock `StorageService` | Easiest way to verify MMKV interaction without native dependencies. |
 
 ## Patterns to Follow
-- **Direct-then-Proxy Strategy**: Try fetching directly first; if it fails (CORS), fall back to the local native proxy.
-- **Sequential Priority**: Ensure `jlibtorrent` is configured for sequential downloading and header piece prioritization (pieces 0-2).
-- **Ephemeral Playback**: Delete torrent data immediately after playback or on app exit.
+- **Behavior-Driven Tests**: Test what the user does (Add URL) rather than implementation details.
+- **Data Validation**: Ensure the `AddonManifest` interface is strictly followed after fetching.
+
+## Anti-Patterns to Avoid
+- **Real Network Calls**: Avoid hitting real `baby-beamup.club` or other addon URLs during CI.
+- **Deep Component Testing**: Focus on the logic layer (stores/services) first, as UI is still evolving.
 
 ## Dependencies Identified
 | Package | Version | Purpose |
 |---------|---------|---------|
-| NanoHTTPD | 2.3.1 | Local HTTP server for proxy/streaming. |
-| jlibtorrent | Latest | Torrent engine. |
-| axios | ^1.13.2 | HTTP client for addon communication (JS). |
+| `jest` | ^29.x | Test runner. |
+| `axios-mock-adapter` | ^2.x | Mocking addon HTTP responses. |
+| `@testing-library/react-native` | ^12.x | UI testing if needed later. |
 
 ## Risks
-- **Background Persistence**: Android may kill the local server/torrent service. **Mitigation**: Run as a Foreground Service with a persistent notification.
-- **Port Conflicts**: Port 11470 might be used. **Mitigation**: Handle `BindException` and retry on a random port if necessary (notifying the JS layer).
+- **Protocol Mismatch**: Real addons might change their response structure. 
+- *Mitigation*: Implement a Zod schema validator in `AddonService` later to catch breaking changes.
 
 ## Ready for Planning
 - [x] Questions answered
