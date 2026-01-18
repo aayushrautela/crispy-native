@@ -52,3 +52,9 @@
 | tailwindcss | 3.4.19 | 4.1.18 | High (Major overhaul) |
 | react-native | 0.81.5 | 0.83.1 | Low (Patch/Minor) |
 | zustand | 5.0.10 | 5.0.3 | - |
+## Reference Codebases
+
+| Context | Path | Technology |
+|---------|------|------------|
+| Web UI | `../Crispy-webui` | Vite, React, Tailwind, Supabase |
+| Legacy Android | `../app` | Native Android (Kotlin/Gradle) |

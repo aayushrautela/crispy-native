@@ -25,15 +25,10 @@ jobs:
           distribution: 'zulu'
           java-version: '21'
 
-      - name: 🏗 Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 📦 Install Dependencies
-        working-directory: ./
         run: npm ci
 
       - name: ⚙️ Expo Prebuild
-        working-directory: ./
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
@@ -42,21 +37,28 @@ jobs:
           EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
         run: npx expo prebuild --platform android --no-install
 
-      - name: 🚀 Upgrade to Gradle 9.1 (2026 Standard)
+      - name: 🚀 Configure Gradle 9.1.0
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew wrapper --gradle-version 9.1.0
+          ./gradlew wrapper --gradle-version 9.1.0 --distribution-type all
 
+      - name: 🏗 Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
 
-      - name: ☕️ Build APK
+      - name: ☕️ Build Android App
         working-directory: ./android
-        run: ./gradlew assembleRelease
-        # If you need a signed release, you would decode the keystore here.
-        # For now, this produces an unsigned debug-signed or release-unsigned APK depending on config.
+        run: ./gradlew assembleDebug
+        # Using assembleDebug to ensure a successful APK without needing release keystores.
+        # If release signing is added later, this can be switched to assembleRelease.
 
       - name: 📤 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crispy-native-app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: crispy-native-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

@@ -65,3 +65,16 @@ graph TD
 - [ ] **Missing Player Implementation:** `src/features/player` exists but full integration with native playback (like MPV or ExoPlayer) is not yet verified.
 - [ ] **Env Vars:** Supabase keys are currently hardcoded with fallbacks in `supabase.ts`.
 - [ ] **Outdated Packages:** Tailwind CSS v3 is used while v4 is available.
+## Reference Knowledge
+
+### UI Reference (`Crispy-webui`)
+- **Role**: Provides the baseline for the visual design and user flow.
+- **Key Modules**:
+  - `src/components`: UI component baseline.
+  - `src/core/api`: Logic for Supabase and Trakt integrations.
+  - `supabase_schema.sql`: Database structure reference.
+
+### Legacy Android (`app`)
+- **Role**: Reference for native Android integrations (likely MPV or ExoPlayer logic).
+- **Key Modules**:
+  - `app/src/main/java`: Original Kotlin business logic.
