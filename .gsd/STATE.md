@@ -1,14 +1,18 @@
-# Project State
+# Project State: Crispy Native
 
-> Last Updated: 2026-01-18
+- **Current Phase**: Phase 2: Addon Engine & Provider Layer
+- **Status**: STARTING
+- **Recent Accomplishments**: 
+  - Completed Phase 1: Foundation & Identity (Theme Engine, Auth Flow, Adaptive Navigation).
+  - Implemented M3 Expressive design tokens and focus-aware components.
+- **Next Steps**: Initialize Stremio Addon SDK integration and Provider layer.
 
-## Last Session Summary
-Planning and Specification complete.
-- Finalized SPEC.md with "Native Feel" and TV support goals.
-- Defined requirements across Core, Media, and UI.
-- Established a 6-phase ROADMAP towards v1.0.
-
-## Current Position
-- **Phase**: Planning
-- **Status**: COMPLETE
-- **Next Step**: /plan 1 — Detail execution plans for Phase 1 (Foundation)
+## Milestones
+- [x] Phase 1: Foundation & Identity
+- [ ] Phase 2: Addon Engine & Provider Layer
+- [ ] Phase 3: Catalog Explorer
+- [ ] Phase 4: Media details & Playback
+- [ ] Phase 5: Search & Discovery
+- [ ] Phase 6: Cloud Sync & Trakt
+- [ ] Phase 7: Optimization & Polish
+- [ ] Phase 1.0 Release

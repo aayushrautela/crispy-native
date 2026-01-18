@@ -9,6 +9,7 @@ interface ExpressiveSurfaceProps {
     style?: ViewStyle;
     variant?: 'elevated' | 'filled' | 'outlined';
     rounding?: 'md' | 'lg' | 'xl' | '2xl' | '3xl';
+    onFocusChange?: (focused: boolean) => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -19,6 +20,7 @@ export const ExpressiveSurface = ({
     style,
     variant = 'filled',
     rounding = 'xl',
+    onFocusChange,
 }: ExpressiveSurfaceProps) => {
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -52,8 +54,14 @@ export const ExpressiveSurface = ({
     return (
         <AnimatedPressable
             onPress={onPress}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onFocus={() => {
+                setFocused(true);
+                onFocusChange?.(true);
+            }}
+            onBlur={() => {
+                setFocused(false);
+                onFocusChange?.(false);
+            }}
             style={[
                 styles.base,
                 {

@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { AuthProvider, useAuth } from '@/src/core/AuthContext';
 import { ThemeProvider, useTheme } from '@/src/core/ThemeContext';
+import { DiscoveryProvider } from '@/src/core/DiscoveryContext';
 import '../src/styles/global.css';
 
 export const unstable_settings = {
@@ -47,7 +48,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <RootLayoutNav />
+        <DiscoveryProvider>
+          <RootLayoutNav />
+        </DiscoveryProvider>
       </ThemeProvider>
     </AuthProvider>
   );
