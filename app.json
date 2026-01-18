@@ -53,8 +53,7 @@
             ]
           }
         }
-      ],
-      "./plugins/withJvm21.js"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
