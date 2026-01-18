@@ -19,11 +19,11 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: 🏗 Setup JDK 21
+      - name: 🏗 Setup JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'
+          java-version: '17'
 
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -46,28 +46,6 @@ jobs:
         working-directory: ./android
         run: ./gradlew wrapper --gradle-version 9.1.0
 
-      - name: 🛠 Force JVM Target 21 (Consistency)
-        working-directory: ./android
-        run: |
-          # Force the root project and all subprojects (libraries) to use Java 21
-          # effectively making everything consistent with our JDK 21 environment.
-          
-          cat <<EOF >> build.gradle
-          subprojects {
-              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                  kotlinOptions {
-                      jvmTarget = "21"
-                  }
-              }
-              tasks.withType(JavaCompile).configureEach {
-                  sourceCompatibility = JavaVersion.VERSION_21
-                  targetCompatibility = JavaVersion.VERSION_21
-              }
-          }
-          EOF
-          
-          # Also ensure the main app follows suit
-          echo "android.kotlinOptions.jvmTarget=21" >> gradle.properties
 
       - name: ☕️ Build APK
         working-directory: ./android
