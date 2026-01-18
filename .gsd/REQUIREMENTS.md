@@ -17,3 +17,5 @@
 | REQ-09 | Mobile bottom-tab navigation with fluid transitions | Goal 1 | Pending |
 | REQ-10 | Tablet multi-column layout support | Goal 2 | Pending |
 | REQ-11 | Dynamic theme support (Accent colors) | Goal 5 | Pending |
+| REQ-12 | Guest Mode for Mobile/Tablet | Discussion 1 | Pending |
+| REQ-13 | AMOLED Black Theme toggle | Discussion 1 | Pending |
