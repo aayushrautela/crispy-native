@@ -1,17 +1,22 @@
-# Debug Session: Gradle `afterEvaluate` Error
+# Debug Session: Missing `kotlinOptions` Method
 
 ## Symptom
-Build failed with `Cannot run Project.afterEvaluate(Closure) when the project is already evaluated`.
+Build fails with `Could not find method kotlinOptions() ... on extension 'android'`.
 
 ## Resolution
 
 **Root Cause:**
-- `allprojects { afterEvaluate { ... } }` attempted to add a hook to a project (likely the root project or an already-configured subproject) that had finished evaluation.
-- `withJvm21.js` appends to `android/build.gradle` (root), which is evaluated last.
+- Pure Java modules (like `react-native-worklets`) do not have the `kotlinOptions` extension added to their `android` block.
+- The global Config Plugin was trying to call it blindly on every project with an `android` extension.
 
 **Fix:**
-- Switched to `subprojects` (skipping the root project).
-- Added a check: `if (project.state.executed) { configure() } else { afterEvaluate { configure() } }`.
-- This ensures the configuration is applied regardless of the project's current lifecycle state.
+- Updated `plugins/withJvm21.js` to check for property existence before calling:
+```groovy
+if (project.android.hasProperty('kotlinOptions')) {
+    project.android.kotlinOptions {
+        jvmTarget = "21"
+    }
+}
+```
 
-**Verified:** Code robustly handles both states.
+**Verified:** Logic prevents calling non-existent methods on Java-only modules.

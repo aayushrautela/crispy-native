@@ -14,8 +14,10 @@ subprojects { project ->
                     sourceCompatibility JavaVersion.VERSION_21
                     targetCompatibility JavaVersion.VERSION_21
                 }
-                kotlinOptions {
-                    jvmTarget = "21"
+                if (project.android.hasProperty('kotlinOptions')) {
+                    project.android.kotlinOptions {
+                        jvmTarget = "21"
+                    }
                 }
             }
         }
