@@ -22,3 +22,17 @@
 ### Accessibility & Interaction
 - **D-Pad**: All Phase 1 UI components (Buttons, Inputs, Tab items) MUST be focus-aware from the start to support TV/Remote navigation natively.
 - **Animations**: Use `react-native-reanimated` for fluid transitions. Expansion/Zoom style for detail transitions.
+
+## Phase 4: Playback & Streaming
+
+**Date:** 2026-01-18
+
+### Video Player Architecture
+- **Engine**: Native MPV implementation via `crispy-native-core`.
+- **Reason**: Performance, codec support, and consistent behavior with established desktop/mobile patterns.
+- **UI**: Custom Material 3 Expressive player controls built in React Native, overlaying the native MPV view.
+
+### Streaming Strategy
+- **Torrent Bridge**: On-demand execution. The `jlibtorrent` server starts when a torrent stream is requested and shutdowns/pauses when not in use to save resources.
+- **Protocol**: Local HTTP bridge (`127.0.0.1:11470`) with full Range request support for seeking.
+- **Buffering**: Implement aggressive prioritization for video headers and metadata.

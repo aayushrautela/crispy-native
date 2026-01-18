@@ -57,12 +57,13 @@ jobs:
 
       - name: ☕️ Build Android App
         working-directory: ./android
+        env:
+          GRADLE_OPTS: "-Xmx3584m -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx3584m -XX:MaxMetaspaceSize=512m\""
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -Preact.bundleInDebug=true \
+          ./gradlew assembleDebug \
             --parallel \
-            --build-cache \
-            --configuration-cache
+            --build-cache
 
       - name: 📤 Upload Artifacts
         uses: actions/upload-artifact@v4

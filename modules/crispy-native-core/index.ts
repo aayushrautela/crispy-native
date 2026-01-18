@@ -1,7 +1,18 @@
-import { requireNativeModule } from 'expo-modules-core';
+import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
+import { ViewProps } from 'react-native';
 
 // requireNativeModule will look for a module with the same name as in CrispyNativeCoreModule.kt
 const CrispyNativeCore = requireNativeModule('CrispyNativeCore');
+
+export interface CrispyVideoViewProps extends ViewProps {
+    source?: string;
+    paused?: boolean;
+    onLoad?: (event: { nativeEvent: { status: string } }) => void;
+    onProgress?: (event: { nativeEvent: { position: number, duration: number } }) => void;
+    onEnd?: () => void;
+}
+
+export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
 
 export default {
     /**

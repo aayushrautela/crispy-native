@@ -1,17 +1,23 @@
-- **Status**: Ready for Implementation (Phase 3 Planning Refined)
+# Project State
+
+- **Current Position**: Phase 8: Audit & UI Alignment (Gap Closure)
 - **Recent Accomplishments**: 
-  - **Native Foundation Complete**: Implemented `crispy-native-core` Expo module with `jlibtorrent` and `NanoHTTPD`.
-  - **Build Pipeline Stabilized**: Aligned project with JDK 17 standards (2026 stable target). 
-  - **Clean Architecture**: Removed fragile JVM-forcing hacks in favor of environment-aligned defaults.
-  - **Phase 3 Plan Finalized**: Approved implementation plan for Catalog Explorer UI.
-- **Next Steps**: Execute Phase 3 (Catalog Explorer UI) once build verification passes.
+  - **Phase 4 Implementation**: Native MPV player, torrent bridge, and M3 playback UI.
+  - **CI Resolution**: Fixed OOM/Config Cache errors in GitHub Actions.
+  - **UI Alignment**: Refactored Home, Discover, and Search to match `crispy-webui` mobile.
+  - **Technical Debt**: Fixed missing imports and module evaluation crashes.
 
 ## Milestones
 - [x] Phase 1: Foundation & Identity
 - [x] Phase 2: Addon Engine & Provider Layer
-- [ ] Phase 3: Catalog Explorer
-- [ ] Phase 4: Media details & Playback
-- [ ] Phase 5: Search & Discovery
-- [ ] Phase 6: Cloud Sync & Trakt
-- [ ] Phase 7: Optimization & Polish
-- [ ] Phase 1.0 Release
+- [x] Phase 3: Catalog Explorer
+- [x] Phase 4: Playback & Streaming
+- [ ] Phase 5: Search & Discovery (Integrated into Gap Closure)
+- [ ] Phase 6: Sync & Personalization
+- [ ] Phase 7: Polish & Performance
+- [/] Phase 8: Audit & UI Alignment [IN PROGRESS]
+
+## Next Steps
+1. Verify the GitHub build passes with new memory limits.
+2. Polish the remaining UI transitions in the Search screen.
+3. Prepare for Phase 6 (Cloud Sync & Trakt).

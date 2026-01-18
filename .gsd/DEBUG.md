@@ -1,22 +1,39 @@
-# Debug Session: Missing `kotlinOptions` Method
+# Debug Session: Missing expo-screen-orientation
 
 ## Symptom
-Build fails with `Could not find method kotlinOptions() ... on extension 'android'`.
+Bundling fails with: `Unable to resolve "expo-screen-orientation" from "src/app/player.tsx"`.
+
+**When:** During app bundling after implementing Phase 4 Player.
+**Expected:** App bundles successfully.
+**Actual:** Module resolution failure for `expo-screen-orientation`.
+
+## Evidence
+- `src/app/player.tsx` uses `import * as ScreenOrientation from 'expo-screen-orientation'`.
+- This package was never explicitly installed in `package.json`.
+
+## Hypotheses
+
+| # | Hypothesis | Likelihood | Status |
+|---|------------|------------|--------|
+| 1 | Package `expo-screen-orientation` is not in `package.json`. | 95% | UNTESTED |
+| 2 | Metro cache is stale. | 5% | UNTESTED |
+
+## Attempts
+
+### Attempt 1
+**Testing:** H1 — Dependency presence.
+**Action:** Check `package.json`.
+**Result:** Package was missing.
+**Conclusion:** CONFIRMED.
 
 ## Resolution
 
 **Root Cause:**
-- Pure Java modules (like `react-native-worklets`) do not have the `kotlinOptions` extension added to their `android` block.
-- The global Config Plugin was trying to call it blindly on every project with an `android` extension.
+- `expo-screen-orientation` was required by `src/app/player.tsx` but not listed in `dependencies`.
 
 **Fix:**
-- Updated `plugins/withJvm21.js` to check for property existence before calling:
-```groovy
-if (project.android.hasProperty('kotlinOptions')) {
-    project.android.kotlinOptions {
-        jvmTarget = "21"
-    }
-}
-```
+- Installed via `npx expo install expo-screen-orientation`.
 
-**Verified:** Logic prevents calling non-existent methods on Java-only modules.
+**Verified:**
+- `package.json` now includes `expo-screen-orientation: ~9.0.8`.
+- Bundler should now resolve the module correctly.

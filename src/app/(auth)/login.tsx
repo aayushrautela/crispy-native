@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@/src/core/AuthContext';
-import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { supabase } from '@/src/core/api/supabase';
+import { useTheme } from '@/src/core/ThemeContext';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');

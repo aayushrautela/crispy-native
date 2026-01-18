@@ -72,5 +72,22 @@ class CrispyNativeCoreModule : Module() {
     AsyncFunction("handleSeek") { infoHash: String, fileIdx: Int, position: Long ->
       torrentService?.handleSeek(infoHash, fileIdx, position)
     }
+
+    // --- VIDEO PLAYER VIEW ---
+    View(CrispyVideoView::class) {
+      Prop("source") { view: CrispyVideoView, url: String? ->
+        view.setSource(url)
+      }
+
+      Prop("paused") { view: CrispyVideoView, paused: Boolean ->
+        view.setPaused(paused)
+      }
+
+      Events("onLoad", "onProgress", "onEnd")
+
+      AsyncFunction("seek") { view: CrispyVideoView, positionMs: Long ->
+        view.seek(positionMs)
+      }
+    }
   }
 }

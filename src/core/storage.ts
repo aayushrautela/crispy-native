@@ -1,8 +1,24 @@
-import { MMKV } from 'react-native-mmkv';
 
-export const storage = new MMKV({
-    id: 'crispy-storage',
-});
+// We initialize defensively because the native module might not be linked in all environments (e.g. Expo Go)
+let internalStorage: any;
+try {
+    internalStorage = new MMKV({
+        id: 'crispy-storage',
+    });
+} catch (e) {
+    console.warn('[Storage] MMKV native module not found, falling back to in-memory storage.');
+    // Simple in-memory fallback to prevent crashes during evaluation
+    const mockStorage = new Map<string, string>();
+    internalStorage = {
+        getString: (key: string) => mockStorage.get(key),
+        set: (key: string, value: string | boolean | number | Uint8Array) => mockStorage.set(key, String(value)),
+        delete: (key: string) => mockStorage.delete(key),
+        clearAll: () => mockStorage.clear(),
+        getAllKeys: () => Array.from(mockStorage.keys()),
+    };
+}
+
+export const storage = internalStorage;
 
 /**
  * Valid keys for user-specific data that must be isolated.
