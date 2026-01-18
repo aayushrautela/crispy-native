@@ -21,24 +21,6 @@ export interface ResourceResponse<T> {
 const STREAMING_SERVER_URL = 'http://127.0.0.1:11470';
 
 export class AddonService {
-    private static proxyAvailable: boolean | null = null;
-
-    private static async checkProxy(): Promise<boolean> {
-        if (this.proxyAvailable !== null) return this.proxyAvailable;
-        try {
-            const res = await axios.get(`${STREAMING_SERVER_URL}/stats.json`, { timeout: 1000 });
-            this.proxyAvailable = res.status === 200;
-        } catch {
-            this.proxyAvailable = false;
-        }
-        return this.proxyAvailable;
-    }
-
-    private static getProxyUrl(url: string): string {
-        const parsed = new URL(url);
-        return `${STREAMING_SERVER_URL}/proxy/d=${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
-    }
-
     static async fetchManifest(url: string): Promise<AddonManifest> {
         const response = await axios.get<AddonManifest>(url);
         return response.data;
@@ -53,43 +35,39 @@ export class AddonService {
         const query = extra ? '?' + new URLSearchParams(extra as any).toString() : '';
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/catalog/${type}/${id}.json${query}`;
 
-        try {
-            const res = await axios.get<CatalogResponse>(url);
-            return res.data;
-        } catch (e) {
-            if (await this.checkProxy()) {
-                const proxyRes = await axios.get<CatalogResponse>(this.getProxyUrl(url));
-                return proxyRes.data;
-            }
-            throw e;
-        }
+        const res = await axios.get<CatalogResponse>(url);
+        return res.data;
     }
 
     static async getMeta(baseUrl: string, type: string, id: string): Promise<any> {
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/meta/${type}/${id}.json`;
-        try {
-            const res = await axios.get<any>(url);
-            return res.data;
-        } catch (e) {
-            if (await this.checkProxy()) {
-                const proxyRes = await axios.get<any>(this.getProxyUrl(url));
-                return proxyRes.data;
-            }
-            throw e;
-        }
+        const res = await axios.get<any>(url);
+        return res.data;
     }
 
     static async search(baseUrl: string, type: string, query: string): Promise<CatalogResponse> {
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/catalog/${type}/search=${encodeURIComponent(query)}.json`;
+        const res = await axios.get<CatalogResponse>(url);
+        return res.data;
+    }
+
+    static async getStreams(baseUrl: string, type: string, id: string): Promise<{ streams: any[] }> {
+        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/stream/${type}/${encodeURIComponent(id)}.json`;
         try {
-            const res = await axios.get<CatalogResponse>(url);
+            const res = await axios.get<{ streams: any[] }>(url);
             return res.data;
         } catch (e) {
-            if (await this.checkProxy()) {
-                const proxyRes = await axios.get<CatalogResponse>(this.getProxyUrl(url));
-                return proxyRes.data;
-            }
-            throw e;
+            return { streams: [] };
+        }
+    }
+
+    static async getSubtitles(baseUrl: string, type: string, id: string): Promise<{ subtitles: any[] }> {
+        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/subtitles/${type}/${encodeURIComponent(id)}.json`;
+        try {
+            const res = await axios.get<{ subtitles: any[] }>(url);
+            return res.data;
+        } catch (e) {
+            return { subtitles: [] };
         }
     }
 }

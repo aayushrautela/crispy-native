@@ -1,0 +1,13 @@
+{
+    "name": "crispy-native-core",
+    "version": "1.0.0",
+    "main": "index.ts",
+    "types": "index.ts",
+    "expo": {
+        "name": "crispy-native-core",
+        "slug": "crispy-native-core"
+    },
+    "dependencies": {
+        "expo-modules-core": "~1.12.11"
+    }
+}

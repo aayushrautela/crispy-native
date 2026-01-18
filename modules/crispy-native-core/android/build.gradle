@@ -1,0 +1,32 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+  compileSdkVersion project.findProperty('compileSdkVersion') ?: 35
+  namespace "aayush.crispy.core"
+
+  defaultConfig {
+    minSdkVersion project.findProperty('minSdkVersion') ?: 24
+    targetSdkVersion project.findProperty('targetSdkVersion') ?: 35
+    versionCode 1
+    versionName "1.0"
+  }
+
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+
+  // jlibtorrent for torrent streaming
+  implementation 'com.frostwire:jlibtorrent:1.2.14.0'
+  
+  // NanoHTTPD for local HTTP streaming server
+  implementation 'org.nanohttpd:nanohttpd:2.3.1'
+  
+  // Lifecycle & Coroutines
+  implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+}

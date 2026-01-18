@@ -13,12 +13,12 @@
 ## Phases
 
 ### Phase 1: Foundation & Identity
-**Status**: ⬜ Not Started
+**Status**: ✅ Completed
 **Objective**: Establish the core architecture, design system (M3 Expressive + AMOLED), and authentication flow (including Guest Mode).
 **Requirements**: REQ-01, REQ-03, REQ-09, REQ-11, REQ-12 (Guest Mode Layout), REQ-13 (AMOLED Theme)
 
 ### Phase 2: Discovery & Ecosystem
-**Status**: ⬜ Not Started
+**Status**: 🔄 In Progress
 **Objective**: Implement addon engine, catalog browsing, and metadata views.
 **Requirements**: REQ-05, REQ-06
 
