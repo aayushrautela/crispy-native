@@ -1,15 +1,15 @@
 const { withProjectBuildGradle } = require('@expo/config-plugins');
 
 const withJvm21 = (config) => {
-  return withProjectBuildGradle(config, (config) => {
-    if (config.modResults.language === 'groovy') {
-      config.modResults.contents = config.modResults.contents + `
+    return withProjectBuildGradle(config, (config) => {
+        if (config.modResults.language === 'groovy') {
+            config.modResults.contents = config.modResults.contents + `
       
 // Force JVM 21 for all subprojects to resolve compatibility issues
-allprojects {
-    afterEvaluate {
+subprojects { project ->
+    def configureAndroid = {
         if (project.hasProperty("android")) {
-            android {
+            project.android {
                 compileOptions {
                     sourceCompatibility JavaVersion.VERSION_21
                     targetCompatibility JavaVersion.VERSION_21
@@ -20,11 +20,19 @@ allprojects {
             }
         }
     }
+
+    if (project.state.executed) {
+        configureAndroid()
+    } else {
+        project.afterEvaluate {
+            configureAndroid()
+        }
+    }
 }
 `;
-    }
-    return config;
-  });
+        }
+        return config;
+    });
 };
 
 module.exports = withJvm21;
