@@ -20,8 +20,8 @@ android {
 dependencies {
   implementation project(':expo-modules-core')
 
-  // jlibtorrent for torrent streaming
-  implementation 'com.frostwire:jlibtorrent:1.2.14.0'
+  // jlibtorrent for torrent streaming (local JARs/AARs + jniLibs)
+  implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
   
   // NanoHTTPD for local HTTP streaming server
   implementation 'org.nanohttpd:nanohttpd:2.3.1'

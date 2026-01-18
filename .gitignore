@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+modules/crispy-native-core/android/libs/
 
 # Expo
 .expo/
