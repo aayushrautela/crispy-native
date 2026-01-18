@@ -1,22 +1,28 @@
-# Debug Session: Compilation Errors in Native Core
+# Debug Session: JVM Target Mismatch
 
 ## Symptom
-Build failed with `Unresolved reference` errors for `TorrentStats` and `FileStats` classes and their properties in `CrispyServer.kt` and `TorrentService.kt`.
-
-**When:** Compiling `crispy-native-core` during GitHub Actions build.
-**Expected:** Successful compilation.
-**Actual:**
-```
-e: .../CrispyServer.kt:101:38 Unresolved reference 'infoHash'.
-e: .../TorrentService.kt:231:57 Unresolved reference 'TorrentStats'.
-```
+Build fails with `Inconsistent JVM-target compatibility` error in `:pchmn-expo-material3-theme`.
 
 ## Resolution
 
-**Root Cause:** The `TorrentStats` and `FileStats` data classes were missing from `CrispyServer.kt` but were referenced as if they existed.
-**Fix:** Added the missing data classes to `CrispyServer.kt` with the properties expected by the calling code.
-```kotlin
-data class TorrentStats(...)
-data class FileStats(...)
+**Root Cause:**
+- Third-party modules (like `expo-material3-theme`) do not strictly enforce JVM 21, inheriting project defaults.
+- The project defaults were drifting between Java 17 and Kotlin 21 due to environment tooling.
+
+**Fix:**
+Created a custom Expo Config Plugin `plugins/withJvm21.js` that injects:
+```groovy
+allprojects {
+    afterEvaluate {
+        if (project.hasProperty("android")) {
+            android {
+                compileOptions { sourceCompatibility 21; targetCompatibility 21 }
+                kotlinOptions { jvmTarget = "21" }
+            }
+        }
+    }
+}
 ```
-**Verified:** Code review confirms property names (`streamProgress`, `streamLen`, etc.) match the consumption logic in `CrispyServer.kt` and instantiation logic in `TorrentService.kt`.
+This forces **every** module to comply with JVM 21.
+
+**Verified:** Plugin added to `app.json`.
