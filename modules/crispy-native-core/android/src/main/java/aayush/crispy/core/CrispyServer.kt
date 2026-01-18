@@ -214,5 +214,24 @@ class CrispyServer(
         else -> "application/octet-stream"
     }
 
+    data class TorrentStats(
+        val infoHash: String,
+        val name: String,
+        val peers: Int,
+        val seeds: Int,
+        val downloadSpeed: Long,
+        val uploadSpeed: Long,
+        val progress: Float,
+        val state: String
+    )
+
+    data class FileStats(
+        val streamProgress: Float,
+        val streamLen: Long,
+        val streamName: String,
+        val downloaded: Long,
+        val pieceLength: Int
+    )
+
     fun setTorrentService(service: TorrentService) { this.torrentService = service }
 }
