@@ -19,11 +19,11 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: 🏗 Setup JDK 17
+      - name: 🏗 Setup JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '25'
 
       - name: 🏗 Setup Android SDK
         uses: android-actions/setup-android@v3
