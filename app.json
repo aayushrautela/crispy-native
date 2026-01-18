@@ -53,7 +53,8 @@
             ]
           }
         }
-      ]
+      ],
+      "./plugins/withAndroidSplits.js"
     ],
     "experiments": {
       "typedRoutes": true,

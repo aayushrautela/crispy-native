@@ -24,6 +24,7 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle'
 
       - name: 📦 Install Dependencies
         run: npm ci
@@ -48,28 +49,25 @@ jobs:
           curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-x86.jar "${BASE_URL}/jlibtorrent-android-x86-${JLIBTORRENT_VERSION}.jar"
           curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-x86_64.jar "${BASE_URL}/jlibtorrent-android-x86_64-${JLIBTORRENT_VERSION}.jar"
 
-      - name: 🚀 Configure Gradle 9.1.0
-        working-directory: ./android
-        run: |
-          chmod +x gradlew
-          ./gradlew wrapper --gradle-version 9.1.0 --distribution-type all
-
       - name: 🏗 Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: wrapper
+          gradle-version: 9.1.0
           cache-read-only: false
 
       - name: ☕️ Build Android App
         working-directory: ./android
-        run: ./gradlew assembleDebug
-        # Using assembleDebug to ensure a successful APK without needing release keystores.
-        # If release signing is added later, this can be switched to assembleRelease.
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug -Preact.bundleInDebug=true \
+            --parallel \
+            --build-cache \
+            --configuration-cache
 
-      - name: 📤 Upload Artifact
+      - name: 📤 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: crispy-native-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: crispy-native-debug-apks
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
