@@ -5,7 +5,7 @@ import { Touchable } from '../components/Touchable';
 import { useTheme } from '@/src/core/ThemeContext';
 import Animated, { useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
 
-const MaterialTabItem = ({
+const NavigationRailItem = ({
     route,
     index,
     state,
@@ -43,7 +43,7 @@ const MaterialTabItem = ({
 
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            width: withSpring(isFocused ? 64 : 0, { damping: 15 }),
+            height: withSpring(isFocused ? 32 : 0, { damping: 15 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
             backgroundColor: theme.colors.secondaryContainer,
         };
@@ -73,7 +73,7 @@ const MaterialTabItem = ({
     );
 };
 
-export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+export const MaterialNavigationRail = ({ state, descriptors, navigation }: BottomTabBarProps) => {
     const { theme } = useTheme();
 
     return (
@@ -81,53 +81,73 @@ export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarP
             styles.container,
             {
                 backgroundColor: theme.colors.surface,
-                borderTopColor: theme.colors.outlineVariant,
-                borderTopWidth: StyleSheet.hairlineWidth
+                borderRightColor: theme.colors.outlineVariant,
+                borderRightWidth: StyleSheet.hairlineWidth
             }
         ]}>
-            {state.routes.map((route, index) => (
-                <MaterialTabItem
-                    key={route.key}
-                    route={route}
-                    index={index}
-                    state={state}
-                    descriptors={descriptors}
-                    navigation={navigation}
-                    theme={theme}
-                />
-            ))}
+            <View style={styles.topSection}>
+                {/* Optional: Add Logo or Menu button here */}
+            </View>
+
+            <View style={styles.itemsSection}>
+                {state.routes.map((route, index) => (
+                    <NavigationRailItem
+                        key={route.key}
+                        route={route}
+                        index={index}
+                        state={state}
+                        descriptors={descriptors}
+                        navigation={navigation}
+                        theme={theme}
+                    />
+                ))}
+            </View>
+
+            <View style={styles.bottomSection}>
+                {/* Optional: Add Profile or Settings shortcut here */}
+            </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        flexDirection: 'row',
+        width: 80,
+        height: '100%',
+        paddingVertical: 24,
         alignItems: 'center',
-        justifyContent: 'space-around',
-        width: '100%',
-        height: 80,
-        paddingBottom: 20,
-        paddingTop: 8,
+        justifyContent: 'space-between',
+    },
+    topSection: {
+        height: 56,
+    },
+    itemsSection: {
+        flex: 1,
+        gap: 12,
+        justifyContent: 'center',
+    },
+    bottomSection: {
+        height: 56,
     },
     tab: {
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         gap: 4,
+        width: 80,
+        paddingVertical: 12,
     },
     iconContainer: {
         position: 'relative',
         alignItems: 'center',
         justifyContent: 'center',
         height: 32,
-        width: 64,
+        width: 56,
         borderRadius: 16,
         overflow: 'hidden',
     },
     indicator: {
         position: 'absolute',
-        height: '100%',
+        width: '100%',
         borderRadius: 16,
     },
     label: {

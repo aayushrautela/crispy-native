@@ -1,14 +1,31 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useWindowDimensions } from 'react-native';
 import { SplitTabBar } from '@/src/cdk/layout/SplitTabBar';
-import { Home, Search, Compass, Library, Settings } from 'lucide-react-native';
+import { MaterialNavigationRail } from '@/src/cdk/layout/MaterialNavigationRail';
+import { Home, Search, Compass, Library, Settings as SettingsIcon } from 'lucide-react-native';
+import { useTheme } from '@/src/core/ThemeContext';
 
 export default function TabLayout() {
+  const { width } = useWindowDimensions();
+  const { theme } = useTheme();
+  const isTablet = width >= 768;
+
   return (
     <Tabs
-      tabBar={(props) => <SplitTabBar {...props} />}
+      tabBar={(props) => isTablet ? <MaterialNavigationRail {...props} /> : <SplitTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        tabBarStyle: isTablet ? {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 80,
+          borderRightWidth: 1,
+          borderRightColor: theme.colors.outlineVariant,
+          backgroundColor: theme.colors.surface,
+        } : undefined,
       }}
     >
       <Tabs.Screen
@@ -43,7 +60,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
         }}
       />
     </Tabs>

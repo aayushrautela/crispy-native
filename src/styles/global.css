@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  /* M3 Expressive Shape Scale */
+  .rounded-m3-xs { border-radius: 4px; }
+  .rounded-m3-sm { border-radius: 8px; }
+  .rounded-m3-md { border-radius: 12px; }
+  .rounded-m3-lg { border-radius: 16px; }
+  .rounded-m3-xl { border-radius: 28px; }
+  .rounded-m3-2xl { border-radius: 32px; }
+  .rounded-m3-3xl { border-radius: 36px; }
+  .rounded-m3-full { border-radius: 9999px; }
+  
+  /* Expressive Outlines */
+  .outline-m3 { outline-width: 2px; outline-style: solid; }
+}
