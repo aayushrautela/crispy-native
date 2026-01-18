@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, PressableProps, ViewStyle, StyleProp } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { cn } from '@/src/lib/utils';
 
 interface TouchableProps extends PressableProps {
     haptic?: Haptics.ImpactFeedbackStyle | 'selection' | 'success' | 'warning' | 'error' | 'off';
