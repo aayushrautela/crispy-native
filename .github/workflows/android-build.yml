@@ -40,8 +40,34 @@ jobs:
           EXPO_PUBLIC_TMDB_API_KEY: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
           EXPO_PUBLIC_TRAKT_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_ID }}
           EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
-        # This generates the ./android folder from your app.json config
         run: npx expo prebuild --platform android --no-install
+
+      - name: 🚀 Upgrade to Gradle 9.1 (2026 Standard)
+        working-directory: ./android
+        run: ./gradlew wrapper --gradle-version 9.1.0
+
+      - name: 🛠 Force JVM Target 21 (Consistency)
+        working-directory: ./android
+        run: |
+          # Force the root project and all subprojects (libraries) to use Java 21
+          # effectively making everything consistent with our JDK 21 environment.
+          
+          cat <<EOF >> build.gradle
+          subprojects {
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  kotlinOptions {
+                      jvmTarget = "21"
+                  }
+              }
+              tasks.withType(JavaCompile).configureEach {
+                  sourceCompatibility = JavaVersion.VERSION_21
+                  targetCompatibility = JavaVersion.VERSION_21
+              }
+          }
+          EOF
+          
+          # Also ensure the main app follows suit
+          echo "android.kotlinOptions.jvmTarget=21" >> gradle.properties
 
       - name: ☕️ Build APK
         working-directory: ./android
