@@ -12,7 +12,7 @@
 **Objective**: Ensure all external keys are correctly managed.
 
 ## Phase 3: Discover Page - Hero Carousel
-**Status**: 🏗️ IN PROGRESS
+**Status**: ✅ COMPLETED
 **Objective**: 1:1 layout copy of `HeroMobile.tsx` using native CDK.
 - [ ] Implement `HeroCarousel` with snap-paging.
 - [ ] Implement `HeroSlide` with backdrop, logo, and metadata alignment.

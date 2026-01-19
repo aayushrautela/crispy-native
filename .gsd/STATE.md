@@ -8,10 +8,10 @@ Codebase mapping complete.
 - Surface technical debt: lack of tests, in-memory caching for metadata, insecure fallbacks.
 
 ## Current Position
-- **Phase:** Phase 2: Configuration & Environment
-- **Task:** GitHub Workflow Setup
+- **Phase:** Phase 3: Discover Page - Hero Carousel
+- **Task:** Component Integration
 - **Status:** COMPLETED
 
 ## Next Steps
-- Proceed to Phase 3: Discover Page - Hero Carousel.
-- Trigger the new GitHub workflow to get a development client APK.
+- Proceed to Phase 4: Discover Page - Catalog Rows.
+- Refactor `CatalogRow` and `MetaCard` for 1:1 web alignment.

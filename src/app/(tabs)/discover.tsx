@@ -14,6 +14,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { CatalogRow } from '../../components/CatalogRow';
 
+import { HeroCarousel } from '../../components/HeroCarousel';
+
 const HEADER_HEIGHT = 100;
 
 export default function DiscoverScreen() {
@@ -49,7 +51,10 @@ export default function DiscoverScreen() {
     const headerStyle = useAnimatedStyle(() => {
         return {
             transform: [{ translateY: headerTranslateY.value }],
-            opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 50], [0, 1])
+            opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 0], [0, 1]),
+            backgroundColor: interpolate(scrollY.value, [0, 50], [0, 0.9]) > 0.5
+                ? theme.colors.background
+                : 'transparent'
         };
     });
 
@@ -75,7 +80,6 @@ export default function DiscoverScreen() {
             {/* Animated Header */}
             <Animated.View style={[
                 styles.header,
-                { backgroundColor: theme.colors.background },
                 headerStyle
             ]}>
                 <Typography variant="headline-large" weight="black" style={{ color: theme.colors.onSurface }}>Discover</Typography>
@@ -93,8 +97,11 @@ export default function DiscoverScreen() {
                 onScroll={onScroll}
                 scrollEventThrottle={16}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingTop: HEADER_HEIGHT }]}
+                contentContainerStyle={styles.scrollContent}
             >
+                {/* Hero Carousel */}
+                <HeroCarousel />
+
                 {/* Filter Chips */}
                 <View style={styles.filterContainer}>
                     <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
@@ -182,7 +189,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     scrollContent: {
-        paddingTop: 12,
+        paddingTop: 0,
     },
     filterContainer: {
         marginBottom: 8,

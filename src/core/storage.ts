@@ -1,12 +1,9 @@
+import { createMMKV } from 'react-native-mmkv';
 
 // Main production storage mechanism
-// NOTE: This REQUIRES a development client (npx expo run:android)
-// It will CRASH in Expo Go because JSI bindings are missing.
-const mmkv = new MMKV({
-    id: 'crispy-storage',
+export const storage = createMMKV({
+    id: 'crispy-storage'
 });
-
-export const storage = mmkv;
 
 export type UserStorageKey =
     | 'crispy-mobile-navbar-style'
@@ -51,10 +48,10 @@ class StorageServiceImpl {
     public removeUser(key: UserStorageKey): void {
         const activeUserId = storage.getString('crispy_active_user_id');
         const fullKey = activeUserId ? "u_" + activeUserId + ":" + key : key;
-        storage.delete(fullKey);
+        storage.remove(fullKey);
     }
     public removeGlobal(key: GlobalStorageKey): void {
-        storage.delete(key);
+        storage.remove(key);
     }
     public getGlobal<T>(key: GlobalStorageKey, defaultValue: T): T;
     public getGlobal<T>(key: GlobalStorageKey): T | null;
