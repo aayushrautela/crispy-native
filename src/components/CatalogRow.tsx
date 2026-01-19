@@ -1,20 +1,25 @@
 import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
+import { Typography } from '@/src/cdk/components/Typography';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useTheme } from '@/src/core/ThemeContext';
 import React from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
+
+const CARD_WIDTH = 140;
+const ITEM_GAP = 16;
+const SNAP_INTERVAL = CARD_WIDTH + ITEM_GAP;
 
 interface CatalogRowProps {
     title: string;
     items?: MetaPreview[];
     isLoading?: boolean;
     onSeeAll?: () => void;
-    // Optional props for self-fetching
     catalogType?: string;
     catalogId?: string;
     extra?: Record<string, any>;
+    addonUrl?: string;
 }
 
 export const CatalogRow = ({
@@ -24,20 +29,21 @@ export const CatalogRow = ({
     onSeeAll,
     catalogType,
     catalogId,
-    extra
+    extra,
+    addonUrl
 }: CatalogRowProps) => {
     const { theme } = useTheme();
 
     const { data, isLoading: queryLoading } = useCatalog(
         catalogType || '',
         catalogId || '',
-        extra
+        extra,
+        addonUrl
     );
 
     const items = propItems || data?.metas || [];
     const isLoading = propLoading || (!!catalogId && queryLoading);
 
-    // Don't render empty rows unless loading
     if (!isLoading && items.length === 0 && !!catalogId) {
         return null;
     }
@@ -45,17 +51,25 @@ export const CatalogRow = ({
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={[styles.title, { color: theme.colors.onSurface }]}>
+                <Typography
+                    variant="h2"
+                    weight="black"
+                    style={{
+                        color: theme.colors.onSurface,
+                        fontSize: 20,
+                        letterSpacing: -0.5
+                    }}
+                >
                     {title}
-                </Text>
-                {onSeeAll && (
-                    <ExpressiveButton
-                        title="See All"
-                        variant="text"
-                        onPress={onSeeAll}
-                        style={styles.seeAllBtn}
-                    />
-                )}
+                </Typography>
+                <ExpressiveButton
+                    title="See All"
+                    variant="text"
+                    onPress={onSeeAll || (() => { })}
+                    size="sm"
+                    style={styles.seeAllBtn}
+                    textStyle={{ color: theme.colors.primary, fontWeight: '700' }}
+                />
             </View>
 
             {isLoading ? (
@@ -68,7 +82,12 @@ export const CatalogRow = ({
                         <View
                             style={[
                                 styles.skeleton,
-                                { backgroundColor: theme.colors.surfaceVariant, width: 120, height: 180, borderRadius: 28 }
+                                {
+                                    backgroundColor: theme.colors.surfaceVariant,
+                                    width: CARD_WIDTH,
+                                    height: CARD_WIDTH * 1.5,
+                                    borderRadius: 12 // Matches lg rounding
+                                }
                             ]}
                         />
                     )}
@@ -81,8 +100,11 @@ export const CatalogRow = ({
                     keyExtractor={(item, index) => `${item.id}-${index}`}
                     contentContainerStyle={styles.scrollContent}
                     renderItem={({ item }) => (
-                        <CatalogCard item={item} width={120} />
+                        <CatalogCard item={item} width={CARD_WIDTH} />
                     )}
+                    snapToInterval={SNAP_INTERVAL}
+                    decelerationRate="fast"
+                    snapToAlignment="start"
                 />
             )}
         </View>
@@ -98,21 +120,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        marginBottom: 12,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: '700',
-        letterSpacing: 0.1,
+        marginBottom: 8,
     },
     seeAllBtn: {
         marginRight: -8,
     },
     scrollContent: {
-        paddingHorizontal: 16,
-        gap: 12,
+        paddingHorizontal: 20,
+        gap: ITEM_GAP,
     },
     skeleton: {
-        opacity: 0.5,
+        opacity: 0.2, // Subtle skeleton
     },
 });

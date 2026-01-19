@@ -1,6 +1,6 @@
+import { useTheme } from '@/src/core/ThemeContext';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, ViewStyle } from 'react-native';
-import { useTheme } from '@/src/core/ThemeContext';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 interface ExpressiveSurfaceProps {
@@ -46,7 +46,7 @@ export const ExpressiveSurface = ({
     });
 
     const backgroundColor = variant === 'elevated'
-        ? theme.colors.elevated
+        ? theme.colors.surface
         : variant === 'filled'
             ? theme.colors.surfaceVariant
             : 'transparent';

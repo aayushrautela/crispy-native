@@ -1,103 +1,146 @@
-import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { Typography } from '@/src/cdk/components/Typography';
+import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
+import { CircleUser } from 'lucide-react-native';
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue
+} from 'react-native-reanimated';
 import { CatalogRow } from '../../components/CatalogRow';
+import { HeroCarousel } from '../../components/HeroCarousel';
+
+const HEADER_HEIGHT = 100;
 
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { manifests } = useAddonStore();
   const router = useRouter();
 
-  // Pick top catalogs for the home screen
+  const scrollY = useSharedValue(0);
+  const headerTranslateY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentScrollY = event.contentOffset.y;
+      const diff = currentScrollY - lastScrollY.value;
+
+      if (currentScrollY <= 0) {
+        headerTranslateY.value = 0;
+      } else if (diff > 0 && currentScrollY > 50) {
+        // Scrolling Down - Hide
+        headerTranslateY.value = Math.max(headerTranslateY.value - diff, -HEADER_HEIGHT);
+      } else if (diff < 0) {
+        // Scrolling Up - Show
+        headerTranslateY.value = Math.min(headerTranslateY.value - diff, 0);
+      }
+
+      lastScrollY.value = currentScrollY;
+      scrollY.value = currentScrollY;
+    },
+  });
+
+  const headerStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: headerTranslateY.value }],
+      opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 0], [0, 1])
+    };
+  });
+
   const homeCatalogs = useMemo(() => {
-    // Flatten all catalogs and pick unique ones or first few
     const catalogs = Object.values(manifests).flatMap(m =>
-      (m.catalogs || []).map(c => ({ ...c, addonName: m.name }))
+      (m.catalogs || []).map(c => ({ ...c, addonName: m.name, addonUrl: (m as any).transportUrl }))
     );
-    // Deduplicate by ID
     const seen = new Set();
     return catalogs.filter(c => {
       if (seen.has(c.id)) return false;
       seen.add(c.id);
       return true;
-    }).slice(0, 5); // Show first 5 on home
+    }).slice(0, 5);
   }, [manifests]);
 
+  const firstCatalog = homeCatalogs[0];
+  const { data: heroData } = useCatalog(
+    firstCatalog?.type || '',
+    firstCatalog?.id || ''
+  );
+
+  const carouselItems = useMemo(() => {
+    if (heroData?.metas && heroData.metas.length > 0) {
+      return heroData.metas.slice(0, 10);
+    }
+    return [
+      { id: 'tt1160419', type: 'movie', name: 'Dune: Part Two' },
+      { id: 'tt1536537', type: 'movie', name: 'Oppenheimer' },
+      { id: 'tt1386697', type: 'movie', name: 'The Batman' },
+    ];
+  }, [heroData]);
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={styles.content}
-    >
-      {/* Header Area */}
-      <View style={styles.headerArea}>
-        <View>
-          <Text style={[styles.welcome, { color: theme.colors.onSurfaceVariant }]}>Good Evening,</Text>
-          <Text style={[styles.appTitle, { color: theme.colors.onSurface }]}>Crispy</Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Collapsible Header */}
+      <Animated.View style={[
+        styles.header,
+        { backgroundColor: theme.colors.background },
+        headerStyle
+      ]}>
+        <View style={styles.branding}>
+          <Typography variant="label" weight="medium" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6 }}>Good Evening,</Typography>
+          <Typography variant="h1" weight="black" style={{ color: theme.colors.primary, marginTop: -4 }}>Crispy</Typography>
         </View>
-        <ExpressiveSurface variant="filled" rounding="full" style={styles.profileBtn}>
-          <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>G</Text>
-        </ExpressiveSurface>
-      </View>
+        <View style={styles.headerActions}>
+          <ExpressiveSurface variant="tonal" rounding="full" style={styles.iconBtn} onPress={() => router.push('/(tabs)/settings')}>
+            <CircleUser size={28} color={theme.colors.onSurface} strokeWidth={1.5} />
+          </ExpressiveSurface>
+        </View>
+      </Animated.View>
 
-      {/* Hero / Featured section */}
-      <View style={styles.hero}>
-        <ExpressiveSurface variant="filled" rounding="xxl" style={[styles.heroCard, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
-          <View style={styles.heroContent}>
-            <View style={[styles.badge, { backgroundColor: theme.colors.primaryContainer }]}>
-              <Text style={[styles.heroSub, { color: theme.colors.onPrimaryContainer }]}>FEATURED</Text>
-            </View>
-            <Text style={[styles.heroTitle, { color: theme.colors.onSurface }]}>Discover Content</Text>
-            <Text style={[styles.heroDesc, { color: theme.colors.onSurfaceVariant }]}>
-              {homeCatalogs.length > 0
-                ? "Browse your favorite catalogs across all your addons."
-                : "Add your favorite addons to start browsing catalogs."}
-            </Text>
-            {homeCatalogs.length === 0 && (
-              <ExpressiveButton
-                title="Add Addons"
-                variant="primary"
-                onPress={() => router.push('/(tabs)/settings')}
-                style={styles.heroBtn}
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: HEADER_HEIGHT }]}
+      >
+        <HeroCarousel items={carouselItems} />
+
+        <View style={styles.sections}>
+          {homeCatalogs.length > 0 ? (
+            homeCatalogs.map((catalog, index) => (
+              <CatalogRow
+                key={`${catalog.id}-${catalog.type}-${index}`}
+                title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
+                catalogType={catalog.type}
+                catalogId={catalog.id}
+                addonUrl={(catalog as any).addonUrl}
               />
-            )}
-          </View>
-        </ExpressiveSurface>
-      </View>
+            ))
+          ) : (
+            <View style={styles.emptyPrompt}>
+              <CatalogRow
+                title="Trending Movies"
+                catalogType="movie"
+                catalogId="tmdb_trending"
+              />
+              <View style={{ height: 24 }} />
+              <CatalogRow
+                title="Popular Shows"
+                catalogType="series"
+                catalogId="tmdb_popular"
+              />
+            </View>
+          )}
+        </View>
 
-      <View style={styles.sections}>
-        {homeCatalogs.length > 0 ? (
-          homeCatalogs.map(catalog => (
-            <CatalogRow
-              key={`${catalog.id}-${catalog.type}`}
-              title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
-              catalogType={catalog.type}
-              catalogId={catalog.id}
-            />
-          ))
-        ) : (
-          <>
-            <CatalogRow
-              title="Trending Movies"
-              catalogType="movie"
-              catalogId="tmdb_trending"
-            />
-            <View style={{ height: 16 }} />
-            <CatalogRow
-              title="Popular Shows"
-              catalogType="series"
-              catalogId="tmdb_popular"
-            />
-          </>
-        )}
-      </View>
-
-      {/* Spacing for tab bar */}
-      <View style={{ height: 100 }} />
-    </ScrollView>
+        <View style={{ height: 120 }} />
+      </Animated.ScrollView>
+    </View>
   );
 }
 
@@ -105,71 +148,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    paddingTop: 64,
-  },
-  headerArea: {
-    paddingHorizontal: 20,
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 48,
+    paddingBottom: 8,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    zIndex: 100,
   },
-  welcome: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+  branding: {
+    flex: 1,
   },
-  appTitle: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: -1,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  profileBtn: {
-    width: 44,
-    height: 44,
+  iconBtn: {
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  hero: {
-    paddingHorizontal: 20,
-    marginBottom: 32,
-  },
-  heroCard: {
-    height: 200,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  heroContent: {
-    gap: 6,
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  heroSub: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  heroDesc: {
-    fontSize: 14,
-    maxWidth: '90%',
-    lineHeight: 20,
-  },
-  heroBtn: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
+  scrollContent: {
+    paddingBottom: 40,
   },
   sections: {
-    gap: 32,
+    gap: 12,
+  },
+  emptyPrompt: {
+    paddingTop: 0,
   }
 });

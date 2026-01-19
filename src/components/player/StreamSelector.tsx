@@ -28,7 +28,8 @@ export const StreamSelector = ({ type, id, onSelect }: StreamSelectorProps) => {
 
             return results
                 .filter((r): r is PromiseFulfilledResult<{ streams: any[] }> => r.status === 'fulfilled')
-                .flatMap(r => r.value.streams);
+                .flatMap(r => r.value.streams)
+                .filter(Boolean); // Defensive: filter out null/undefined
         },
     });
 
@@ -56,27 +57,45 @@ export const StreamSelector = ({ type, id, onSelect }: StreamSelectorProps) => {
                         </Typography>
                     </View>
                 }
-                renderItem={({ item }) => (
-                    <ExpressiveSurface
-                        variant="filled"
-                        rounding="xl"
-                        onPress={() => onSelect(item)}
-                        style={styles.streamItem}
-                    >
-                        <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceVariant }]}>
-                            {item.infoHash ? <Cpu size={20} color={theme.colors.primary} /> : <Globe size={20} color={theme.colors.secondary} />}
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Typography variant="body" className="text-white font-bold" numberOfLines={2}>
-                                {item.title || item.name || "Unknown Stream"}
-                            </Typography>
-                            <Typography variant="caption" className="text-zinc-500">
-                                {item.infoHash ? "Torrent" : "HTTP Direct"} {item.fileIdx !== undefined ? `• File #${item.fileIdx}` : ""}
-                            </Typography>
-                        </View>
-                        <Play size={20} color={theme.colors.onSurfaceVariant} />
-                    </ExpressiveSurface>
-                )}
+                renderItem={({ item }) => {
+                    if (!item) return null; // Defensive check
+
+                    // Align with Crispy-webui: stream.name is the addon/source, stream.title is metadata
+                    const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
+                    const subtitle = item.title || item.description || "No description available";
+
+                    const isTorrent = !!item.infoHash;
+                    const isYT = !!item.ytId;
+                    const isExternal = !!item.externalUrl;
+
+                    return (
+                        <ExpressiveSurface
+                            variant="filled"
+                            rounding="xl"
+                            onPress={() => onSelect(item)}
+                            style={styles.streamItem}
+                        >
+                            <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceVariant }]}>
+                                {isTorrent ? (
+                                    <Cpu size={20} color={theme.colors.primary} />
+                                ) : isYT ? (
+                                    <Globe size={20} color={"#FF0000"} />
+                                ) : (
+                                    <Globe size={20} color={theme.colors.secondary} />
+                                )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Typography variant="body" weight="black" style={{ color: 'white' }} numberOfLines={1}>
+                                    {mainTitle}
+                                </Typography>
+                                <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 12 }} numberOfLines={2}>
+                                    {subtitle}
+                                </Typography>
+                            </View>
+                            <Play size={20} color={theme.colors.primary} fill={theme.colors.primary} style={{ opacity: 0.7 }} />
+                        </ExpressiveSurface>
+                    );
+                }}
             />
         </View>
     );

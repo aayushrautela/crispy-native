@@ -24,8 +24,6 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!user && !inAuthGroup) {
-      // On TV we should force login, on mobile we allow guest
-      // For now, let's just implement the basic redirect
       // router.replace('/(auth)/login'); 
     } else if (user && inAuthGroup) {
       router.replace('/(tabs)');
@@ -37,6 +35,8 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="meta/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="player" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />

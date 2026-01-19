@@ -55,7 +55,10 @@ export class AddonService {
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/stream/${type}/${encodeURIComponent(id)}.json`;
         try {
             const res = await axios.get<{ streams: any[] }>(url);
-            return res.data;
+            if (res.data && Array.isArray(res.data.streams)) {
+                return res.data;
+            }
+            return { streams: [] };
         } catch (e) {
             return { streams: [] };
         }

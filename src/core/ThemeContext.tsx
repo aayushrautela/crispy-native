@@ -1,8 +1,8 @@
+import { useMaterial3Theme } from '@pchmn/expo-material3-theme';
 import React, { createContext, useContext, useMemo } from 'react';
 import { useColorScheme } from 'react-native';
-import { useMaterial3Theme } from '@pchmn/expo-material3-theme';
-import { useUserStore } from './stores/userStore';
 import { MD3DarkTheme, MD3LightTheme, MD3Theme, Provider as PaperProvider } from 'react-native-paper';
+import { useUserStore } from './stores/userStore';
 
 interface ThemeContextType {
     theme: MD3Theme;
@@ -44,11 +44,11 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
             colors: {
                 ...baseTheme.colors,
                 ...m3Colors,
-                // AMOLED support
+                // Material You / AMOLED support
                 ...(isDark && amoledMode ? {
                     background: '#000000',
                     surface: '#000000',
-                    surfaceVariant: '#121212', // Slightly elevated for contrast
+                    surfaceVariant: '#121212',
                     onSurface: '#ECEDEE',
                 } : {}),
             },

@@ -57,7 +57,8 @@
           }
         }
       ],
-      "./plugins/withAndroidSplits.js"
+      "./plugins/withAndroidSplits.js",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

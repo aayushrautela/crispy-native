@@ -2,19 +2,24 @@ import { useQuery } from '@tanstack/react-query';
 import { AddonService, CatalogResponse } from '../api/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 
-export const useCatalog = (type: string, id: string, extra?: Record<string, any>) => {
+export const useCatalog = (type: string, id: string, extra?: Record<string, any>, addonUrl?: string) => {
     const { manifests } = useAddonStore();
 
-    // Find addons that support this catalog
-    const addonUrls = Object.keys(manifests).filter(url =>
-        manifests[url].catalogs?.some(c => c.type === type && c.id === id)
-    );
+    // Determine which addon(s) to fetch from
+    const targetUrls = useMemo(() => {
+        if (addonUrl) return [addonUrl];
+
+        // Fallback: find all addons that support this catalog
+        return Object.keys(manifests).filter(url =>
+            manifests[url].catalogs?.some(c => c.type === type && c.id === id)
+        );
+    }, [manifests, type, id, addonUrl]);
 
     return useQuery({
-        queryKey: ['catalog', type, id, extra, addonUrls],
+        queryKey: ['catalog', type, id, extra, targetUrls],
         queryFn: async () => {
             const results = await Promise.allSettled(
-                addonUrls.map(url => AddonService.getCatalog(url, type, id, extra))
+                targetUrls.map(url => AddonService.getCatalog(url, type, id, extra))
             );
 
             const metas = results
@@ -31,7 +36,7 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
                 })
             };
         },
-        enabled: addonUrls.length > 0,
+        enabled: targetUrls.length > 0,
     });
 };
 
@@ -57,3 +62,5 @@ export const useMeta = (type: string, id: string) => {
         enabled: addonUrls.length > 0,
     });
 };
+
+import { useMemo } from 'react';

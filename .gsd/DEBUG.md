@@ -1,39 +1,34 @@
-# Debug Session: Missing expo-screen-orientation
+# Debug Session: Missing useAiInsights
 
 ## Symptom
-Bundling fails with: `Unable to resolve "expo-screen-orientation" from "src/app/player.tsx"`.
+Runtime error: `[ReferenceError: Property 'useAiInsights' doesn't exist]` in `src/app/meta/[id].tsx`.
 
-**When:** During app bundling after implementing Phase 4 Player.
-**Expected:** App bundles successfully.
-**Actual:** Module resolution failure for `expo-screen-orientation`.
+**When:** accessing MetaDetailsScreen
+**Expected:** Page loads with AI insights
+**Actual:** Crash
 
 ## Evidence
-- `src/app/player.tsx` uses `import * as ScreenOrientation from 'expo-screen-orientation'`.
-- This package was never explicitly installed in `package.json`.
+- `src/app/meta/[id].tsx` was missing imports for `AIInsightsCarousel` and `useAiInsights`.
+- `src/core/storage.ts` was mysteriously missing the `MMKV` import despite previous attempts to add it.
 
 ## Hypotheses
-
 | # | Hypothesis | Likelihood | Status |
 |---|------------|------------|--------|
-| 1 | Package `expo-screen-orientation` is not in `package.json`. | 95% | UNTESTED |
-| 2 | Metro cache is stale. | 5% | UNTESTED |
-
-## Attempts
-
-### Attempt 1
-**Testing:** H1 — Dependency presence.
-**Action:** Check `package.json`.
-**Result:** Package was missing.
-**Conclusion:** CONFIRMED.
+| 1 | Missing imports in MetaDetails | 100% | CONFIRMED |
+| 2 | Malformed storage.ts | 100% | CONFIRMED |
 
 ## Resolution
 
 **Root Cause:**
-- `expo-screen-orientation` was required by `src/app/player.tsx` but not listed in `dependencies`.
+1. Forgot to add imports when uncommenting hook usage.
+2. `storage.ts` edits were not persisting correctly or were being malformed by the tool.
 
 **Fix:**
-- Installed via `npx expo install expo-screen-orientation`.
+1. Added missing imports to `MetaDetailsScreen`.
+2. Fully overwrote `storage.ts` with correct content including `import { MMKV } ...`.
+3. Corrected prop types in `MetaDetailsScreen` (`variant="filled"`, `rounding="lg"`) to appease TypeScript.
 
 **Verified:**
-- `package.json` now includes `expo-screen-orientation: ~9.0.8`.
-- Bundler should now resolve the module correctly.
+- Imports are present.
+- `storage.ts` has MMKV import.
+- Type checker should be cleaner (some errors persist in other files but are unrelated to this crash).

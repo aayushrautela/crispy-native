@@ -1,23 +1,24 @@
 # Project State
 
-- **Current Position**: Phase 8: Audit & UI Alignment (Gap Closure)
+- **Current Position**: Phase 8 In Progress (Audit & Recovery)
 - **Recent Accomplishments**: 
-  - **Phase 4 Implementation**: Native MPV player, torrent bridge, and M3 playback UI.
-  - **CI Resolution**: Fixed OOM/Config Cache errors in GitHub Actions.
-  - **UI Alignment**: Refactored Home, Discover, and Search to match `crispy-webui` mobile.
-  - **Technical Debt**: Fixed missing imports and module evaluation crashes.
+  - **M3 Expressive Base**: Implemented swipable HeroCarousel and refined CatalogCard layout.
+  - **TMDB Service**: Established metadata enrichment layer.
+- **Blockers**: 
+  - **Navigation Gap**: Player unreachable from new Home/Discover components.
+  - **UI Instability**: User reported "mostly broken" state; needs deep audit.
+  - **Playback Verification**: Phase 4 marked as UNVERIFIED due to unreachable UI.
 
 ## Milestones
-- [x] Phase 1: Foundation & Identity
-- [x] Phase 2: Addon Engine & Provider Layer
-- [x] Phase 3: Catalog Explorer
-- [x] Phase 4: Playback & Streaming
-- [ ] Phase 5: Search & Discovery (Integrated into Gap Closure)
-- [ ] Phase 6: Sync & Personalization
-- [ ] Phase 7: Polish & Performance
-- [/] Phase 8: Audit & UI Alignment [IN PROGRESS]
+- [x] Phase 1: Foundation & Identity (Verified)
+- [x] Phase 2: Addon Engine & Provider Layer (Verified)
+- [x] Phase 3: Catalog Explorer (Verified)
+- [ ] Phase 4: Playback & Streaming (UNVERIFIED)
+- [/] Phase 8: Audit & UI Alignment (IN PROGRESS)
+- [ ] Phase 5: Sync & Personalization
+- [ ] Phase 6: Leanback Experience (TV)
 
 ## Next Steps
-1. Verify the GitHub build passes with new memory limits.
-2. Polish the remaining UI transitions in the Search screen.
-3. Prepare for Phase 6 (Cloud Sync & Trakt).
+1. Audit navigation paths from Hero and CatalogCard to Playback.
+2. Fix "mostly broken" UI elements identified in audit.
+3. Re-verify Phase 4 once the player is reachable.
