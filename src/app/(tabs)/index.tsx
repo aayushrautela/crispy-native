@@ -55,8 +55,9 @@ export default function HomeScreen() {
   });
 
   const homeCatalogs = useMemo(() => {
-    const catalogs = Object.values(manifests).flatMap(m =>
-      (m.catalogs || []).map(c => ({ ...c, addonName: m.name, addonUrl: (m as any).transportUrl }))
+    if (!manifests) return [];
+    const catalogs = Object.entries(manifests).flatMap(([url, m]) =>
+      (m?.catalogs || []).map(c => ({ ...c, addonName: m.name, addonUrl: url }))
     );
     const seen = new Set();
     return catalogs.filter(c => {
@@ -66,11 +67,34 @@ export default function HomeScreen() {
     }).slice(0, 5);
   }, [manifests]);
 
+  /*
+  console.log('[Home] manifests count:', Object.keys(manifests || {}).length);
+  console.log('[Home] homeCatalogs count:', homeCatalogs.length);
+  if (homeCatalogs.length > 0) {
+      console.log('[Home] firstCatalog:', {
+          type: homeCatalogs[0].type,
+          id: homeCatalogs[0].id,
+          addonUrl: homeCatalogs[0].addonUrl
+      });
+  }
+  */
+
   const firstCatalog = homeCatalogs[0];
-  const { data: heroData } = useCatalog(
+  const { data: heroData, isLoading: heroLoading, error: heroError } = useCatalog(
     firstCatalog?.type || '',
-    firstCatalog?.id || ''
+    firstCatalog?.id || '',
+    firstCatalog?.extra ? { ...firstCatalog.extra } : undefined,
+    firstCatalog?.addonUrl
   );
+
+  /*
+  console.log('[Home] heroData:', {
+      hasMetas: !!heroData?.metas,
+      count: heroData?.metas?.length,
+      loading: heroLoading,
+      error: heroError
+  });
+  */
 
   const carouselItems = useMemo(() => {
     if (heroData?.metas && heroData.metas.length > 0) {
@@ -107,44 +131,49 @@ export default function HomeScreen() {
         </View>
       </Animated.View>
 
-      <Animated.ScrollView
+      <Animated.FlatList
+        data={homeCatalogs}
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingTop: HEADER_HEIGHT }]}
-      >
-        <HeroCarousel items={carouselItems} />
-
-        <View style={styles.sections}>
-          {homeCatalogs.length > 0 ? (
-            homeCatalogs.map((catalog, index) => (
-              <CatalogRow
-                key={`${catalog.id}-${catalog.type}-${index}`}
-                title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
-                catalogType={catalog.type}
-                catalogId={catalog.id}
-                addonUrl={(catalog as any).addonUrl}
-              />
-            ))
-          ) : (
-            <View style={styles.emptyPrompt}>
-              <CatalogRow
-                title="Trending Movies"
-                catalogType="movie"
-                catalogId="tmdb_trending"
-              />
-              <View style={{ height: 32 }} />
-              <CatalogRow
-                title="Popular Shows"
-                catalogType="series"
-                catalogId="tmdb_popular"
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={{ height: 120 }} />
-      </Animated.ScrollView>
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        ListHeaderComponent={() => (
+          <>
+            <HeroCarousel items={carouselItems} />
+            {homeCatalogs.length === 0 && (
+              <View style={styles.emptyPrompt}>
+                <CatalogRow
+                  title="Trending Movies"
+                  catalogType="movie"
+                  catalogId="tmdb_trending"
+                />
+                <View style={{ height: 32 }} />
+                <CatalogRow
+                  title="Popular Shows"
+                  catalogType="series"
+                  catalogId="tmdb_popular"
+                />
+              </View>
+            )}
+          </>
+        )}
+        renderItem={({ item: catalog, index }) => (
+          <CatalogRow
+            key={`${catalog.id}-${catalog.type}-${index}`}
+            title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
+            catalogType={catalog.type}
+            catalogId={catalog.id}
+            addonUrl={(catalog as any).addonUrl}
+          />
+        )}
+        ListFooterComponent={() => <View style={{ height: 120 }} />}
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        initialNumToRender={2}
+      />
     </View>
   );
 }

@@ -35,7 +35,8 @@ export class AddonService {
         let path = `/catalog/${type}/${id}`;
 
         if (extra) {
-            // Stremio v2 convention: /catalog/type/id/key=value.json
+            // Updated to handle standard Stremio extra formatting
+            // Usually path keys like: /genre=Action/skip=20.json
             const extraPath = Object.entries(extra)
                 .filter(([_, v]) => v !== undefined && v !== null)
                 .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
@@ -47,9 +48,16 @@ export class AddonService {
         }
 
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}${path}.json`;
+        console.log(`[AddonService] Fetching catalog: ${url}`);
 
-        const res = await axios.get<CatalogResponse>(url);
-        return res.data;
+        try {
+            const res = await axios.get<CatalogResponse>(url);
+            console.log(`[AddonService] Success ${url}, items: ${res.data?.metas?.length}`);
+            return res.data;
+        } catch (e) {
+            console.error(`[AddonService] Failed ${url}`, e);
+            throw e;
+        }
     }
 
     static async getMeta(baseUrl: string, type: string, id: string): Promise<any> {

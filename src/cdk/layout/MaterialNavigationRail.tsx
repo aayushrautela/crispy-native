@@ -95,7 +95,7 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
             </View>
 
             <View style={styles.itemsSection}>
-                {state.routes.map((route, index) => (
+                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
                     <NavigationRailItem
                         key={route.key}
                         route={route}

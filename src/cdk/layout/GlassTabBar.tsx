@@ -82,7 +82,7 @@ export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProp
                     }
                 ]}
             >
-                {state.routes.map((route, index) => (
+                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
                     <GlassTabItem
                         key={route.key}
                         route={route}

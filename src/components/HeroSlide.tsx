@@ -10,7 +10,7 @@ import { Meta } from '../core/hooks/useHeroItems';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_WIDTH = SCREEN_WIDTH - 32;
-const ASPECT_RATIO = 4 / 5;
+const ASPECT_RATIO = 1; // Shorter (Square)
 const HERO_HEIGHT = HERO_WIDTH / ASPECT_RATIO;
 
 interface HeroSlideProps {
@@ -50,7 +50,7 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                     style={styles.backgroundImage}
                 >
                     <LinearGradient
-                        colors={['rgba(0,0,0,0.6)', 'transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.95)']}
+                        colors={['rgba(0,0,0,0.3)', 'transparent', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.95)']}
                         locations={[0, 0.3, 0.6, 1]}
                         style={styles.gradient}
                     >
@@ -74,11 +74,9 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             {/* Meta Row */}
                             <View style={styles.metaRow}>
                                 {item.released && (
-                                    <View style={[styles.metaBadge, { backgroundColor: 'black' }]}>
-                                        <Typography variant="label-small" weight="bold" style={{ color: 'white' }}>
-                                            {item.released.split('-')[0]}
-                                        </Typography>
-                                    </View>
+                                    <Typography variant="label-medium" weight="bold" style={{ color: 'white' }}>
+                                        {item.released.split('-')[0]}
+                                    </Typography>
                                 )}
                                 {item.rating && (
                                     <View style={styles.metaRowItem}>
@@ -146,17 +144,20 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'flex-end',
         padding: 24,
-        paddingBottom: 40,
+        paddingBottom: 56, // Reduced padding
     },
     content: {
     },
     brandingSection: {
         marginBottom: 8,
+        alignItems: 'flex-start',
+        width: '100%', // Ensure container takes full width
     },
     logo: {
-        width: HERO_WIDTH * 0.7,
-        height: 60,
-        marginBottom: 4,
+        width: 250, // Constrain width so it doesn't look centered in a huge box
+        height: 80,
+        marginBottom: 8,
+        alignSelf: 'flex-start',
     },
     newTag: {
         marginTop: -4,
@@ -165,13 +166,8 @@ const styles = StyleSheet.create({
     metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
         marginBottom: 12,
-    },
-    metaBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
     },
     metaRowItem: {
         flexDirection: 'row',
@@ -180,10 +176,12 @@ const styles = StyleSheet.create({
     actionRow: {
         flexDirection: 'row',
         gap: 12,
-        justifyContent: 'center',
+        width: '100%',
+        justifyContent: 'center', // Align Center
     },
     actionBtn: {
-        flex: 1,
-        height: 48,
+        width: 140,
+        height: 44, // Slightly shorter for sleeker pill look
+        borderRadius: 100,
     },
 });

@@ -16,7 +16,7 @@ import Animated, {
     useSharedValue
 } from 'react-native-reanimated';
 
-const HEADER_HEIGHT = 160;
+const HEADER_HEIGHT = 220;
 
 const TYPE_OPTIONS = [
     { label: 'All', value: 'all' },

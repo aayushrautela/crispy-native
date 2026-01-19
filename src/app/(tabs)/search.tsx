@@ -3,7 +3,6 @@ import { Touchable } from '@/src/cdk/components/Touchable';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
 import { CatalogRow } from '@/src/components/CatalogRow';
-import { SectionHeader } from '@/src/components/SectionHeader';
 import { AddonService } from '@/src/core/api/AddonService';
 import { TMDBService } from '@/src/core/api/TMDBService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
@@ -16,7 +15,7 @@ import Animated, { interpolate, useAnimatedScrollHandler, useAnimatedStyle, useS
 
 type SearchType = 'all' | 'movie' | 'series';
 
-const HEADER_HEIGHT = 220;
+const HEADER_HEIGHT = 280;
 
 export default function SearchScreen() {
     const { theme } = useTheme();
@@ -195,7 +194,6 @@ export default function SearchScreen() {
                                 />
                             </View>
                         ))}
-                        {results?.tmdb.length ? <SectionHeader title="Global Results" hideAction /> : null}
                     </>
                 )}
                 contentContainerStyle={styles.listContent}

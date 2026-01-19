@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { AddonService } from '../api/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 
@@ -7,12 +8,17 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
 
     // Determine which addon(s) to fetch from
     const targetUrls = useMemo(() => {
+        console.log('[useCatalog] manifests:', manifests);
+        if (!manifests || typeof manifests !== 'object') return [];
+        const safeManifests = manifests as Record<string, AddonManifest>;
+
         if (addonUrl) return [addonUrl];
 
-        // Fallback: find all addons that support this catalog
-        return Object.keys(manifests).filter(url =>
-            manifests[url].catalogs?.some(c => c.type === type && c.id === id)
+        const filtered = Object.keys(safeManifests).filter(url =>
+            safeManifests[url]?.catalogs?.some(c => c.type === type && c.id === id)
         );
+        // console.log('[useCatalog] targetUrls:', filtered, 'type:', type, 'id:', id);
+        return filtered;
     }, [manifests, type, id, addonUrl]);
 
     return useQuery({
@@ -23,13 +29,11 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
             );
 
             // Filter successful results and log failures
-            const successfulResults = results.map((r, idx) => {
+            const metas = results.flatMap((r, idx) => {
                 if (r.status === 'fulfilled') return r.value.metas || [];
                 console.error(`[useCatalog] Failed to fetch catalog from ${targetUrls[idx]}:`, r.reason);
                 return [];
             });
-
-            const metas = successfulResults.flat();
 
             // ID deduplication while preserving order
             const seen = new Set<string>();
@@ -41,7 +45,7 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
 
             return { metas: uniqueMetas };
         },
-        enabled: targetUrls.length > 0,
+        enabled: !!type && !!id && ((targetUrls?.length || 0) > 0),
         staleTime: 1000 * 60 * 5, // 5 minutes cache
     });
 };
@@ -68,5 +72,3 @@ export const useMeta = (type: string, id: string) => {
         enabled: addonUrls.length > 0,
     });
 };
-
-import { useMemo } from 'react';

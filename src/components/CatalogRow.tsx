@@ -1,12 +1,12 @@
 import { MetaPreview } from '@/src/core/api/AddonService';
-import { useCatalog } from '@/src/core/hooks/useDiscovery';
+import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
 import { useTheme } from '@/src/core/ThemeContext';
 import React from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
 import { SectionHeader } from './SectionHeader';
 
-const CARD_WIDTH = 144; // Standardized to 144 from webui
+const CARD_WIDTH = 144;
 const ITEM_GAP = 16;
 const SNAP_INTERVAL = CARD_WIDTH + ITEM_GAP;
 
@@ -33,19 +33,40 @@ export const CatalogRow = ({
 }: CatalogRowProps) => {
     const { theme } = useTheme();
 
-    const { data, isLoading: queryLoading } = useCatalog(
+    const {
+        items: fetchedItems,
+        isLoading: catalogLoading,
+        isFetchingMore,
+        hasMore,
+        fetchMore,
+    } = usePaginatedCatalog(
         catalogType || '',
         catalogId || '',
         extra,
         addonUrl
     );
 
-    const items = propItems || data?.metas || [];
-    const isLoading = propLoading || (!!catalogId && queryLoading);
+    const items = propItems || fetchedItems;
+    const isLoading = propLoading || (!!catalogId && catalogLoading);
 
     if (!isLoading && items.length === 0 && !!catalogId) {
         return null;
     }
+
+    const handleEndReached = () => {
+        if (hasMore && !isFetchingMore && !propItems) {
+            fetchMore();
+        }
+    };
+
+    const renderFooter = () => {
+        if (!isFetchingMore) return null;
+        return (
+            <View style={styles.footerLoader}>
+                <ActivityIndicator color={theme.colors.primary} />
+            </View>
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -69,7 +90,7 @@ export const CatalogRow = ({
                                     backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
                                     width: CARD_WIDTH,
                                     height: CARD_WIDTH * 1.5,
-                                    borderRadius: 16 // rounding-lg
+                                    borderRadius: 16
                                 }
                             ]}
                         />
@@ -88,6 +109,19 @@ export const CatalogRow = ({
                     snapToInterval={SNAP_INTERVAL}
                     decelerationRate="fast"
                     snapToAlignment="start"
+                    onEndReached={handleEndReached}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={renderFooter}
+                    // Performance optimizations
+                    removeClippedSubviews={true}
+                    maxToRenderPerBatch={4}
+                    windowSize={3}
+                    initialNumToRender={4}
+                    getItemLayout={(_, index) => ({
+                        length: SNAP_INTERVAL,
+                        offset: SNAP_INTERVAL * index,
+                        index,
+                    })}
                 />
             )}
         </View>
@@ -114,5 +148,11 @@ const styles = StyleSheet.create({
     },
     skeleton: {
         opacity: 0.5,
+    },
+    footerLoader: {
+        width: 100,
+        height: CARD_WIDTH * 1.5,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

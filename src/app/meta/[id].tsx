@@ -26,54 +26,99 @@ import { CatalogRow } from '../../components/CatalogRow';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 550;
 
-const CastItem = ({ person, theme }: { person: any, theme: any }) => (
-    <View style={styles.castItem}>
-        <Image
-            source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
-            style={styles.castImage}
-        />
-        <Typography variant="label" weight="black" numberOfLines={1} style={{ color: theme.colors.onSurface, marginTop: 8, fontSize: 12 }}>{person.name}</Typography>
-        <Typography variant="label" weight="medium" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 11 }}>{person.character}</Typography>
-    </View>
-);
-
-const EpisodeItem = ({ episode, theme }: { episode: any, theme: any }) => (
-    <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-        <Image source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
-        <View style={styles.episodeInfo}>
-            <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
-                E{episode.episode || episode.number}: {episode.name || episode.title}
+const CastItem = ({ person, theme }: { person: any; theme: any }) => {
+    return (
+        <View style={styles.castItem}>
+            <Image
+                source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
+                style={styles.castImage}
+            />
+            <Typography
+                variant="label"
+                weight="black"
+                numberOfLines={1}
+                style={{ color: theme.colors.onSurface, marginTop: 8, fontSize: 12 }}
+            >
+                {person.name}
             </Typography>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 2 }}>
-                {episode.runtime && <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>{episode.runtime}</Typography>}
-                {episode.released && <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>{new Date(episode.released).toLocaleDateString()}</Typography>}
-            </View>
-            <Typography variant="label" numberOfLines={2} style={{ color: 'white', opacity: 0.7, marginTop: 4, fontSize: 11 }}>
-                {episode.overview || episode.description || "No description available."}
+            <Typography
+                variant="label"
+                weight="medium"
+                numberOfLines={1}
+                style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 11 }}
+            >
+                {person.character}
             </Typography>
         </View>
-    </View>
-);
+    );
+};
 
-const ReviewCard = ({ review, theme }: { review: any, theme: any }) => (
-    <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-        <View style={styles.reviewHeader}>
-            <Image source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')} style={styles.avatar} />
-            <View style={{ flex: 1 }}>
-                <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface }}>{review.author}</Typography>
-                {review.rating && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Star size={10} color="#F5C518" fill="#F5C518" />
-                        <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontSize: 11 }}>{review.rating}/10</Typography>
-                    </View>
-                )}
+const EpisodeItem = ({ episode, theme }: { episode: any; theme: any }) => {
+    return (
+        <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <Image source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
+            <View style={styles.episodeInfo}>
+                <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
+                    E{episode.episode || episode.number}: {episode.name || episode.title}
+                </Typography>
+                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                    {episode.runtime && (
+                        <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
+                            {episode.runtime}
+                        </Typography>
+                    )}
+                    {episode.released && (
+                        <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
+                            {new Date(episode.released).toLocaleDateString()}
+                        </Typography>
+                    )}
+                </View>
+                <Typography
+                    variant="label"
+                    numberOfLines={2}
+                    style={{ color: 'white', opacity: 0.7, marginTop: 4, fontSize: 11 }}
+                >
+                    {episode.overview || episode.description || 'No description available.'}
+                </Typography>
             </View>
         </View>
-        <Typography variant="body" numberOfLines={4} style={{ color: theme.colors.onSurface, opacity: 0.8, marginTop: 8, fontSize: 13 }}>
-            {review.content}
-        </Typography>
-    </View>
-);
+    );
+};
+
+const ReviewCard = ({ review, theme }: { review: any; theme: any }) => {
+    if (!review) return null;
+
+    return (
+        <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <View style={styles.reviewHeader}>
+                <Image
+                    source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')}
+                    style={styles.avatar}
+                />
+                <View style={{ flex: 1 }}>
+                    <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface }}>
+                        {review.author}
+                    </Typography>
+                    {review.rating && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Star size={10} color="#F5C518" fill="#F5C518" />
+                            <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontSize: 11 }}>
+                                {review.rating}/10
+                            </Typography>
+                        </View>
+                    )}
+                </View>
+            </View>
+            <Typography
+                variant="body"
+                numberOfLines={4}
+                style={{ color: theme.colors.onSurface, opacity: 0.8, marginTop: 8, fontSize: 13 }}
+            >
+                {review.content}
+            </Typography>
+        </View>
+    );
+};
 
 export default function MetaDetailsScreen() {
     const { id, type } = useLocalSearchParams();
@@ -255,6 +300,12 @@ export default function MetaDetailsScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* Gradient Fade for Body Start */}
+                <LinearGradient
+                    colors={['transparent', theme.colors.background]}
+                    style={{ height: 100, marginTop: -100 }}
+                />
 
                 {/* Body Content (Opaque) */}
                 <View style={[styles.body, { backgroundColor: theme.colors.background }]}>

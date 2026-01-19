@@ -99,7 +99,7 @@ export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarP
                     paddingBottom: insets.bottom + 16,
                 }
             ]}>
-                {state.routes.map((route, index) => (
+                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
                     <MaterialTabItem
                         key={route.key}
                         route={route}

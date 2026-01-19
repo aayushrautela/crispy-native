@@ -3,15 +3,21 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { Meta, useHeroItems } from '../core/hooks/useHeroItems';
+import { Meta } from '../core/hooks/useHeroItems';
 import { HeroSlide } from './HeroSlide';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export const HeroCarousel = () => {
+interface HeroCarouselProps {
+    items?: Meta[];
+}
+
+export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
     const { theme } = useTheme();
     const router = useRouter();
-    const { data: items, isLoading } = useHeroItems();
+    // const { data: items, isLoading } = useHeroItems();
+    const items = propItems || [];
+    const isLoading = false; // Controlled by parent now
     const scrollX = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
@@ -97,13 +103,13 @@ const styles = StyleSheet.create({
     },
     skeleton: {
         width: SCREEN_WIDTH - 32,
-        height: (SCREEN_WIDTH - 32) / (4 / 5),
+        height: (SCREEN_WIDTH - 32), // Aspect Ratio 1
         borderRadius: 32,
         opacity: 0.5,
     },
     dotsContainer: {
         position: 'absolute',
-        bottom: 30,
+        bottom: 20,
         left: 0,
         right: 0,
         flexDirection: 'row',

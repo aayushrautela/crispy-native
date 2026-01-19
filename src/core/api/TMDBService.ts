@@ -63,23 +63,33 @@ export interface TMDBMeta {
 const metaCache: Record<string, Partial<TMDBMeta>> = {};
 
 export class TMDBService {
-    static async getEnrichedMeta(stremioId: string, type: 'movie' | 'series' | string): Promise<Partial<TMDBMeta>> {
-        const cacheKey = `${stremioId}_${type}`;
+    static async getEnrichedMeta(stremioId: string | number, type: 'movie' | 'series' | string): Promise<Partial<TMDBMeta>> {
+        if (!stremioId) return {};
+        const idStr = String(stremioId);
+
+        const cacheKey = `${idStr}_${type}`;
         if (metaCache[cacheKey]) return metaCache[cacheKey];
 
         try {
             const findPath = type === 'movie' ? 'movie' : 'tv';
-            let tmdbId: string | number;
-
-            if (stremioId.startsWith('tmdb:')) {
-                tmdbId = stremioId.split(':')[1];
-            } else {
+            if (idStr.startsWith('tmdb:')) {
+                tmdbId = idStr.split(':')[1];
+            } else if (idStr.startsWith('tt')) {
                 // 1. Find TMDB ID from External ID (IMDB)
-                const findUrl = `${BASE_URL}/find/${stremioId}?api_key=${API_KEY}&external_source=imdb_id`;
+                const findUrl = `${BASE_URL}/find/${idStr}?api_key=${API_KEY}&external_source=imdb_id`;
                 const findRes = await axios.get(findUrl);
                 const result = type === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
                 if (!result) return {};
                 tmdbId = result.id;
+            } else {
+                // Fallback: If it's a plain number, assume it's a TMDB ID (like Web UI)
+                const n = Number(idStr);
+                if (!isNaN(n)) {
+                    tmdbId = n;
+                } else {
+                    console.warn('[TMDBService] Unsupported ID format:', idStr);
+                    return {};
+                }
             }
 
             // 2. Get Full Details & Images & Credits & Similar & Reviews & Keywords

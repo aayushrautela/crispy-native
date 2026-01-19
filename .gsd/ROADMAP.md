@@ -34,3 +34,24 @@
 ## Phase 7: Playback (Deferred)
 **Status**: ⬜ Not Started
 **Objective**: Clean up and verify the video player.
+
+---
+
+## Phase 8: Performance Optimization
+**Status**: ✅ COMPLETED
+**Objective**: Optimize the application for 60+ FPS rendering and minimize `VirtualizedList` update lag.
+**Depends on**: Phase 4, Phase 6
+
+**Tasks**:
+- [ ] TBD (run /plan 8 to create)
+
+**Verification**:
+- [ ] Profiler trace showing < 16ms frame times during scroll.
+
+## Phase 9: Infinite Catalog Scroll
+**Status**: 🚧 IN_PROGRESS
+**Objective**: Implement horizontal lazy-loading for catalog rows on Home/Discover.
+- [ ] Refactor `useCatalog` to `useInfiniteQuery`.
+- [ ] Implement `skip` pagination in `AddonService`.
+- [ ] Update `CatalogRow` with `onEndReached` logic.
+
