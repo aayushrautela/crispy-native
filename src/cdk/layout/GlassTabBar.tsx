@@ -1,6 +1,7 @@
+import { useTheme } from '@/src/core/ThemeContext';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Surface } from '../components/Surface';
 import { Touchable } from '../components/Touchable';

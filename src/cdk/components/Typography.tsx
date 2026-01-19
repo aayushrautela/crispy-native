@@ -12,6 +12,7 @@ interface TypographyProps extends TextProps {
     | 'label-large' | 'label-medium' | 'label-small'
     | 'h1' | 'h2' | 'h3' | 'body' | 'caption' | 'label'; // Legacy support
     weight?: 'light' | 'normal' | 'medium' | 'semibold' | 'bold' | 'black';
+    rounded?: boolean;
 }
 
 const variantStyles = {
@@ -57,6 +58,7 @@ const weightStyles = {
 export const Typography = ({
     variant = 'body',
     weight,
+    rounded = false,
     className,
     children,
     style,
@@ -64,11 +66,27 @@ export const Typography = ({
 }: TypographyProps) => {
     const { theme } = useTheme();
 
+    const getFontFamily = () => {
+        const familyPrefix = rounded ? 'Nunito' : 'GoogleSans';
+        switch (weight) {
+            case 'medium': return `${familyPrefix}-Medium`;
+            case 'semibold': return `${familyPrefix}-SemiBold`;
+            case 'bold': return `${familyPrefix}-Bold`;
+            case 'black': return rounded ? 'Nunito-Black' : 'GoogleSans-Bold';
+            default: return `${familyPrefix}-Regular`;
+        }
+    };
+
     return (
         <Text
             className={cn(variantStyles[variant], weight && weightStyles[weight], className)}
             style={[
-                { color: theme.colors.onSurface },
+                {
+                    color: theme.colors.onSurface,
+                    fontFamily: getFontFamily(),
+                    includeFontPadding: false,
+                    textAlignVertical: 'center',
+                },
                 style,
             ]}
             {...props}
