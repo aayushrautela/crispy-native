@@ -25,3 +25,6 @@
   - Built `AddonService` and `ProviderStore` for Stremio addon integration.
   - **Key Change**: Based on user feedback, removed the "Direct-then-Proxy" logic. Realized that since we are running in a pure React Native environment, browser-level CORS restrictions are non-existent for native fetches. This simplified the `CrispyServer` to a pure streaming engine and `AddonService` to standard direct fetches.
 - **Decision**: Keep the local server purely for torrent piece serving (required for MPV playback) but stop using it as an API proxy.
+
+## 2026-01-19
+- Completed codebase mapping and generated ARCHITECTURE.md and STACK.md.
