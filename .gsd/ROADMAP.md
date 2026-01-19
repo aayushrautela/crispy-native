@@ -55,3 +55,14 @@
 - [ ] Implement `skip` pagination in `AddonService`.
 - [ ] Update `CatalogRow` with `onEndReached` logic.
 
+## Phase 10: Trakt Integration
+**Status**: ⬜ Not Started
+**Objective**: Port Trakt implementation from `Crispy-webui`, adapting it for `crispy-native`.
+**Depends on**: Phase 9
+
+**Tasks**:
+- [ ] TBD (run /plan 10 to create)
+
+**Verification**:
+- [ ] TBD
+

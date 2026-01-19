@@ -16,3 +16,4 @@ Codebase mapping complete.
 ## Next Steps
 - Proceed to Phase 4: Discover Page - Catalog Rows.
 - Continue implementing 1:1 mobile layout alignment.
+- Plan Phase 10: Trakt Integration.
