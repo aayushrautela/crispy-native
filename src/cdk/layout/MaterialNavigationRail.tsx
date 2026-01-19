@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Touchable } from '../components/Touchable';
 import { useTheme } from '@/src/core/ThemeContext';
-import Animated, { useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
+import { Touchable } from '../components/Touchable';
+
+import { Typography } from '../components/Typography';
 
 const NavigationRailItem = ({
     route,
@@ -43,7 +45,7 @@ const NavigationRailItem = ({
 
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            height: withSpring(isFocused ? 32 : 0, { damping: 15 }),
+            height: withSpring(isFocused ? 32 : 0, { damping: 15, stiffness: 150 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
             backgroundColor: theme.colors.secondaryContainer,
         };
@@ -60,15 +62,19 @@ const NavigationRailItem = ({
                 {options.tabBarIcon && options.tabBarIcon({
                     focused: isFocused,
                     color: isFocused ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
-                    size: 24
+                    size: 26
                 })}
             </View>
-            <Text style={[
-                styles.label,
-                { color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant, fontWeight: isFocused ? '700' : '500' }
-            ]}>
+            <Typography
+                variant="label-medium"
+                weight={isFocused ? 'bold' : 'medium'}
+                style={{
+                    color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+                    marginTop: 4
+                }}
+            >
                 {label as string}
-            </Text>
+            </Typography>
         </Touchable>
     );
 };
@@ -82,11 +88,10 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
             {
                 backgroundColor: theme.colors.surface,
                 borderRightColor: theme.colors.outlineVariant,
-                borderRightWidth: StyleSheet.hairlineWidth
             }
         ]}>
             <View style={styles.topSection}>
-                {/* Optional: Add Logo or Menu button here */}
+                <Typography variant="h3" weight="black" style={{ color: theme.colors.primary }}>C</Typography>
             </View>
 
             <View style={styles.itemsSection}>
@@ -104,7 +109,8 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
             </View>
 
             <View style={styles.bottomSection}>
-                {/* Optional: Add Profile or Settings shortcut here */}
+                {/* Profile placeholder */}
+                <View style={[styles.profileCircle, { backgroundColor: theme.colors.surfaceVariant }]} />
             </View>
         </View>
     );
@@ -112,29 +118,38 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
 
 const styles = StyleSheet.create({
     container: {
-        width: 80,
+        width: 88, // Slightly wider for premium feel
         height: '100%',
-        paddingVertical: 24,
+        paddingVertical: 32,
         alignItems: 'center',
         justifyContent: 'space-between',
+        borderRightWidth: StyleSheet.hairlineWidth,
     },
     topSection: {
         height: 56,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     itemsSection: {
         flex: 1,
-        gap: 12,
+        gap: 16,
         justifyContent: 'center',
     },
     bottomSection: {
         height: 56,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    profileCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
     },
     tab: {
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
         width: 80,
-        paddingVertical: 12,
+        paddingVertical: 14,
     },
     iconContainer: {
         position: 'relative',
@@ -149,9 +164,5 @@ const styles = StyleSheet.create({
         position: 'absolute',
         width: '100%',
         borderRadius: 16,
-    },
-    label: {
-        fontSize: 12,
-        letterSpacing: 0.5,
     },
 });

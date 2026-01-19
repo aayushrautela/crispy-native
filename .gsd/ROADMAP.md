@@ -1,40 +1,36 @@
 # ROADMAP.md
 
-> **Current Phase**: Phase 8: Audit & UI Alignment (Gap Closure)
+> **Current Phase**: Phase 3: Discover Page - Hero Carousel
 > **Milestone**: v1.0 Alpha
 
-## Must-Haves (from SPEC)
-- [x] Native Material You UI components
-- [x] Addon resolution and catalog browsing
-- [ ] Cloud Sync via Supabase
-- [ ] Production-grade video player (UNVERIFIED)
-- [ ] D-Pad support for TV
+## Phase 1: CDK Standardization & Refactor
+**Status**: ✅ COMPLETED
+**Objective**: Fix mismatches in the Core Design Kit. Standardize tokens, rounding, and interaction states for MD3 Expressive.
 
-## Phases
+## Phase 2: Configuration & Environment
+**Status**: ✅ COMPLETED
+**Objective**: Ensure all external keys are correctly managed.
 
-### Phase 1: Foundation & Identity
-**Status**: ✅ Verified
-
-### Phase 2: Addon Engine & Provider Layer
-**Status**: ✅ Verified
-
-### Phase 3: Catalog Explorer UI
-**Status**: ✅ Verified
-
-### Phase 4: Playback & Streaming
-**Status**: ⚠️ UNVERIFIED (UI Path Broken)
-**Objective**: Build the video player and integrate stream resolution.
-
-### Phase 8: Audit & UI Alignment (Gap Closure)
+## Phase 3: Discover Page - Hero Carousel
 **Status**: 🏗️ IN PROGRESS
-**Objective**: Fix regressions from Phase 4 and align UI with `crispy-webui (mobile ui)` mobile.
+**Objective**: 1:1 layout copy of `HeroMobile.tsx` using native CDK.
+- [ ] Implement `HeroCarousel` with snap-paging.
+- [ ] Implement `HeroSlide` with backdrop, logo, and metadata alignment.
 
-**In Progress:**
-- [ ] Fix navigation paths to Player.
-- [ ] Audit "Mostly Broken" UI components.
-
-### Phase 5: Sync & Personalization
+## Phase 4: Discover Page - Catalog Rows
 **Status**: ⬜ Not Started
+**Objective**: 1:1 layout copy of `CatalogRow.tsx` and `ContentRow.tsx`.
+- [ ] Implement `CatalogRow` with lazy-loading logic.
+- [ ] Align `MetaCard` styling with WebUI version (rounded-xl, scale effects).
 
-### Phase 6: Leanback Experience (TV)
+## Phase 5: Shell & Layout Alignment
 **Status**: ⬜ Not Started
+**Objective**: Align Tab Bar and Navigation Rail with Crispy-webui specs.
+
+## Phase 6: Sync & Search (Gap Closure)
+**Status**: ⬜ Not Started
+**Objective**: Implement functional 1:1 copies of Search and Library pages.
+
+## Phase 7: Playback (Deferred)
+**Status**: ⬜ Not Started
+**Objective**: Clean up and verify the video player.

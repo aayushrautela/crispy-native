@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Image, Text, Pressable } from 'react-native';
-import { ExpressiveSurface } from './ExpressiveSurface';
-import { MetaPreview } from '../../core/api/AddonService';
 import { useRouter } from 'expo-router';
-import { useTheme } from '../../core/ThemeContext';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { MetaPreview } from '../../core/api/AddonService';
+import { useTheme } from '../../core/ThemeContext';
+import { ExpressiveSurface } from './ExpressiveSurface';
 
 interface MetaCardProps {
     item: MetaPreview;
@@ -12,7 +12,7 @@ interface MetaCardProps {
     onPress?: () => void;
 }
 
-export const MetaCard = ({ item, width = 120, onPress }: MetaCardProps) => {
+export const MetaCard = ({ item, width = 144, onPress }: MetaCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -24,13 +24,16 @@ export const MetaCard = ({ item, width = 120, onPress }: MetaCardProps) => {
         if (onPress) {
             onPress();
         } else {
-            router.push(`/meta/${item.id}`);
+            router.push({
+                pathname: '/meta/[id]',
+                params: { id: item.id }
+            });
         }
     };
 
     const animatedImageStyle = useAnimatedStyle(() => {
         return {
-            transform: [{ scale: withSpring(focused ? 1.1 : 1) }],
+            transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
         };
     });
 
@@ -38,7 +41,7 @@ export const MetaCard = ({ item, width = 120, onPress }: MetaCardProps) => {
         <View style={[styles.container, { width }]}>
             <ExpressiveSurface
                 variant="filled"
-                rounding="xl"
+                rounding="lg" // Standard MD3 rounded-xl equivalent
                 style={[styles.surface, { height }]}
                 onPress={handlePress}
                 onFocusChange={setFocused}
@@ -57,12 +60,17 @@ export const MetaCard = ({ item, width = 120, onPress }: MetaCardProps) => {
                     )}
                 </View>
             </ExpressiveSurface>
-            <Text
+            <Typography
+                variant="body-small"
+                weight="bold"
                 numberOfLines={1}
-                style={[styles.label, { color: theme.colors.onSurface }]}
+                style={{
+                    color: theme.colors.onSurface,
+                    marginTop: 4
+                }}
             >
                 {item.name}
-            </Text>
+            </Typography>
         </View>
     );
 };
@@ -94,8 +102,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     label: {
-        fontSize: 12,
-        fontWeight: '500',
-        paddingHorizontal: 4,
+        paddingHorizontal: 0,
+        marginTop: 2,
     },
 });

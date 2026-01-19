@@ -32,8 +32,21 @@ export class AddonService {
         id: string,
         extra?: Record<string, string | number | boolean | undefined | null>
     ): Promise<CatalogResponse> {
-        const query = extra ? '?' + new URLSearchParams(extra as any).toString() : '';
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/catalog/${type}/${id}.json${query}`;
+        let path = `/catalog/${type}/${id}`;
+
+        if (extra) {
+            // Stremio v2 convention: /catalog/type/id/key=value.json
+            const extraPath = Object.entries(extra)
+                .filter(([_, v]) => v !== undefined && v !== null)
+                .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+                .join('/');
+
+            if (extraPath) {
+                path += `/${extraPath}`;
+            }
+        }
+
+        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}${path}.json`;
 
         const res = await axios.get<CatalogResponse>(url);
         return res.data;

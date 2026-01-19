@@ -92,12 +92,17 @@ export default function HomeScreen() {
         headerStyle
       ]}>
         <View style={styles.branding}>
-          <Typography variant="label" weight="medium" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6 }}>Good Evening,</Typography>
-          <Typography variant="h1" weight="black" style={{ color: theme.colors.primary, marginTop: -4 }}>Crispy</Typography>
+          <Typography variant="label-medium" weight="medium" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}>Good Evening,</Typography>
+          <Typography variant="headline-large" weight="black" style={{ color: theme.colors.primary, marginTop: -2 }}>Crispy</Typography>
         </View>
         <View style={styles.headerActions}>
-          <ExpressiveSurface variant="tonal" rounding="full" style={styles.iconBtn} onPress={() => router.push('/(tabs)/settings')}>
-            <CircleUser size={28} color={theme.colors.onSurface} strokeWidth={1.5} />
+          <ExpressiveSurface
+            variant="tonal"
+            rounding="full"
+            style={styles.iconBtn}
+            onPress={() => router.push('/(tabs)/settings')}
+          >
+            <CircleUser size={26} color={theme.colors.onSurface} strokeWidth={1.5} />
           </ExpressiveSurface>
         </View>
       </Animated.View>
@@ -128,7 +133,7 @@ export default function HomeScreen() {
                 catalogType="movie"
                 catalogId="tmdb_trending"
               />
-              <View style={{ height: 24 }} />
+              <View style={{ height: 32 }} />
               <CatalogRow
                 title="Popular Shows"
                 catalogType="series"

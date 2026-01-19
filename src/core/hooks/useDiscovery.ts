@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { AddonService, CatalogResponse } from '../api/AddonService';
+import { AddonService } from '../api/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 
 export const useCatalog = (type: string, id: string, extra?: Record<string, any>, addonUrl?: string) => {
@@ -22,21 +22,27 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
                 targetUrls.map(url => AddonService.getCatalog(url, type, id, extra))
             );
 
-            const metas = results
-                .filter((r): r is PromiseFulfilledResult<CatalogResponse> => r.status === 'fulfilled')
-                .flatMap(r => r.value.metas);
+            // Filter successful results and log failures
+            const successfulResults = results.map((r, idx) => {
+                if (r.status === 'fulfilled') return r.value.metas || [];
+                console.error(`[useCatalog] Failed to fetch catalog from ${targetUrls[idx]}:`, r.reason);
+                return [];
+            });
 
-            // Simple ID deduplication
-            const seen = new Set();
-            return {
-                metas: metas.filter(m => {
-                    if (seen.has(m.id)) return false;
-                    seen.add(m.id);
-                    return true;
-                })
-            };
+            const metas = successfulResults.flat();
+
+            // ID deduplication while preserving order
+            const seen = new Set<string>();
+            const uniqueMetas = metas.filter(m => {
+                if (!m?.id || seen.has(m.id)) return false;
+                seen.add(m.id);
+                return true;
+            });
+
+            return { metas: uniqueMetas };
         },
         enabled: targetUrls.length > 0,
+        staleTime: 1000 * 60 * 5, // 5 minutes cache
     });
 };
 

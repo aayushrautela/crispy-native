@@ -14,7 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { CatalogRow } from '../../components/CatalogRow';
 
-const HEADER_HEIGHT = 90;
+const HEADER_HEIGHT = 100;
 
 export default function DiscoverScreen() {
     const { manifests } = useAddonStore();
@@ -36,10 +36,8 @@ export default function DiscoverScreen() {
             if (currentScrollY <= 0) {
                 headerTranslateY.value = 0;
             } else if (diff > 0 && currentScrollY > 50) {
-                // Scrolling Down
                 headerTranslateY.value = Math.max(headerTranslateY.value - diff, -HEADER_HEIGHT);
             } else if (diff < 0) {
-                // Scrolling Up
                 headerTranslateY.value = Math.min(headerTranslateY.value - diff, 0);
             }
 
@@ -51,7 +49,7 @@ export default function DiscoverScreen() {
     const headerStyle = useAnimatedStyle(() => {
         return {
             transform: [{ translateY: headerTranslateY.value }],
-            opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 0], [0, 1])
+            opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 50], [0, 1])
         };
     });
 
@@ -80,14 +78,14 @@ export default function DiscoverScreen() {
                 { backgroundColor: theme.colors.background },
                 headerStyle
             ]}>
-                <Typography variant="h2" weight="black" style={{ color: theme.colors.onSurface }}>Discover</Typography>
+                <Typography variant="headline-large" weight="black" style={{ color: theme.colors.onSurface }}>Discover</Typography>
                 <ExpressiveSurface
                     variant="tonal"
                     rounding="full"
                     style={styles.searchEntry}
                     onPress={() => router.push('/(tabs)/search')}
                 >
-                    <Search size={22} color={theme.colors.onSurface} strokeWidth={2.5} />
+                    <Search size={24} color={theme.colors.onSurface} strokeWidth={2} />
                 </ExpressiveSurface>
             </Animated.View>
 
@@ -113,14 +111,15 @@ export default function DiscoverScreen() {
                                         activeFilter === f && { backgroundColor: theme.colors.primary }
                                     ]}
                                 >
-                                    <Typography
-                                        variant="body"
-                                        weight="bold"
-                                        className="px-4 py-1.5 text-sm"
-                                        style={{ color: activeFilter === f ? theme.colors.onPrimary : theme.colors.onSurfaceVariant }}
-                                    >
-                                        {f}
-                                    </Typography>
+                                    <View style={styles.chipContent}>
+                                        <Typography
+                                            variant="label-large"
+                                            weight="bold"
+                                            style={{ color: activeFilter === f ? theme.colors.onPrimary : theme.colors.onSurfaceVariant }}
+                                        >
+                                            {f}
+                                        </Typography>
+                                    </View>
                                 </ExpressiveSurface>
                             </Pressable>
                         ))}
@@ -129,7 +128,7 @@ export default function DiscoverScreen() {
 
                 <View style={styles.sections}>
                     {allCatalogs.length > 0 ? (
-                        <View style={{ gap: 40 }}>
+                        <View style={{ gap: 24 }}>
                             {allCatalogs.map((catalog, idx) => (
                                 <CatalogRow
                                     key={`${catalog.addonUrl}-${catalog.id}-${catalog.type}-${idx}`}
@@ -142,12 +141,12 @@ export default function DiscoverScreen() {
                         </View>
                     ) : (
                         <View style={styles.emptyContainer}>
-                            <View style={[styles.emptyIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
+                            <View style={[styles.emptyIcon, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>
                                 <Search size={32} color={theme.colors.onSurfaceVariant} />
                             </View>
-                            <Typography variant="h3" weight="bold" className="mt-6">No Content Found</Typography>
-                            <Typography variant="body" className="text-zinc-500 text-center mt-2 px-12">
-                                We couldn't find any "{activeFilter}" catalogs. Try adding more addons.
+                            <Typography variant="title-large" weight="bold" style={{ marginTop: 24 }}>No Content Found</Typography>
+                            <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8, paddingHorizontal: 48 }}>
+                                We couldn't find any "{activeFilter}" catalogs. Try adding more addons in Settings.
                             </Typography>
                         </View>
                     )}
@@ -168,8 +167,8 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        paddingTop: 48,
-        paddingBottom: 8,
+        paddingTop: 56,
+        paddingBottom: 12,
         paddingHorizontal: 24,
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -177,27 +176,31 @@ const styles = StyleSheet.create({
         zIndex: 100,
     },
     searchEntry: {
-        width: 44,
-        height: 44,
+        width: 48,
+        height: 48,
         alignItems: 'center',
         justifyContent: 'center',
     },
     scrollContent: {
-        paddingTop: 8,
+        paddingTop: 12,
     },
     filterContainer: {
-        paddingVertical: 12,
-        marginBottom: 16,
+        marginBottom: 8,
     },
     filterScroll: {
         paddingHorizontal: 24,
         gap: 12,
+        paddingVertical: 12,
     },
     sections: {
-        gap: 40,
+        gap: 24,
     },
     chip: {
         minWidth: 80,
+    },
+    chipContent: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },

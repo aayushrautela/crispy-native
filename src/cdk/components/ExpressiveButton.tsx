@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle, View } from 'react-native';
 import { useTheme } from '@/src/core/ThemeContext';
+import React, { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 interface ExpressiveButtonProps {
@@ -31,9 +31,9 @@ export const ExpressiveButton = ({
     const getRounding = () => {
         switch (size) {
             case 'sm': return 12; // rounded-m3-md
-            case 'md': return 28; // rounded-m3-xl
-            case 'lg': return 36; // rounded-m3-3xl
-            default: return 28;
+            case 'md': return 20; // rounded-m3-lg (Standard MD3 button is fully rounded, but Expressive uses large)
+            case 'lg': return 28; // rounded-m3-xl
+            default: return 20;
         }
     };
 
@@ -76,7 +76,7 @@ export const ExpressiveButton = ({
     const animatedStyle = useAnimatedStyle(() => {
         return {
             transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
-            borderWidth: variant === 'outline' || focused ? 2 : 0,
+            borderWidth: variant === 'outline' ? 1 : (focused ? 2 : 0),
             borderColor: focused ? theme.colors.primary : colors.border || 'transparent',
             elevation: withSpring(focused ? 4 : 0),
         };
@@ -92,7 +92,7 @@ export const ExpressiveButton = ({
                 {
                     backgroundColor: colors.bg,
                     borderRadius: getRounding(),
-                    paddingVertical: size === 'sm' ? 8 : size === 'md' ? 12 : 16,
+                    minHeight: size === 'sm' ? 32 : size === 'md' ? 40 : 48,
                     paddingHorizontal: size === 'sm' ? 16 : size === 'md' ? 24 : 32,
                 },
                 animatedStyle,
@@ -104,7 +104,11 @@ export const ExpressiveButton = ({
                 <Text
                     style={[
                         styles.text,
-                        { color: colors.text, fontSize: size === 'sm' ? 14 : size === 'md' ? 16 : 18 },
+                        {
+                            color: colors.text,
+                            fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16,
+                            fontWeight: '500' // Label Large/Medium/Small
+                        },
                         textStyle,
                     ]}
                 >

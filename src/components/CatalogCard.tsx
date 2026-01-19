@@ -14,7 +14,7 @@ interface CatalogCardProps {
     width?: number;
 }
 
-export const CatalogCard = ({ item, width = 140 }: CatalogCardProps) => {
+export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -31,8 +31,8 @@ export const CatalogCard = ({ item, width = 140 }: CatalogCardProps) => {
 
     const handlePress = () => {
         router.push({
-            pathname: `/meta/${item.id}` as any,
-            params: { type: item.type }
+            pathname: '/meta/[id]' as any,
+            params: { id: item.id, type: item.type }
         });
     };
 
@@ -46,43 +46,40 @@ export const CatalogCard = ({ item, width = 140 }: CatalogCardProps) => {
         <View style={[styles.container, { width }]}>
             <ExpressiveSurface
                 variant="filled"
-                rounding="lg" // Reduced from xl as requested
+                rounding="lg" // MD3 Medium (16px)
                 style={[
                     styles.surface,
                     {
                         height,
-                        borderColor: focused ? theme.colors.primary : 'transparent',
-                        backgroundColor: theme.colors.surfaceVariant,
                     }
-                ] as any}
+                ]}
                 onPress={handlePress}
                 onFocusChange={setFocused}
             >
                 <View style={styles.imageContainer}>
-                    {item.poster || meta.poster ? (
+                    {(item.poster || meta.poster) ? (
                         <Animated.Image
                             source={{ uri: item.poster || meta.poster }}
                             style={[styles.image, animatedImageStyle]}
                             resizeMode="cover"
                         />
                     ) : (
-                        <View style={[styles.placeholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <View style={[styles.placeholder, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>
                             <Typography
-                                variant="caption"
+                                variant="label-small"
                                 weight="bold"
-                                className="text-center px-2"
-                                style={{ color: theme.colors.onSurfaceVariant }}
+                                style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}
                             >
                                 {item.name}
                             </Typography>
                         </View>
                     )}
 
-                    {/* Rating Overlay (Bottom Right) */}
+                    {/* Rating Overlay */}
                     {(meta.rating || (item as any).rating) && (
                         <View style={styles.ratingOverlay}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
-                            <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
+                            <Typography variant="label-small" weight="black" style={{ color: 'white', marginLeft: 4 }}>
                                 {meta.rating || (item as any).rating}
                             </Typography>
                         </View>
@@ -92,30 +89,28 @@ export const CatalogCard = ({ item, width = 140 }: CatalogCardProps) => {
 
             {/* Metadata Below Poster */}
             <View style={styles.metadata}>
-                <View style={styles.nameContainer}>
-                    <Typography
-                        variant="body"
-                        numberOfLines={2}
-                        weight="bold"
-                        style={{ color: theme.colors.onSurface, fontSize: 13 }}
-                    >
-                        {item.name}
-                    </Typography>
-                </View>
+                <Typography
+                    variant="body-small"
+                    weight="bold"
+                    numberOfLines={1}
+                    style={{ color: theme.colors.onSurface }}
+                >
+                    {item.name}
+                </Typography>
                 <View style={styles.badgeRow}>
                     <Typography
-                        variant="label"
+                        variant="label-small"
                         weight="medium"
-                        style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7, fontSize: 11 }}
+                        style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}
                     >
                         {meta.year || (item as any).releaseInfo || 'TBA'}
                     </Typography>
                     {(meta.genres?.[0]) && (
-                        <View style={[styles.genrePill, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <View style={[styles.genrePill, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>
                             <Typography
-                                variant="label"
+                                variant="label-small"
                                 weight="black"
-                                style={{ color: theme.colors.onSurfaceVariant, fontSize: 9 }}
+                                style={{ color: theme.colors.onSurface, fontSize: 9 }}
                             >
                                 {meta.genres[0].toUpperCase()}
                             </Typography>
@@ -129,10 +124,9 @@ export const CatalogCard = ({ item, width = 140 }: CatalogCardProps) => {
 
 const styles = StyleSheet.create({
     container: {
-        gap: 6,
+        gap: 8,
     },
     surface: {
-        borderWidth: 1.5,
         overflow: 'hidden',
     },
     imageContainer: {
@@ -161,12 +155,8 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     metadata: {
-        gap: 1,
-        paddingHorizontal: 2,
-    },
-    nameContainer: {
-        minHeight: 36, // Fits roughly 2 lines of 13px text
-        justifyContent: 'center',
+        gap: 2,
+        paddingHorizontal: 0,
     },
     badgeRow: {
         flexDirection: 'row',
@@ -174,8 +164,8 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     genrePill: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 6,
         paddingVertical: 1,
-        borderRadius: 20,
+        borderRadius: 4,
     }
 });

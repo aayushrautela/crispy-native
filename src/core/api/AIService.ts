@@ -4,7 +4,7 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 export class AIService {
     static async getApiKey(): Promise<string | null> {
-        return StorageService.getUser<string>('crispy-openrouter-key');
+        return process.env.EXPO_PUBLIC_OPENROUTER_KEY || StorageService.getUser<string>('crispy-openrouter-key');
     }
 
     static async setApiKey(key: string) {

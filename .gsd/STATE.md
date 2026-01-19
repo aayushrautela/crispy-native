@@ -8,10 +8,10 @@ Codebase mapping complete.
 - Surface technical debt: lack of tests, in-memory caching for metadata, insecure fallbacks.
 
 ## Current Position
-- **Phase:** Mapping
-- **Task:** Complete
-- **Status:** Done
+- **Phase:** Phase 2: Configuration & Environment
+- **Task:** GitHub Workflow Setup
+- **Status:** COMPLETED
 
 ## Next Steps
-- Run `/plan` to decompose requirements into executable phases.
-- Finalize `SPEC.md` if not already done.
+- Proceed to Phase 3: Discover Page - Hero Carousel.
+- Trigger the new GitHub workflow to get a development client APK.

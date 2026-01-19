@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Touchable } from '../components/Touchable';
 import { useTheme } from '@/src/core/ThemeContext';
-import Animated, { useAnimatedStyle, withTiming, withSpring } from 'react-native-reanimated';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
+import { Touchable } from '../components/Touchable';
+
+import { Typography } from '../components/Typography';
 
 const MaterialTabItem = ({
     route,
@@ -43,7 +45,7 @@ const MaterialTabItem = ({
 
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            width: withSpring(isFocused ? 64 : 0, { damping: 15 }),
+            width: withSpring(isFocused ? 64 : 0, { damping: 15, stiffness: 150 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
             backgroundColor: theme.colors.secondaryContainer,
         };
@@ -63,12 +65,16 @@ const MaterialTabItem = ({
                     size: 24
                 })}
             </View>
-            <Text style={[
-                styles.label,
-                { color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant, fontWeight: isFocused ? '700' : '500' }
-            ]}>
+            <Typography
+                variant="label-medium"
+                weight={isFocused ? 'bold' : 'medium'}
+                style={{
+                    color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+                    marginTop: 4
+                }}
+            >
                 {label as string}
-            </Text>
+            </Typography>
         </Touchable>
     );
 };
@@ -82,39 +88,44 @@ export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarP
             {
                 backgroundColor: theme.colors.surface,
                 borderTopColor: theme.colors.outlineVariant,
-                borderTopWidth: StyleSheet.hairlineWidth
             }
         ]}>
-            {state.routes.map((route, index) => (
-                <MaterialTabItem
-                    key={route.key}
-                    route={route}
-                    index={index}
-                    state={state}
-                    descriptors={descriptors}
-                    navigation={navigation}
-                    theme={theme}
-                />
-            ))}
+            <View style={styles.content}>
+                {state.routes.map((route, index) => (
+                    <MaterialTabItem
+                        key={route.key}
+                        route={route}
+                        index={index}
+                        state={state}
+                        descriptors={descriptors}
+                        navigation={navigation}
+                        theme={theme}
+                    />
+                ))}
+            </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
+        width: '100%',
+        backgroundColor: 'transparent',
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    content: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
-        width: '100%',
         height: 80,
-        paddingBottom: 20,
-        paddingTop: 8,
+        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+        paddingTop: 12,
+        paddingHorizontal: 8,
     },
     tab: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
     },
     iconContainer: {
         position: 'relative',
@@ -129,9 +140,5 @@ const styles = StyleSheet.create({
         position: 'absolute',
         height: '100%',
         borderRadius: 16,
-    },
-    label: {
-        fontSize: 12,
-        letterSpacing: 0.5,
     },
 });

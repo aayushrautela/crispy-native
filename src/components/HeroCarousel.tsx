@@ -11,7 +11,8 @@ import Animated, { interpolate, SharedValue, useAnimatedScrollHandler, useAnimat
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_WIDTH = SCREEN_WIDTH - 32;
-const HERO_HEIGHT = 500; // Slightly taller for better spacing
+const ASPECT_RATIO = 4 / 5;
+const HERO_HEIGHT = HERO_WIDTH / ASPECT_RATIO;
 
 interface HeroCarouselProps {
     items: any[];
@@ -28,8 +29,8 @@ const HeroItem = ({ item, index, scrollX }: { item: any, index: number, scrollX:
 
     const handleNavigate = (autoplay = false) => {
         router.push({
-            pathname: `/meta/${item.id}` as any,
-            params: { type: item.type, autoplay: autoplay ? 'true' : 'false' }
+            pathname: '/meta/[id]' as any,
+            params: { id: item.id, type: item.type, autoplay: autoplay ? 'true' : 'false' }
         });
     };
 
@@ -54,71 +55,73 @@ const HeroItem = ({ item, index, scrollX }: { item: any, index: number, scrollX:
                     style={styles.backgroundImage}
                 >
                     <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.8)', '#000000']}
-                        locations={[0, 0.3, 0.65, 1]}
+                        colors={['black', 'transparent', 'rgba(0,0,0,0.4)', 'black']}
+                        locations={[0, 0.3, 0.6, 1]}
                         style={styles.gradient}
                     >
                         <View style={styles.content}>
-                            {/* Logo and New Tag Container */}
+                            {/* Branding Section */}
                             <View style={styles.brandingSection}>
+                                {meta.networkLogo && (
+                                    <Image source={{ uri: meta.networkLogo }} style={styles.networkLogo} resizeMode="contain" />
+                                )}
                                 {meta.logo ? (
-                                    <View>
-                                        <Image source={{ uri: meta.logo }} style={styles.logo} resizeMode="contain" />
-                                        {isNew && (
-                                            <Typography variant="label" weight="black" style={{ color: theme.colors.primary, marginTop: -4, marginLeft: 2 }}>#NEW</Typography>
-                                        )}
-                                    </View>
+                                    <Image source={{ uri: meta.logo }} style={styles.logo} resizeMode="contain" />
                                 ) : (
-                                    <View>
-                                        <Typography variant="h1" weight="black" style={{ color: 'white', marginBottom: 2 }}>{item.name}</Typography>
-                                        {isNew && (
-                                            <Typography variant="label" weight="black" style={{ color: theme.colors.primary, marginTop: -2 }}>#NEW</Typography>
-                                        )}
+                                    <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
+                                        {item.name}
+                                    </Typography>
+                                )}
+                                {isNew && (
+                                    <View style={styles.newTag}>
+                                        <Typography variant="label-large" weight="black" style={{ color: theme.colors.primary }}>#NEW</Typography>
                                     </View>
                                 )}
                             </View>
 
                             {/* Meta Row */}
                             <View style={styles.metaRow}>
-                                <View style={[styles.metaBadge, { backgroundColor: theme.colors.onSurface + '20' }]}>
-                                    <Typography variant="label" weight="bold" style={{ color: 'white' }}>{meta.year || '2024'}</Typography>
-                                </View>
-                                <View style={styles.metaRowItem}>
-                                    <Star size={16} color="#FFD700" fill="#FFD700" />
-                                    <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>{meta.rating || '8.5'}</Typography>
-                                </View>
-                                <Typography variant="label" weight="medium" style={{ color: 'white', opacity: 0.8 }}>
-                                    {meta.genres?.slice(0, 2).join(' • ') || 'Drama'}
+                                {meta.year && (
+                                    <View style={[styles.metaBadge, { backgroundColor: 'black' }]}>
+                                        <Typography variant="label-small" weight="bold" style={{ color: 'white' }}>{meta.year}</Typography>
+                                    </View>
+                                )}
+                                {meta.rating && (
+                                    <View style={styles.metaRowItem}>
+                                        <Star size={14} color="#FFD700" fill="#FFD700" />
+                                        <Typography variant="label-medium" weight="bold" style={{ color: 'white', marginLeft: 4 }}>{meta.rating}</Typography>
+                                    </View>
+                                )}
+                                <Typography variant="label-medium" weight="medium" style={{ color: 'white', opacity: 0.6 }}>
+                                    {meta.genres?.slice(0, 3).join(' • ')}
                                 </Typography>
                             </View>
 
-                            {/* Description (Increased to 3 lines and slightly larger) */}
+                            {/* Description */}
                             <Typography
-                                variant="body"
+                                variant="body-medium"
                                 numberOfLines={3}
-                                weight="medium"
-                                style={{ color: 'white', opacity: 0.7, fontSize: 14, lineHeight: 20, marginBottom: 28 }}
+                                style={{ color: 'white', opacity: 0.7, marginBottom: 20 }}
                             >
                                 {meta.description || item.description || "Loading description..."}
                             </Typography>
 
-                            {/* Actions (Increased spacing) */}
+                            {/* Actions */}
                             <View style={styles.actionRow}>
                                 <ExpressiveButton
                                     title="Watch Now"
                                     variant="primary"
                                     onPress={() => handleNavigate(true)}
                                     icon={<Play size={20} color="black" fill="black" />}
-                                    style={[styles.watchBtn, { backgroundColor: 'white' }] as any}
-                                    textStyle={{ color: 'black', fontWeight: '900' }}
+                                    style={styles.actionBtn}
                                 />
                                 <ExpressiveButton
                                     title="More Info"
                                     variant="tonal"
                                     onPress={() => handleNavigate(false)}
                                     icon={<Info size={20} color="white" />}
-                                    style={[styles.infoBtn, { backgroundColor: theme.colors.onSurface + '25' }] as any}
-                                    textStyle={{ color: 'white', fontWeight: 'bold' }}
+                                    style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                                    textStyle={{ color: 'white' }}
                                 />
                             </View>
                         </View>
@@ -141,61 +144,55 @@ export const HeroCarousel = ({ items }: HeroCarouselProps) => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.carouselWrapper}>
-                <Animated.FlatList
-                    data={items.length > 0 ? items : []}
-                    renderItem={({ item, index }) => <HeroItem item={item} index={index} scrollX={scrollX} />}
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    onScroll={onScroll}
-                    scrollEventThrottle={16}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
-                    snapToInterval={SCREEN_WIDTH}
-                    decelerationRate="fast"
-                    onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
-                />
+            <Animated.FlatList
+                data={items}
+                renderItem={({ item, index }) => <HeroItem item={item} index={index} scrollX={scrollX} />}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                snapToInterval={SCREEN_WIDTH}
+                decelerationRate="fast"
+                onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
+            />
 
-                {/* Dots (Absolute Overlay inside card bounds) */}
-                {items.length > 1 && (
-                    <View style={styles.dotsContainer}>
-                        {items.map((_, i) => (
-                            <View
-                                key={i}
-                                style={[
-                                    styles.dot,
-                                    {
-                                        backgroundColor: activeIndex === i ? theme.colors.primary : 'rgba(255,255,255,0.3)',
-                                        width: activeIndex === i ? 24 : 8,
-                                    }
-                                ]}
-                            />
-                        ))}
-                    </View>
-                )}
-            </View>
+            {/* Dot Indicators */}
+            {items.length > 1 && (
+                <View style={styles.dotsContainer}>
+                    {items.map((_, i) => (
+                        <View
+                            key={i}
+                            style={[
+                                styles.dot,
+                                {
+                                    backgroundColor: activeIndex === i ? theme.colors.primary : 'rgba(255,255,255,0.3)',
+                                    width: activeIndex === i ? 24 : 8,
+                                }
+                            ]}
+                        />
+                    ))}
+                </View>
+            )}
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 24, // Added more space after hero
+        marginBottom: 8,
     },
     itemContainer: {
         width: SCREEN_WIDTH,
         alignItems: 'center',
         paddingHorizontal: 16,
-    },
-    carouselWrapper: {
-        width: SCREEN_WIDTH,
-        alignItems: 'center',
-        justifyContent: 'center',
+        paddingTop: 16,
     },
     heroCard: {
         width: HERO_WIDTH,
         height: HERO_HEIGHT,
-        borderRadius: 36,
+        borderRadius: 32, // rounding-2xl
         overflow: 'hidden',
     },
     backgroundImage: {
@@ -205,27 +202,36 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'flex-end',
         padding: 24,
-        paddingBottom: 48, // Increased for dots
+        paddingBottom: 40,
     },
     content: {
-        gap: 0,
     },
     brandingSection: {
-        marginBottom: 12,
+        marginBottom: 8,
+    },
+    networkLogo: {
+        height: 20,
+        width: 60,
+        marginBottom: 8,
+        opacity: 0.8,
     },
     logo: {
-        width: 220, // Increased as requested
-        height: 80,
-        marginBottom: 0,
+        width: HERO_WIDTH * 0.7,
+        height: 60,
+        marginBottom: 4,
+    },
+    newTag: {
+        marginTop: -4,
+        marginBottom: 4,
     },
     metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        marginBottom: 10,
+        gap: 8,
+        marginBottom: 12,
     },
     metaBadge: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
     },
@@ -236,25 +242,20 @@ const styles = StyleSheet.create({
     actionRow: {
         flexDirection: 'row',
         gap: 12,
-        marginTop: 12, // Increased spacing
+        justifyContent: 'center',
     },
-    watchBtn: {
+    actionBtn: {
         flex: 1,
-        height: 52,
-        borderRadius: 32,
-    },
-    infoBtn: {
-        flex: 1,
-        height: 52,
-        borderRadius: 32,
+        height: 48,
     },
     dotsContainer: {
         position: 'absolute',
-        bottom: 20,
+        bottom: 30,
+        left: 0,
+        right: 0,
         flexDirection: 'row',
         justifyContent: 'center',
         gap: 6,
-        zIndex: 100,
     },
     dot: {
         height: 8,

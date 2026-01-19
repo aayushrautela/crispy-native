@@ -1,8 +1,8 @@
 import React from 'react';
-import { StyleSheet, View, Text, ScrollView, FlatList } from 'react-native';
-import { MetaCard } from './MetaCard';
+import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MetaPreview } from '../../core/api/AddonService';
 import { useTheme } from '../../core/ThemeContext';
+import { MetaCard } from './MetaCard';
 
 interface ContentRowProps {
     title: string;
@@ -12,6 +12,7 @@ interface ContentRowProps {
 
 export const ContentRow = ({ title, items = [], isLoading }: ContentRowProps) => {
     const { theme } = useTheme();
+    const CARD_WIDTH = 144; // Matches WebUI Mobile w-[144px]
 
     return (
         <View style={styles.container}>
@@ -30,7 +31,12 @@ export const ContentRow = ({ title, items = [], isLoading }: ContentRowProps) =>
                             key={i}
                             style={[
                                 styles.skeleton,
-                                { backgroundColor: theme.colors.surfaceVariant, width: 120, height: 180, borderRadius: 28 }
+                                {
+                                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                                    width: CARD_WIDTH,
+                                    height: CARD_WIDTH / (2 / 3),
+                                    borderRadius: 16 // rounding-lg
+                                }
                             ]}
                         />
                     ))}
@@ -43,7 +49,7 @@ export const ContentRow = ({ title, items = [], isLoading }: ContentRowProps) =>
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.scrollContent}
                     renderItem={({ item }) => (
-                        <MetaCard item={item} width={120} />
+                        <MetaCard item={item} width={CARD_WIDTH} />
                     )}
                 />
             )}
@@ -53,18 +59,18 @@ export const ContentRow = ({ title, items = [], isLoading }: ContentRowProps) =>
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 16,
+        paddingVertical: 8, // py-2 in webui
     },
     title: {
-        fontSize: 18,
+        fontSize: 20, // Headline Small approx
         fontWeight: '700',
-        paddingHorizontal: 20,
-        marginBottom: 12,
-        letterSpacing: 0.1,
+        paddingHorizontal: 24, // px-6 in webui
+        marginBottom: 16, // mb-4 in webui
+        letterSpacing: -0.2,
     },
     scrollContent: {
-        paddingHorizontal: 16,
-        gap: 12,
+        paddingHorizontal: 24,
+        gap: 16, // gap-4 in webui (16px)
     },
     skeleton: {
         opacity: 0.5,

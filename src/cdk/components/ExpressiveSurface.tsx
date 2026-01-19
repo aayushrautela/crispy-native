@@ -27,11 +27,11 @@ export const ExpressiveSurface = ({
 
     const getRounding = () => {
         switch (rounding) {
-            case 'md': return 12;
-            case 'lg': return 16;
-            case 'xl': return 28;
-            case '2xl': return 32;
-            case '3xl': return 36;
+            case 'md': return 12; // Extra Small -> Low (Standard)
+            case 'lg': return 16; // Small -> Medium
+            case 'xl': return 28; // Medium -> Large (Expressive standard)
+            case '2xl': return 32; // Large -> Extra Large
+            case '3xl': return 36; // Extra Large -> Full
             default: return 28;
         }
     };
@@ -39,16 +39,16 @@ export const ExpressiveSurface = ({
     const animatedStyle = useAnimatedStyle(() => {
         return {
             transform: [{ scale: withSpring(focused ? 1.02 : 1) }],
-            borderWidth: variant === 'outlined' || focused ? 1 : 0,
+            borderWidth: variant === 'outlined' ? 1 : (focused ? 2 : 0),
             borderColor: focused ? theme.colors.primary : theme.colors.outlineVariant,
-            elevation: withSpring(focused ? 6 : variant === 'elevated' ? 1 : 0),
+            elevation: withSpring(focused ? 6 : variant === 'elevated' ? 2 : 0),
         };
     });
 
     const backgroundColor = variant === 'elevated'
         ? theme.colors.surface
         : variant === 'filled'
-            ? theme.colors.surfaceVariant
+            ? theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant
             : 'transparent';
 
     return (

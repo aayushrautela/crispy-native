@@ -1,6 +1,7 @@
-import { MMKV } from 'react-native-mmkv';
 
 // Main production storage mechanism
+// NOTE: This REQUIRES a development client (npx expo run:android)
+// It will CRASH in Expo Go because JSI bindings are missing.
 const mmkv = new MMKV({
     id: 'crispy-storage',
 });

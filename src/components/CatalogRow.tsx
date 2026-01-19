@@ -7,7 +7,7 @@ import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
 
-const CARD_WIDTH = 140;
+const CARD_WIDTH = 144; // Standardized to 144 from webui
 const ITEM_GAP = 16;
 const SNAP_INTERVAL = CARD_WIDTH + ITEM_GAP;
 
@@ -52,12 +52,11 @@ export const CatalogRow = ({
         <View style={styles.container}>
             <View style={styles.header}>
                 <Typography
-                    variant="h2"
-                    weight="black"
+                    variant="title-large"
+                    weight="bold"
                     style={{
                         color: theme.colors.onSurface,
-                        fontSize: 20,
-                        letterSpacing: -0.5
+                        letterSpacing: -0.2
                     }}
                 >
                     {title}
@@ -83,10 +82,10 @@ export const CatalogRow = ({
                             style={[
                                 styles.skeleton,
                                 {
-                                    backgroundColor: theme.colors.surfaceVariant,
+                                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
                                     width: CARD_WIDTH,
                                     height: CARD_WIDTH * 1.5,
-                                    borderRadius: 12 // Matches lg rounding
+                                    borderRadius: 16 // rounding-lg
                                 }
                             ]}
                         />
@@ -113,23 +112,23 @@ export const CatalogRow = ({
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 12,
+        paddingVertical: 8,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        marginBottom: 8,
+        paddingHorizontal: 24,
+        marginBottom: 12,
     },
     seeAllBtn: {
-        marginRight: -8,
+        marginRight: -12,
     },
     scrollContent: {
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
         gap: ITEM_GAP,
     },
     skeleton: {
-        opacity: 0.2, // Subtle skeleton
+        opacity: 0.5,
     },
 });

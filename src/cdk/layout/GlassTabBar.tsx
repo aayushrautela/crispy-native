@@ -1,22 +1,24 @@
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { View } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { Surface } from '../components/Surface';
 import { Touchable } from '../components/Touchable';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 const GlassTabItem = ({
     route,
     index,
     state,
     descriptors,
-    navigation
+    navigation,
+    theme
 }: {
     route: any,
     index: number,
     state: any,
     descriptors: any,
-    navigation: any
+    navigation: any,
+    theme: any
 }) => {
     const { options } = descriptors[route.key];
     const isFocused = state.index === index;
@@ -35,8 +37,8 @@ const GlassTabItem = ({
 
     const animatedStyle = useAnimatedStyle(() => {
         return {
-            transform: [{ scale: withSpring(isFocused ? 1.2 : 1) }],
-            opacity: withSpring(isFocused ? 1 : 0.6)
+            transform: [{ scale: withSpring(isFocused ? 1.15 : 1) }],
+            opacity: withSpring(isFocused ? 1 : 0.5)
         };
     });
 
@@ -44,31 +46,38 @@ const GlassTabItem = ({
         <Touchable
             onPress={onPress}
             haptic="selection"
-            className="flex-1 h-full items-center justify-center rounded-full active:bg-white/10"
+            style={styles.tab}
         >
             <Animated.View style={animatedStyle}>
                 {options.tabBarIcon && options.tabBarIcon({
                     focused: isFocused,
-                    color: isFocused ? '#FFFFFF' : '#A1A1AA',
+                    color: '#FFFFFF',
                     size: 24
                 })}
             </Animated.View>
 
             {isFocused && (
-                <View className="absolute bottom-3 w-1 h-1 rounded-full bg-white shadow-lg shadow-white" />
+                <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
             )}
         </Touchable>
     );
 };
 
 export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+    const { theme } = useTheme();
+
     return (
-        <View className="absolute bottom-8 left-0 right-0 items-center justify-center pointer-events-none">
+        <View style={styles.container}>
             <Surface
                 variant="glass"
-                intensity={80}
-                className="flex-row items-center justify-between px-2 h-16 bg-black/50 rounded-full shadow-2xl pointer-events-auto overflow-hidden border border-white/10"
-                style={{ width: '85%', maxWidth: 400 }}
+                intensity={60}
+                style={[
+                    styles.surface,
+                    {
+                        backgroundColor: 'rgba(0,0,0,0.4)',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                    }
+                ]}
             >
                 {state.routes.map((route, index) => (
                     <GlassTabItem
@@ -78,9 +87,46 @@ export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProp
                         state={state}
                         descriptors={descriptors}
                         navigation={navigation}
+                        theme={theme}
                     />
                 ))}
             </Surface>
         </View>
     );
 };
+
+const styles = StyleSheet.create({
+    container: {
+        position: 'absolute',
+        bottom: 32,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100,
+    },
+    surface: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        height: 64,
+        borderRadius: 32,
+        borderWidth: 1,
+        width: '85%',
+        maxWidth: 400,
+    },
+    tab: {
+        flex: 1,
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    dot: {
+        position: 'absolute',
+        bottom: 10,
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+    },
+});
