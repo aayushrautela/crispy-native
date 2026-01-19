@@ -1,8 +1,9 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Touchable } from '../components/Touchable';
 
 import { Typography } from '../components/Typography';
@@ -45,7 +46,7 @@ const MaterialTabItem = ({
 
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            width: withSpring(isFocused ? 64 : 0, { damping: 15, stiffness: 150 }),
+            width: withTiming(isFocused ? 64 : 0, { duration: 250 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
             backgroundColor: theme.colors.secondaryContainer,
         };
@@ -81,6 +82,7 @@ const MaterialTabItem = ({
 
 export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     return (
         <View style={[
@@ -90,7 +92,13 @@ export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarP
                 borderTopColor: theme.colors.outlineVariant,
             }
         ]}>
-            <View style={styles.content}>
+            <View style={[
+                styles.content,
+                {
+                    height: 88 + insets.bottom,
+                    paddingBottom: insets.bottom + 16,
+                }
+            ]}>
                 {state.routes.map((route, index) => (
                     <MaterialTabItem
                         key={route.key}
@@ -117,8 +125,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-around',
-        height: 80,
-        paddingBottom: Platform.OS === 'ios' ? 24 : 12,
         paddingTop: 12,
         paddingHorizontal: 8,
     },

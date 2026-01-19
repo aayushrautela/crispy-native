@@ -3,6 +3,7 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Surface } from '../components/Surface';
 import { Touchable } from '../components/Touchable';
 
@@ -66,9 +67,10 @@ const GlassTabItem = ({
 
 export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { bottom: 32 + insets.bottom }]}>
             <Surface
                 variant="glass"
                 intensity={60}
@@ -99,7 +101,6 @@ export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProp
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 32,
         left: 0,
         right: 0,
         alignItems: 'center',

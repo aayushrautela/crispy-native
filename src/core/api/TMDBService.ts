@@ -69,15 +69,18 @@ export class TMDBService {
 
         try {
             const findPath = type === 'movie' ? 'movie' : 'tv';
+            let tmdbId: string | number;
 
-            // 1. Find TMDB ID from External ID (IMDB)
-            const findUrl = `${BASE_URL}/find/${stremioId}?api_key=${API_KEY}&external_source=imdb_id`;
-            const findRes = await axios.get(findUrl);
-
-            const result = type === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
-            if (!result) return {};
-
-            const tmdbId = result.id;
+            if (stremioId.startsWith('tmdb:')) {
+                tmdbId = stremioId.split(':')[1];
+            } else {
+                // 1. Find TMDB ID from External ID (IMDB)
+                const findUrl = `${BASE_URL}/find/${stremioId}?api_key=${API_KEY}&external_source=imdb_id`;
+                const findRes = await axios.get(findUrl);
+                const result = type === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
+                if (!result) return {};
+                tmdbId = result.id;
+            }
 
             // 2. Get Full Details & Images & Credits & Similar & Reviews & Keywords
             const detailUrl = `${BASE_URL}/${findPath}/${tmdbId}?api_key=${API_KEY}&append_to_response=images,content_ratings,release_dates,credits,recommendations,reviews,keywords`;
@@ -195,12 +198,27 @@ export class TMDBService {
         }
     }
 
-    static async getTrending(type: 'movie' | 'series' = 'movie'): Promise<any[]> {
+    static async search(type: 'movie' | 'series', query: string, page = 1): Promise<any[]> {
         try {
-            const url = `${BASE_URL}/trending/${type === 'movie' ? 'movie' : 'tv'}/week?api_key=${API_KEY}`;
+            const tmdbType = type === 'series' ? 'tv' : 'movie';
+            const url = `${BASE_URL}/search/${tmdbType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&page=${page}&include_adult=false`;
             const res = await axios.get(url);
-            return res.data.results;
+
+            return res.data.results
+                .filter((r: any) => r.poster_path)
+                .map((r: any) => ({
+                    id: `tmdb:${r.id}`,
+                    tmdbId: r.id,
+                    name: r.title || r.name,
+                    poster: `${IMAGE_BASE}/w500${r.poster_path}`,
+                    year: (r.release_date || r.first_air_date || '').split('-')[0],
+                    type: type,
+                    rating: r.vote_average?.toFixed(1) || '0.0',
+                    description: r.overview,
+                    popularity: r.popularity
+                }));
         } catch (e) {
+            console.error('[TMDBService] Search failed:', e);
             return [];
         }
     }

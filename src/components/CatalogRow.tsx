@@ -1,11 +1,10 @@
-import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
-import { Typography } from '@/src/cdk/components/Typography';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useTheme } from '@/src/core/ThemeContext';
 import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
+import { SectionHeader } from './SectionHeader';
 
 const CARD_WIDTH = 144; // Standardized to 144 from webui
 const ITEM_GAP = 16;
@@ -50,26 +49,11 @@ export const CatalogRow = ({
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Typography
-                    variant="title-large"
-                    weight="bold"
-                    style={{
-                        color: theme.colors.onSurface,
-                        letterSpacing: -0.2
-                    }}
-                >
-                    {title}
-                </Typography>
-                <ExpressiveButton
-                    title="See All"
-                    variant="text"
-                    onPress={onSeeAll || (() => { })}
-                    size="sm"
-                    style={styles.seeAllBtn}
-                    textStyle={{ color: theme.colors.primary, fontWeight: '700' }}
-                />
-            </View>
+            <SectionHeader
+                title={title}
+                onAction={onSeeAll}
+                style={{ paddingHorizontal: 24 }}
+            />
 
             {isLoading ? (
                 <FlatList

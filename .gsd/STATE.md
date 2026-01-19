@@ -8,10 +8,11 @@ Codebase mapping complete.
 - Surface technical debt: lack of tests, in-memory caching for metadata, insecure fallbacks.
 
 ## Current Position
-- **Phase:** Phase 3: Discover Page - Hero Carousel
-- **Task:** Component Integration
-- **Status:** COMPLETED
+- **Phase:** Phase 8: Performance Optimization
+- **Task:** Planning & Strategy
+- **Status:** IN PROGRESS
 
 ## Next Steps
-- Proceed to Phase 4: Discover Page - Catalog Rows.
-- Refactor `CatalogRow` and `MetaCard` for 1:1 web alignment.
+- Finalize `.gsd/phases/8/PLAN.md`.
+- Implement memoization for `CatalogRow` and `MetaCard`.
+- Tune `VirtualizedList` props for high-density catalog views.

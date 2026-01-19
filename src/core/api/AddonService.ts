@@ -86,4 +86,49 @@ export class AddonService {
             return { subtitles: [] };
         }
     }
+
+    static async searchGrouped(manifests: Record<string, AddonManifest>, type: string, query: string): Promise<Array<{ addonName: string; catalogName?: string; metas: MetaPreview[] }>> {
+        const addonUrls = Object.keys(manifests);
+        const candidates: Array<{ baseUrl: string; addonName: string; catalogName?: string }> = [];
+
+        for (const url of addonUrls) {
+            const m = manifests[url];
+            for (const c of m.catalogs ?? []) {
+                const isSearchable =
+                    (c.extraSupported ?? []).includes('search') ||
+                    (c.extra ?? []).some((e: any) => (typeof e === 'string' ? e === 'search' : e.name === 'search'));
+
+                if (c.type === type && isSearchable) {
+                    candidates.push({
+                        baseUrl: url.replace(/\/manifest\.json$/, ''),
+                        addonName: m.name,
+                        catalogName: c.name,
+                    });
+                }
+            }
+        }
+
+        const results = await Promise.allSettled(
+            candidates.map((c) =>
+                axios.get<CatalogResponse>(`${c.baseUrl}/catalog/${type}/search=${encodeURIComponent(query)}.json`)
+                    .then(res => res.data)
+                    .catch(() => ({ metas: [] }))
+            )
+        );
+
+        const grouped: Array<{ addonName: string; catalogName?: string; metas: MetaPreview[] }> = [];
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i]!;
+            const c = candidates[i]!;
+            if (r.status === 'fulfilled' && r.value?.metas && r.value.metas.length > 0) {
+                grouped.push({
+                    addonName: c.addonName,
+                    catalogName: c.catalogName,
+                    metas: r.value.metas
+                });
+            }
+        }
+
+        return grouped;
+    }
 }

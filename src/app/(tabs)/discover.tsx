@@ -6,7 +6,7 @@ import { AddonService, MetaPreview } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
-import { ChevronDown, Filter, Search, Star } from 'lucide-react-native';
+import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -217,15 +217,14 @@ export default function DiscoverScreen() {
                 pointerEvents="box-none"
             >
                 <View style={styles.headerTop} pointerEvents="box-none">
-                    <Typography variant="headline-large" weight="black" style={{ color: theme.colors.onSurface }}>Discover</Typography>
-                    <ExpressiveSurface
-                        variant="tonal"
-                        rounding="full"
-                        style={styles.searchEntry}
-                        onPress={() => router.push('/(tabs)/search')}
+                    <Typography
+                        variant="display-large"
+                        weight="black"
+                        rounded
+                        style={{ fontSize: 40, lineHeight: 48, color: theme.colors.onSurface }}
                     >
-                        <Search size={24} color={theme.colors.onSurface} strokeWidth={2} />
-                    </ExpressiveSurface>
+                        Discover
+                    </Typography>
                 </View>
 
                 {/* Filters */}
@@ -425,25 +424,14 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        paddingTop: 56,
+        paddingTop: 64,
         paddingBottom: 16,
         zIndex: 1000,
         elevation: 10,
     },
     headerTop: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         paddingHorizontal: 24,
         marginBottom: 16,
-    },
-    searchEntry: {
-        width: 48,
-        height: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 0,
-        paddingVertical: 0,
     },
     filterScroll: {
         paddingHorizontal: 24,

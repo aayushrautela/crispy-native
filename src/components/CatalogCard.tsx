@@ -103,7 +103,7 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                         weight="medium"
                         style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}
                     >
-                        {meta.year || (item as any).releaseInfo || 'TBA'}
+                        {meta.year || (item as any).year || (item as any).releaseInfo || 'TBA'}
                     </Typography>
                     {(meta.genres?.[0]) && (
                         <View style={[styles.genrePill, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>

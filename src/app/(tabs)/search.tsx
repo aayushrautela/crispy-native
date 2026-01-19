@@ -1,107 +1,232 @@
+import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Touchable } from '@/src/cdk/components/Touchable';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
+import { CatalogRow } from '@/src/components/CatalogRow';
+import { SectionHeader } from '@/src/components/SectionHeader';
 import { AddonService } from '@/src/core/api/AddonService';
+import { TMDBService } from '@/src/core/api/TMDBService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
-import { Info, Search as SearchIcon, X } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Film, Info, LayoutGrid, Search as SearchIcon, Tv, X } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import Animated, { interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+
+type SearchType = 'all' | 'movie' | 'series';
+
+const HEADER_HEIGHT = 220;
 
 export default function SearchScreen() {
     const { theme } = useTheme();
     const [query, setQuery] = useState('');
+    const [type, setType] = useState<SearchType>('all');
     const { manifests } = useAddonStore();
+    const { width } = useWindowDimensions();
 
-    const addonUrls = Object.keys(manifests);
+    const numColumns = width > 768 ? 5 : 3;
+    const gap = 12;
+    const padding = 16;
+    const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
+    const itemWidth = availableWidth / numColumns;
+
+    const scrollY = useSharedValue(0);
+    const headerTranslateY = useSharedValue(0);
+    const lastScrollY = useSharedValue(0);
+
+    const onScroll = useAnimatedScrollHandler({
+        onScroll: (event) => {
+            const currentScrollY = event.contentOffset.y;
+            const diff = currentScrollY - lastScrollY.value;
+
+            if (currentScrollY <= 0) {
+                headerTranslateY.value = 0;
+            } else if (diff > 0 && currentScrollY > 50) {
+                headerTranslateY.value = Math.max(headerTranslateY.value - diff, -HEADER_HEIGHT);
+            } else if (diff < 0) {
+                headerTranslateY.value = Math.min(headerTranslateY.value - diff, 0);
+            }
+
+            lastScrollY.value = currentScrollY;
+            scrollY.value = currentScrollY;
+        },
+    });
+
+    const headerStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: headerTranslateY.value }],
+        opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 0], [0, 1]),
+        backgroundColor: interpolate(scrollY.value, [0, 50], [0, 1]) > 0.5
+            ? theme.colors.background
+            : 'transparent',
+    }));
 
     const { data: results, isLoading } = useQuery({
-        queryKey: ['search', query, addonUrls],
+        queryKey: ['search', query, type, manifests],
         queryFn: async () => {
-            if (!query.trim()) return [];
+            if (!query.trim()) return { tmdb: [], addonGroups: [] };
 
-            const types = ['movie', 'series'];
-            const allResults = await Promise.allSettled(
-                addonUrls.flatMap(url =>
-                    types.map(type => AddonService.search(url, type, query))
-                )
-            );
+            const fetchTypes: ('movie' | 'series')[] = type === 'all' ? ['movie', 'series'] : [type as 'movie' | 'series'];
 
-            const flattened = allResults
-                .filter((r): r is PromiseFulfilledResult<{ metas: any[] }> => r.status === 'fulfilled')
-                .flatMap(r => r.value.metas);
+            // 1. Fetch TMDB Results
+            const tmdbPromises = fetchTypes.map(t => TMDBService.search(t, query));
+            const tmdbResponses = await Promise.allSettled(tmdbPromises);
+            const tmdbResults = tmdbResponses
+                .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+                .flatMap(r => r.value);
 
-            // Deduplicate
-            const seen = new Set();
-            return flattened.filter(m => {
-                const key = `${m.type}-${m.id}`;
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
+            // Sort TMDB results by popularity (WebUI behavior)
+            const sortedTmdb = tmdbResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+
+            // 2. Fetch Addon Results Grouped
+            const addonPromises = fetchTypes.map(t => AddonService.searchGrouped(manifests, t, query));
+            const addonResponses = await Promise.allSettled(addonPromises);
+            const addonGroups = addonResponses
+                .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+                .flatMap(r => r.value);
+
+            return {
+                tmdb: sortedTmdb,
+                addonGroups: addonGroups
+            };
         },
         enabled: query.trim().length > 2,
     });
+
+    const categoryButtons: { id: SearchType; label: string; icon: any }[] = [
+        { id: 'all', label: 'All', icon: LayoutGrid },
+        { id: 'movie', label: 'Movies', icon: Film },
+        { id: 'series', label: 'TV Shows', icon: Tv },
+    ];
+
+    const activeIndex = useMemo(() => {
+        return categoryButtons.findIndex(opt => opt.id === type);
+    }, [type]);
+
+    const renderHeader = () => (
+        <Animated.View style={[styles.header, headerStyle]} pointerEvents="box-none">
+            <View style={styles.headerTop} pointerEvents="box-none">
+                <Typography
+                    variant="display-large"
+                    weight="black"
+                    rounded
+                    style={{ fontSize: 40, lineHeight: 48 }}
+                >
+                    Search
+                </Typography>
+            </View>
+
+            <View style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                <SearchIcon size={20} color={theme.colors.onSurfaceVariant} />
+                <TextInput
+                    placeholder="Search for movies, TV shows..."
+                    placeholderTextColor={theme.colors.onSurfaceVariant}
+                    style={[styles.input, { color: theme.colors.onSurface }]}
+                    value={query}
+                    onChangeText={setQuery}
+                    autoFocus
+                />
+                {query.length > 0 && (
+                    <Touchable onPress={() => setQuery('')}>
+                        <X size={20} color={theme.colors.onSurfaceVariant} />
+                    </Touchable>
+                )}
+            </View>
+
+            <View style={{ height: 56 }} pointerEvents="box-none">
+                <Animated.ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.filterScroll}
+                    pointerEvents="auto"
+                >
+                    {categoryButtons.map((btn, index) => {
+                        const isSelected = type === btn.id;
+                        return (
+                            <ExpressiveSurface
+                                key={btn.id}
+                                onPress={() => setType(btn.id)}
+                                variant={isSelected ? 'filled' : 'outlined'}
+                                selected={isSelected}
+                                rounding="full"
+                                index={index}
+                                activeIndex={activeIndex}
+                                style={styles.chip}
+                            >
+                                <Typography
+                                    variant="label-large"
+                                    weight="bold"
+                                    rounded
+                                    style={{
+                                        color: isSelected ? theme.colors.onPrimary : theme.colors.onSurfaceVariant
+                                    }}
+                                >
+                                    {btn.label}
+                                </Typography>
+                            </ExpressiveSurface>
+                        );
+                    })}
+                </Animated.ScrollView>
+            </View>
+        </Animated.View>
+    );
 
     return (
         <KeyboardAvoidingView
             style={[styles.container, { backgroundColor: theme.colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-            <View style={styles.header}>
-                <Typography variant="h1" className="text-white font-extrabold tracking-tight mb-4">Search</Typography>
-                <View style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
-                    <SearchIcon size={20} color={theme.colors.onSurfaceVariant} />
-                    <TextInput
-                        placeholder="Search for movies, TV shows..."
-                        placeholderTextColor={theme.colors.onSurfaceVariant}
-                        style={[styles.input, { color: theme.colors.onSurface }]}
-                        value={query}
-                        onChangeText={setQuery}
-                        autoFocus
-                    />
-                    {query.length > 0 && (
-                        <Touchable onPress={() => setQuery('')}>
-                            <X size={20} color={theme.colors.onSurfaceVariant} />
-                        </Touchable>
-                    )}
-                </View>
-            </View>
-
-            {query.length > 2 ? (
-                <FlatList
-                    data={results}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
-                    numColumns={3}
-                    contentContainerStyle={styles.listContent}
-                    columnWrapperStyle={styles.columnWrapper}
-                    renderItem={({ item }) => (
-                        <View style={styles.gridItem}>
-                            <CatalogCard item={item} />
-                        </View>
-                    )}
-                    ListEmptyComponent={() => !isLoading && (
-                        <View style={styles.empty}>
-                            <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
-                                <Info size={32} color={theme.colors.onSurfaceVariant} />
+            <Animated.FlatList
+                key={numColumns}
+                data={results?.tmdb || []}
+                keyExtractor={(item, index) => `${item.id}-${index}`}
+                numColumns={numColumns}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={() => (
+                    <>
+                        <View style={{ height: HEADER_HEIGHT + 16 }} />
+                        {results?.addonGroups?.map((group, idx) => (
+                            <View key={`${group.addonName}-${idx}`} style={styles.addonSection}>
+                                <CatalogRow
+                                    title={`${group.addonName}${group.catalogName ? ` - ${group.catalogName}` : ''}`}
+                                    items={group.metas}
+                                />
                             </View>
-                            <Typography variant="body" className="text-zinc-500 mt-4">
-                                No results found for "{query}"
-                            </Typography>
-                        </View>
-                    )}
-                />
-            ) : (
-                <View style={styles.empty}>
-                    <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
-                        <SearchIcon size={32} color={theme.colors.onSurfaceVariant} />
+                        ))}
+                        {results?.tmdb.length ? <SectionHeader title="Global Results" hideAction /> : null}
+                    </>
+                )}
+                contentContainerStyle={styles.listContent}
+                columnWrapperStyle={[styles.columnWrapper, { gap }]}
+                renderItem={({ item }) => (
+                    <View style={{ width: itemWidth }}>
+                        <CatalogCard item={item} width={itemWidth} />
                     </View>
-                    <Typography variant="body" className="text-zinc-500 mt-4">
-                        Search across all your addons
-                    </Typography>
-                </View>
-            )}
+                )}
+                ListEmptyComponent={() => !isLoading && query.length > 2 && (
+                    <View style={styles.empty}>
+                        <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                            <Info size={32} color={theme.colors.onSurfaceVariant} />
+                        </View>
+                        <Typography variant="body" className="text-zinc-500 mt-4">
+                            No results found for "{query}"
+                        </Typography>
+                    </View>
+                )}
+                ListFooterComponent={() => query.length <= 2 && (
+                    <View style={styles.empty}>
+                        <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                            <SearchIcon size={32} color={theme.colors.onSurfaceVariant} />
+                        </View>
+                        <Typography variant="body" className="text-zinc-500 mt-4">
+                            Search across TMDB and all your addons
+                        </Typography>
+                    </View>
+                )}
+            />
+            {renderHeader()}
         </KeyboardAvoidingView>
     );
 }
@@ -111,37 +236,59 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
         paddingTop: 64,
-        paddingHorizontal: 20,
         paddingBottom: 16,
+        zIndex: 1000,
+        elevation: 10,
+    },
+    headerTop: {
+        paddingHorizontal: 24,
+        marginBottom: 16,
     },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
+        marginHorizontal: 24,
         height: 56,
         borderRadius: 28,
         gap: 12,
+        marginBottom: 16,
     },
     input: {
         flex: 1,
         fontSize: 16,
         fontWeight: '600',
     },
+    filterScroll: {
+        paddingHorizontal: 24,
+        gap: 8,
+        alignItems: 'center',
+    },
+    chip: {
+        minWidth: 64,
+        height: 42,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+    },
     listContent: {
-        paddingHorizontal: 12,
-        paddingBottom: 100,
+        paddingBottom: 120,
     },
     columnWrapper: {
         justifyContent: 'flex-start',
-        gap: 8,
-        marginBottom: 8,
+        paddingHorizontal: 16,
+        marginBottom: 16,
     },
-    gridItem: {
-        width: '32%',
+    addonSection: {
+        marginBottom: 12,
     },
     empty: {
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 100,
