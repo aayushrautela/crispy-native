@@ -6,7 +6,7 @@ import android.view.SurfaceView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
-import is.xyz.mpv.MPVLib
+import `is`.xyz.mpv.MPVLib
 
 class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     private val surfaceView = SurfaceView(context)
