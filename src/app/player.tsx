@@ -1,8 +1,8 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useUserStore } from '@/src/core/stores/userStore';
-import { LoadingIndicator } from '@cdk/components/LoadingIndicator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ChevronLeft, Pause, Play, RotateCcw, RotateCw, Settings } from 'lucide-react-native';

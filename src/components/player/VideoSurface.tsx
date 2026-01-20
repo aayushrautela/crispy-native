@@ -1,4 +1,4 @@
-import { CrispyVideoView, CrispyVideoViewRef } from 'crispy-native-core';
+import { CrispyVideoView, CrispyVideoViewRef } from '@/modules/crispy-native-core';
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Video, { ResizeMode, VideoRef } from 'react-native-video';

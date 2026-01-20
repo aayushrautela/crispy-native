@@ -1,8 +1,8 @@
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { TraktService } from '@/src/core/api/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { LoadingIndicator } from '@cdk/components/LoadingIndicator';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
