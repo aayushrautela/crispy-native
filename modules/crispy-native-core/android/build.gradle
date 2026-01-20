@@ -38,4 +38,7 @@ dependencies {
   // Lifecycle & Coroutines
   implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.7.0"
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+  // Material 3 Components
+  implementation "com.google.android.material:material:1.14.0-alpha01"
 }

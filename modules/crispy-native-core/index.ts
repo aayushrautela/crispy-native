@@ -14,6 +14,15 @@ export interface CrispyVideoViewProps extends ViewProps {
 
 export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
 
+export interface LoadingIndicatorViewProps extends ViewProps {
+    color?: number;
+    containerColor?: number;
+    size?: number;
+    containerSize?: number;
+}
+
+export const LoadingIndicatorView: React.ComponentType<LoadingIndicatorViewProps> = requireNativeViewManager('CrispyNativeCore');
+
 export default {
     /**
      * Resolves a stream (e.g. infoHash) into a localhost URL.
