@@ -80,7 +80,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             MPVLib.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
             MPVLib.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
             MPVLib.observeProperty("track-list", MPVLib.MpvFormat.MPV_FORMAT_NONE)
-            MPVLib.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_Boolean)
+            MPVLib.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG)
             
             isMpvInitialized = true
             Log.d(TAG, "MPV initialized successfully")
