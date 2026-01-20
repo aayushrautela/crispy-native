@@ -28,30 +28,32 @@ import { CatalogRow } from '../../components/CatalogRow';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 550;
 
-const CastItem = ({ person, theme }: { person: any; theme: any }) => {
+const CastItem = ({ person, theme, onPress }: { person: any; theme: any; onPress: () => void }) => {
     return (
-        <View style={styles.castItem}>
-            <ExpoImage
-                source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
-                style={styles.castImage}
-            />
-            <Typography
-                variant="label"
-                weight="black"
-                numberOfLines={1}
-                style={{ color: theme.colors.onSurface, marginTop: 8, fontSize: 12 }}
-            >
-                {person.name}
-            </Typography>
-            <Typography
-                variant="label"
-                weight="medium"
-                numberOfLines={1}
-                style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 11 }}
-            >
-                {person.character}
-            </Typography>
-        </View>
+        <Pressable onPress={onPress}>
+            <View style={styles.castItem}>
+                <ExpoImage
+                    source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
+                    style={styles.castImage}
+                />
+                <Typography
+                    variant="label"
+                    weight="black"
+                    numberOfLines={1}
+                    style={{ color: theme.colors.onSurface, marginTop: 8, fontSize: 12 }}
+                >
+                    {person.name}
+                </Typography>
+                <Typography
+                    variant="label"
+                    weight="medium"
+                    numberOfLines={1}
+                    style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 11 }}
+                >
+                    {person.character}
+                </Typography>
+            </View>
+        </Pressable>
     );
 };
 
@@ -366,18 +368,17 @@ export default function MetaDetailsScreen() {
                             <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginBottom: 16 }}>Cast</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
                                 {(enriched.cast || []).map((person) => (
-                                    <CastItem key={person.id} person={person} theme={theme} />
+                                    <CastItem
+                                        key={person.id}
+                                        person={person}
+                                        theme={theme}
+                                        onPress={() => router.push(`/person/${person.id}`)}
+                                    />
                                 ))}
                             </ScrollView>
                         </View>
                     )}
 
-                    {/* Collection / Franchise Section */}
-                    {enriched.collection && enriched.collection.parts && enriched.collection.parts.length > 0 && (
-                        <View style={[styles.section, { marginHorizontal: -20 }]}>
-                            <CatalogRow title={`${enriched.collection.name}`} items={enriched.collection.parts} />
-                        </View>
-                    )}
 
                     {/* Episodes Section (if series) */}
                     {isSeries && seasons.length > 0 && (
@@ -440,6 +441,13 @@ export default function MetaDetailsScreen() {
                                     />
                                 ))}
                             </ScrollView>
+                        </View>
+                    )}
+
+                    {/* Collection / Franchise Section */}
+                    {enriched.collection && enriched.collection.parts && enriched.collection.parts.length > 0 && (
+                        <View style={[styles.section, { marginHorizontal: -20 }]}>
+                            <CatalogRow title={`${enriched.collection.name}`} items={enriched.collection.parts} />
                         </View>
                     )}
 

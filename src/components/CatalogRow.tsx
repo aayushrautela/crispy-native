@@ -1,6 +1,7 @@
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
 import { useTheme } from '@/src/core/ThemeContext';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
@@ -32,6 +33,7 @@ export const CatalogRow = ({
     addonUrl
 }: CatalogRowProps) => {
     const { theme } = useTheme();
+    const router = useRouter();
 
     const {
         items: fetchedItems,
@@ -72,7 +74,18 @@ export const CatalogRow = ({
         <View style={styles.container}>
             <SectionHeader
                 title={title}
-                onAction={onSeeAll}
+                onAction={onSeeAll || (() => {
+                    if (catalogId && catalogType) {
+                        router.push({
+                            pathname: `/catalog/${catalogId}`,
+                            params: {
+                                type: catalogType,
+                                addonUrl: addonUrl,
+                                title: title
+                            }
+                        });
+                    }
+                })}
                 style={{ paddingHorizontal: 24 }}
             />
 

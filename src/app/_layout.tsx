@@ -74,6 +74,8 @@ function RootLayoutNav() {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="meta/[id]" options={{ headerShown: false, animation: 'default' }} />
           <Stack.Screen name="player" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="catalog/[id]" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="person/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style={isDark ? 'light' : 'dark'} />

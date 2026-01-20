@@ -65,6 +65,26 @@ export interface TMDBMeta {
     productionCompanies?: { id: number; name: string; logo: string | null }[];
 }
 
+export interface TMDBPerson {
+    id: number;
+    name: string;
+    biography: string;
+    birthday: string | null;
+    place_of_birth: string | null;
+    profile: string | null;
+    known_for_department: string;
+    also_known_as: string[];
+    external_ids: {
+        imdb_id: string | null;
+        instagram_id: string | null;
+        twitter_id: string | null;
+    };
+    credits: {
+        cast: any[];
+        crew: any[];
+    };
+}
+
 const metaCache: Record<string, Partial<TMDBMeta>> = {};
 
 export class TMDBService {
@@ -336,6 +356,56 @@ export class TMDBService {
         } catch (e) {
             console.error('[TMDBService] Search failed:', e);
             return [];
+        }
+    }
+
+    static async getPersonDetails(personId: number): Promise<TMDBPerson | null> {
+        try {
+            const url = `${BASE_URL}/person/${personId}?api_key=${API_KEY}&append_to_response=combined_credits,external_ids`;
+            const res = await axios.get(url);
+            const data = res.data;
+
+            return {
+                id: data.id,
+                name: data.name,
+                biography: data.biography,
+                birthday: data.birthday,
+                place_of_birth: data.place_of_birth,
+                profile: data.profile_path ? `${IMAGE_BASE}/h632${data.profile_path}` : null,
+                known_for_department: data.known_for_department,
+                also_known_as: data.also_known_as || [],
+                external_ids: {
+                    imdb_id: data.external_ids?.imdb_id || null,
+                    instagram_id: data.external_ids?.instagram_id || null,
+                    twitter_id: data.external_ids?.twitter_id || null,
+                },
+                credits: {
+                    cast: (() => {
+                        const unique = new Map();
+                        const cast = data.combined_credits?.cast || [];
+                        cast.forEach((c: any) => {
+                            if (!unique.has(c.id)) {
+                                unique.set(c.id, c);
+                            }
+                        });
+                        return Array.from(unique.values())
+                            .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
+                            .map((c: any) => ({
+                                id: c.id.toString(),
+                                tmdbId: c.id,
+                                name: c.title || c.name,
+                                poster: c.poster_path ? `${IMAGE_BASE}/w500${c.poster_path}` : null,
+                                year: (c.release_date || c.first_air_date || '').split('-')[0],
+                                type: c.media_type === 'tv' ? 'series' : 'movie',
+                                rating: c.vote_average?.toFixed(1) || '0.0',
+                            }));
+                    })(),
+                    crew: data.combined_credits?.crew || [],
+                }
+            };
+        } catch (e) {
+            console.error('[TMDBService] Failed to fetch person details:', personId, e);
+            return null;
         }
     }
 }
