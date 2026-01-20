@@ -3,9 +3,11 @@ package aayush.crispy.core
 import android.content.Context
 import android.graphics.Color
 import com.google.android.material.loadingindicator.LoadingIndicator
+import android.view.View
+import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.views.ExpoView
 
-class LoadingIndicatorView(context: Context) : ExpoView(context) {
+class LoadingIndicatorView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     private val indicator = LoadingIndicator(context)
 
     init {
