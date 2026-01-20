@@ -26,6 +26,7 @@ export interface AppSettings {
     showRatingBadges: boolean;
     accentColor: string;
     amoledMode: boolean;
+    videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
     updatedAt?: number;
 }
 
@@ -84,6 +85,7 @@ function getDefaultSettings(): AppSettings {
         showRatingBadges: true,
         accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
+        videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
     };
 }
 
@@ -155,6 +157,9 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
     // Theme
     if ('accentColor' in updates) StorageService.setUser('crispy-accent-color', updates.accentColor);
     if ('amoledMode' in updates) StorageService.setUser('crispy-amoled-mode', updates.amoledMode);
+
+    // Video Player
+    if ('videoPlayerEngine' in updates) StorageService.setUser('crispy-video-engine', updates.videoPlayerEngine);
 }
 
 export const useUserStore = create<UserStoreState>((set, get) => ({

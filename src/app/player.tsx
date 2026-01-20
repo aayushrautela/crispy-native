@@ -1,11 +1,14 @@
-import CrispyNativeCore, { CrispyVideoView, CrispyVideoViewRef } from '@/modules/crispy-native-core';
+import CrispyNativeCore from '@/modules/crispy-native-core';
+import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { useTheme } from '@/src/core/ThemeContext';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ChevronLeft, Pause, Play, RotateCcw, RotateCw, Settings } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+
 const SafeOrientation = ScreenOrientation || {};
 
 export default function PlayerScreen() {
@@ -13,6 +16,7 @@ export default function PlayerScreen() {
     const { url, title, infoHash, fileIdx, headers: headersParam } = params;
     const { theme } = useTheme();
     const router = useRouter();
+    const settings = useUserStore((s) => s.settings);
 
     const [finalUrl, setFinalUrl] = useState<string | null>(null);
     const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
@@ -21,7 +25,14 @@ export default function PlayerScreen() {
     const [showControls, setShowControls] = useState(true);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
 
-    const videoRef = useRef<CrispyVideoViewRef>(null);
+    // Dual-engine state
+    const [useExoPlayer, setUseExoPlayer] = useState(() => {
+        if (settings.videoPlayerEngine === 'mpv') return false;
+        if (settings.videoPlayerEngine === 'exoplayer') return true;
+        return true; // 'auto' defaults to ExoPlayer
+    });
+
+    const videoRef = useRef<VideoSurfaceRef>(null);
     const controlsTimer = useRef<NodeJS.Timeout | null>(null);
 
     // Parse headers if present
@@ -90,22 +101,29 @@ export default function PlayerScreen() {
     };
 
     const handleSeekForward = () => {
-        const newPos = progress.position + 10000;
+        const newPos = progress.position + 10;
         videoRef.current?.seek(newPos);
         resetControlsTimer();
     };
 
     const handleSeekBackward = () => {
-        const newPos = Math.max(0, progress.position - 10000);
+        const newPos = Math.max(0, progress.position - 10);
         videoRef.current?.seek(newPos);
         resetControlsTimer();
     };
 
-    const formatTime = (ms: number) => {
-        const totalSeconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    // Handle codec errors - switch to MPV
+    const handleCodecError = () => {
+        if (useExoPlayer && settings.videoPlayerEngine === 'auto') {
+            console.warn('[PlayerScreen] Codec error detected, switching to MPV');
+            setUseExoPlayer(false);
+        }
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
     const extractInfoHash = (magnet: string): string | null => {
@@ -116,19 +134,20 @@ export default function PlayerScreen() {
     return (
         <View style={[styles.container, { backgroundColor: '#000' }]}>
             {finalUrl ? (
-                <CrispyVideoView
+                <VideoSurface
                     ref={videoRef}
-                    style={styles.video}
-                    source={finalUrl} // Fixed: use finalUrl
+                    source={finalUrl}
                     headers={headers}
                     paused={paused}
-                    onProgress={(e) => setProgress(e.nativeEvent)}
-                    onLoad={(e) => {
-                        console.log("Video loaded", e.nativeEvent);
+                    useExoPlayer={useExoPlayer}
+                    onCodecError={handleCodecError}
+                    onProgress={(data) => setProgress({ position: data.currentTime, duration: data.duration })}
+                    onLoad={(data) => {
+                        console.log("Video loaded", data);
                         setLoading(false);
                     }}
                     onEnd={() => router.back()}
-                    onError={(e) => console.error("Playback error", e.nativeEvent)}
+                    onError={(e) => console.error("Playback error", e.message)}
                 />
             ) : (
                 <View style={styles.centerLoading}>
@@ -199,9 +218,6 @@ export default function PlayerScreen() {
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
-    },
-    video: {
         flex: 1,
     },
     centerLoading: {
