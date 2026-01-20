@@ -1,5 +1,6 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
+import { SideSheet } from '@/src/cdk/components/SideSheet';
 import { Typography } from '@/src/cdk/components/Typography';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -31,6 +32,8 @@ import Animated, {
 
 const SafeOrientation = ScreenOrientation || {};
 
+type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
+
 export default function PlayerScreen() {
     const params = useLocalSearchParams();
     const { url, title, infoHash, fileIdx, headers: headersParam } = params;
@@ -46,6 +49,7 @@ export default function PlayerScreen() {
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
+    const [activeTab, setActiveTab] = useState<ActiveTab>('none');
 
     // Gesture & Feedback State
     const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
@@ -126,8 +130,21 @@ export default function PlayerScreen() {
     const resetControlsTimer = () => {
         if (controlsTimer.current) clearTimeout(controlsTimer.current);
         setShowControls(true);
-        controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
+        // Only auto-hide if no tab is active
+        if (activeTab === 'none') {
+            controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
+        }
     };
+
+    // Keep controls visible when tab is active
+    useEffect(() => {
+        if (activeTab !== 'none') {
+            if (controlsTimer.current) clearTimeout(controlsTimer.current);
+            setShowControls(true);
+        } else {
+            resetControlsTimer();
+        }
+    }, [activeTab]);
 
     const togglePlay = () => {
         const nextPaused = !paused;
@@ -418,7 +435,14 @@ export default function PlayerScreen() {
                                         { icon: Settings, key: 'settings' },
                                         { icon: Info, key: 'info' }
                                     ].map((item, i) => (
-                                        <Pressable key={i} style={styles.actionIconBtn} onPress={resetControlsTimer}>
+                                        <Pressable
+                                            key={i}
+                                            style={styles.actionIconBtn}
+                                            onPress={() => {
+                                                setActiveTab(item.key as ActiveTab);
+                                                // resetControlsTimer handled by effect
+                                            }}
+                                        >
                                             <item.icon color="#fff" size={20} />
                                         </Pressable>
                                     ))}
@@ -428,6 +452,19 @@ export default function PlayerScreen() {
                     </Animated.View>
                 )}
             </Pressable>
+
+            {/* Side Sheet */}
+            <SideSheet
+                isVisible={activeTab !== 'none'}
+                onClose={() => setActiveTab('none')}
+                title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+            >
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Typography variant="body" style={{ color: '#fff' }}>
+                        {activeTab.toUpperCase()} CONTENT
+                    </Typography>
+                </View>
+            </SideSheet>
         </View>
     );
 }
