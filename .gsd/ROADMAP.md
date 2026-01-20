@@ -20,8 +20,9 @@
 ## Phase 4: Discover Page - Catalog Rows
 **Status**: ⬜ Not Started
 **Objective**: 1:1 layout copy of `CatalogRow.tsx` and `ContentRow.tsx`.
-- [ ] Implement `CatalogRow` with lazy-loading logic.
-- [ ] Align `MetaCard` styling with WebUI version (rounded-xl, scale effects).
+- [x] Implement `CatalogRow` with lazy-loading logic.
+- [x] Align `MetaCard` styling with WebUI version (rounded-xl, scale effects).
+- [x] **Meta Details Enhancements**: Clickable episodes & review bottom sheets.
 
 ## Phase 5: Shell & Layout Alignment
 **Status**: ⬜ Not Started

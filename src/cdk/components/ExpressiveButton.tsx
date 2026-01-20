@@ -1,7 +1,7 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 interface ExpressiveButtonProps {
     onPress: () => void;
@@ -73,9 +73,14 @@ export const ExpressiveButton = ({
         }
     }, [variant, theme]);
 
+    const pressed = useSharedValue(0);
+
     const animatedStyle = useAnimatedStyle(() => {
         return {
-            transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
+            transform: [
+                { scale: withSpring(interpolate(pressed.value, [0, 1], [focused ? 1.05 : 1, 0.96])) }
+            ],
+            opacity: withSpring(interpolate(pressed.value, [0, 1], [focused ? 0.9 : 1, 0.8])),
             borderWidth: variant === 'outline' ? 1 : (focused ? 2 : 0),
             borderColor: focused ? theme.colors.primary : colors.border || 'transparent',
             elevation: withSpring(focused ? 4 : 0),
@@ -85,6 +90,8 @@ export const ExpressiveButton = ({
     return (
         <AnimatedPressable
             onPress={onPress}
+            onPressIn={() => (pressed.value = 1)}
+            onPressOut={() => (pressed.value = 0)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             style={[

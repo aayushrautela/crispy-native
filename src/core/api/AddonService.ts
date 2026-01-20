@@ -82,13 +82,16 @@ export class AddonService {
 
     static async getStreams(baseUrl: string, type: string, id: string): Promise<{ streams: any[] }> {
         const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/stream/${type}/${encodeURIComponent(id)}.json`;
+        console.log(`[AddonService] getStreams URL: ${url}`);
         try {
             const res = await axios.get<{ streams: any[] }>(url);
+            console.log(`[AddonService] getStreams ${url} status: ${res.status}, count: ${res.data?.streams?.length || 0}`);
             if (res.data && Array.isArray(res.data.streams)) {
                 return res.data;
             }
             return { streams: [] };
-        } catch (e) {
+        } catch (e: any) {
+            console.error(`[AddonService] getStreams failed for ${url}:`, e.message);
             return { streams: [] };
         }
     }

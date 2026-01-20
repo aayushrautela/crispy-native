@@ -30,6 +30,7 @@ export interface TMDBCollection {
 export interface TMDBMeta {
     id: string; // The original ID used for the fetch
     tmdbId: number;
+    imdbId?: string;
     title: string;
     logo?: string;
     backdrop?: string;
@@ -240,7 +241,12 @@ export class TMDBService {
             const enriched: Partial<TMDBMeta> = {
                 id: idStr,
                 tmdbId: Number(foundTmdbId),
+                imdbId: data.external_ids?.imdb_id || (data.imdb_id),
                 type: findPath === 'tv' ? 'series' : 'movie',
+            };
+            console.log(`[TMDBService] Resolved meta for ${idStr}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);
+
+            Object.assign(enriched, {
                 title: data.title || data.name,
                 logo: logo ? `${IMAGE_BASE}/original${logo}` : undefined,
                 backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/original${data.backdrop_path || backdropFallback}` : undefined,
@@ -281,7 +287,7 @@ export class TMDBService {
                     type: r.media_type || (findPath === 'movie' ? 'movie' : 'series'),
                     tmdbId: r.id,
                 })) || [],
-            };
+            });
 
             metaCache[cacheKey] = enriched;
             return enriched;

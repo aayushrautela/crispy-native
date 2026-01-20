@@ -1,4 +1,5 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
+import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
@@ -11,9 +12,9 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, List, Play, Star, X } from 'lucide-react-native';
+import { ArrowLeft, List, Play, Star } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
     Extrapolation,
     interpolate,
@@ -54,70 +55,74 @@ const CastItem = ({ person, theme }: { person: any; theme: any }) => {
     );
 };
 
-const EpisodeItem = ({ episode, theme }: { episode: any; theme: any }) => {
+const EpisodeItem = ({ episode, theme, onPress }: { episode: any; theme: any; onPress: () => void }) => {
     return (
-        <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
-            <View style={styles.episodeInfo}>
-                <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
-                    E{episode.episode || episode.number}: {episode.name || episode.title}
-                </Typography>
-                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 2 }}>
-                    {episode.runtime && (
-                        <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
-                            {episode.runtime}
-                        </Typography>
-                    )}
-                    {episode.released && (
-                        <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
-                            {new Date(episode.released).toLocaleDateString()}
-                        </Typography>
-                    )}
+        <Pressable onPress={onPress}>
+            <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
+                <View style={styles.episodeInfo}>
+                    <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
+                        E{episode.episode || episode.number}: {episode.name || episode.title}
+                    </Typography>
+                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                        {episode.runtime && (
+                            <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
+                                {episode.runtime}
+                            </Typography>
+                        )}
+                        {episode.released && (
+                            <Typography variant="label" style={{ color: 'white', opacity: 0.6 }}>
+                                {new Date(episode.released).toLocaleDateString()}
+                            </Typography>
+                        )}
+                    </View>
+                    <Typography
+                        variant="label"
+                        numberOfLines={2}
+                        style={{ color: 'white', opacity: 0.7, marginTop: 4, fontSize: 11 }}
+                    >
+                        {episode.overview || episode.description || 'No description available.'}
+                    </Typography>
                 </View>
-                <Typography
-                    variant="label"
-                    numberOfLines={2}
-                    style={{ color: 'white', opacity: 0.7, marginTop: 4, fontSize: 11 }}
-                >
-                    {episode.overview || episode.description || 'No description available.'}
-                </Typography>
             </View>
-        </View>
+        </Pressable>
     );
 };
 
-const ReviewCard = ({ review, theme }: { review: any; theme: any }) => {
+const ReviewCard = ({ review, theme, onPress }: { review: any; theme: any; onPress: () => void }) => {
     if (!review) return null;
 
     return (
-        <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <View style={styles.reviewHeader}>
-                <ExpoImage
-                    source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')}
-                    style={styles.avatar}
-                />
-                <View style={{ flex: 1 }}>
-                    <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface }}>
-                        {review.author}
-                    </Typography>
-                    {review.rating && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Star size={10} color="#F5C518" fill="#F5C518" />
-                            <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontSize: 11 }}>
-                                {review.rating}/10
-                            </Typography>
-                        </View>
-                    )}
+        <Pressable onPress={onPress}>
+            <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                <View style={styles.reviewHeader}>
+                    <ExpoImage
+                        source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')}
+                        style={styles.avatar}
+                    />
+                    <View style={{ flex: 1 }}>
+                        <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface }}>
+                            {review.author}
+                        </Typography>
+                        {review.rating && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Star size={10} color="#F5C518" fill="#F5C518" />
+                                <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontSize: 11 }}>
+                                    {review.rating}/10
+                                </Typography>
+                            </View>
+                        )}
+                    </View>
                 </View>
+                <Typography
+                    variant="body"
+                    numberOfLines={4}
+                    style={{ color: theme.colors.onSurface, opacity: 0.8, marginTop: 8, fontSize: 13 }}
+                >
+                    {review.content}
+                </Typography>
             </View>
-            <Typography
-                variant="body"
-                numberOfLines={4}
-                style={{ color: theme.colors.onSurface, opacity: 0.8, marginTop: 8, fontSize: 13 }}
-            >
-                {review.content}
-            </Typography>
-        </View>
+        </Pressable>
     );
 };
 
@@ -131,6 +136,12 @@ export default function MetaDetailsScreen() {
     const [activeSeason, setActiveSeason] = useState(1);
     const [enriched, setEnriched] = useState<Partial<TMDBMeta>>({});
     const [seasonEpisodes, setSeasonEpisodes] = useState<any[]>([]);
+    const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
+    const [selectedReview, setSelectedReview] = useState<any>(null);
+    const bottomSheetRef = React.useRef<BottomSheetRef>(null);
+    const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
+
+    const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
 
     // AI Hooks
     const { insights, isLoading: isAiLoading, generateInsights, loadFromCache, clearInsights } = useAiInsights();
@@ -164,7 +175,7 @@ export default function MetaDetailsScreen() {
         if (id) {
             TMDBService.getEnrichedMeta(id as string, type as any).then(data => {
                 setEnriched(data);
-                if (data.tmdbId && type === 'series') {
+                if (data.tmdbId && (type === 'series' || type === 'tv' || data.type === 'series')) {
                     // Fetch Season 1 by default
                     TMDBService.getSeasonEpisodes(data.tmdbId, 1).then(setSeasonEpisodes);
                 }
@@ -173,22 +184,30 @@ export default function MetaDetailsScreen() {
     }, [id, type]);
 
     useEffect(() => {
-        if (enriched.tmdbId && type === 'series') {
-            TMDBService.getSeasonEpisodes(enriched.tmdbId, activeSeason).then(data => {
+        const tmdbId = enriched.tmdbId;
+        if (tmdbId && (type === 'series' || type === 'tv' || enriched.type === 'series')) {
+            TMDBService.getSeasonEpisodes(tmdbId, activeSeason).then(data => {
                 if (data && data.length > 0) setSeasonEpisodes(data);
             });
         }
-    }, [activeSeason, enriched.tmdbId]);
+    }, [activeSeason, enriched.tmdbId, type, enriched.type]);
 
     // Auto-trigger stream selector if autoplay is requested
     useEffect(() => {
         if (!isLoading && meta && useLocalSearchParams().autoplay === 'true') {
-            setShowStreamSelector(true);
+            streamBottomSheetRef.current?.present();
         }
     }, [isLoading, meta]);
 
+    const getStreamId = () => {
+        const baseId = enriched.imdbId || id as string;
+        if (!isSeries || !selectedEpisode) return baseId;
+        // Construct standard Stremio ID format: id:season:episode
+        return `${baseId}:${activeSeason}:${selectedEpisode.episode}`;
+    };
+
     const handleStreamSelect = async (stream: any) => {
-        setShowStreamSelector(false);
+        streamBottomSheetRef.current?.dismiss();
         let playbackUrl = stream.url;
         if (stream.infoHash) {
             const localUrl = await CrispyNativeCore.resolveStream(stream.infoHash, stream.fileIdx || -1);
@@ -232,7 +251,7 @@ export default function MetaDetailsScreen() {
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Layer 1: Parallax Backdrop (Fixed at back) */}
-            <Animated.View style={[styles.parallaxLayer, backdropStyle]}>
+            <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
                 <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.4)', theme.colors.background]}
@@ -294,7 +313,12 @@ export default function MetaDetailsScreen() {
                             <ExpressiveButton
                                 title="Watch Now"
                                 variant="primary"
-                                onPress={() => setShowStreamSelector(true)}
+                                onPress={() => {
+                                    if (isSeries && !selectedEpisode && seasonEpisodes.length > 0) {
+                                        setSelectedEpisode(seasonEpisodes[0]);
+                                    }
+                                    streamBottomSheetRef.current?.present();
+                                }}
                                 icon={<Play size={20} color="black" fill="black" />}
                                 style={styles.primaryWatchBtn}
                                 textStyle={{ color: 'black', fontWeight: '900' }}
@@ -310,25 +334,24 @@ export default function MetaDetailsScreen() {
                 <LinearGradient
                     colors={['transparent', theme.colors.background]}
                     style={{ height: 100, marginTop: -100 }}
+                    pointerEvents="none"
                 />
 
                 {/* Body Content (Opaque) */}
                 <View style={[styles.body, { backgroundColor: theme.colors.background }]}>
 
-                    {/* AI Insights Section */}
+                    <Typography variant="body" weight="medium" style={{ color: 'white', opacity: 0.8, lineHeight: 22, fontSize: 15 }}>
+                        {enriched.description || meta?.description}
+                    </Typography>
 
-                    <View style={{ marginBottom: 24 }}>
+                    {/* AI Insights Section */}
+                    <View style={{ marginTop: 24, marginBottom: 8 }}>
                         <AIInsightsCarousel
                             insights={insights}
                             isLoading={isAiLoading}
                             onGenerate={() => generateInsights(enriched, enriched.reviews)}
                         />
                     </View>
-
-
-                    <Typography variant="body" weight="medium" style={{ color: 'white', opacity: 0.8, lineHeight: 22, fontSize: 15 }}>
-                        {enriched.description || meta?.description}
-                    </Typography>
 
                     {enriched.director && (
                         <View style={{ marginTop: 16 }}>
@@ -342,7 +365,7 @@ export default function MetaDetailsScreen() {
                         <View style={styles.section}>
                             <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginBottom: 16 }}>Cast</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
-                                {enriched.cast.map((person) => (
+                                {(enriched.cast || []).map((person) => (
                                     <CastItem key={person.id} person={person} theme={theme} />
                                 ))}
                             </ScrollView>
@@ -357,29 +380,44 @@ export default function MetaDetailsScreen() {
                     )}
 
                     {/* Episodes Section (if series) */}
-                    {type === 'series' && seasons.length > 0 && (
+                    {isSeries && seasons.length > 0 && (
                         <View style={styles.section}>
                             <Typography variant="label" weight="black" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.5, marginBottom: 12 }}>SEASON</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 16 }}>
-                                {seasons.map((s) => (
-                                    <Pressable key={s} onPress={() => setActiveSeason(s)}>
-                                        <ExpressiveSurface
-                                            variant={activeSeason === s ? 'filled' : 'filled'}
-                                            rounding="3xl"
-                                            style={[styles.seasonChip, activeSeason === s && { backgroundColor: theme.colors.primary }] as any}
+                                {seasons.map((s, idx) => (
+                                    <ExpressiveSurface
+                                        key={s}
+                                        onPress={() => setActiveSeason(s)}
+                                        selected={activeSeason === s}
+                                        index={idx}
+                                        activeIndex={seasons.indexOf(activeSeason)}
+                                        rounding="3xl"
+                                        variant="filled"
+                                        style={styles.seasonChip}
+                                    >
+                                        <Typography
+                                            variant="label"
+                                            weight="bold"
+                                            style={{ color: activeSeason === s ? theme.colors.onPrimary : theme.colors.onSurface }}
                                         >
-                                            <Typography variant="label" weight="bold" style={{ color: activeSeason === s ? theme.colors.onPrimary : theme.colors.onSurface }}>
-                                                {enriched?.seasons?.find(fs => fs.seasonNumber === s)?.name || `Season ${s}`}
-                                            </Typography>
-                                        </ExpressiveSurface>
-                                    </Pressable>
+                                            {enriched?.seasons?.find(fs => fs.seasonNumber === s)?.name || `Season ${s}`}
+                                        </Typography>
+                                    </ExpressiveSurface>
                                 ))}
                             </ScrollView>
 
                             <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginVertical: 16 }}>Episodes</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
                                 {(seasonEpisodes.length > 0 ? seasonEpisodes : []).map((ep, idx) => (
-                                    <EpisodeItem key={ep.id || idx} episode={ep} theme={theme} />
+                                    <EpisodeItem
+                                        key={ep.id || idx}
+                                        episode={ep}
+                                        theme={theme}
+                                        onPress={() => {
+                                            setSelectedEpisode(ep);
+                                            streamBottomSheetRef.current?.present();
+                                        }}
+                                    />
                                 ))}
                             </ScrollView>
                         </View>
@@ -390,8 +428,16 @@ export default function MetaDetailsScreen() {
                         <View style={styles.section}>
                             <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginBottom: 16 }}>Reviews</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
-                                {enriched.reviews.map((r) => (
-                                    <ReviewCard key={r.id} review={r} theme={theme} />
+                                {(enriched.reviews || []).map((r) => (
+                                    <ReviewCard
+                                        key={r.id}
+                                        review={r}
+                                        theme={theme}
+                                        onPress={() => {
+                                            setSelectedReview(r);
+                                            bottomSheetRef.current?.present();
+                                        }}
+                                    />
                                 ))}
                             </ScrollView>
                         </View>
@@ -408,26 +454,51 @@ export default function MetaDetailsScreen() {
                 <View style={{ height: 100 }} />
             </Animated.ScrollView>
 
-            <Modal
-                visible={showStreamSelector}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => setShowStreamSelector(false)}
-            >
-                <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-                    <View style={styles.modalHeader}>
-                        <Pressable onPress={() => setShowStreamSelector(false)} style={styles.modalClose}>
-                            <X color={theme.colors.onSurface} size={24} />
-                        </Pressable>
-                        <Typography variant="h3" weight="black">Select Stream</Typography>
+            <CustomBottomSheet ref={streamBottomSheetRef} title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`} snapPoints={['60%', '90%']}>
+                <StreamSelector
+                    type={isSeries ? 'series' : 'movie'}
+                    id={getStreamId()}
+                    onSelect={handleStreamSelect}
+                    hideHeader={true}
+                />
+            </CustomBottomSheet>
+
+            <CustomBottomSheet ref={bottomSheetRef} title="Review">
+                {selectedReview && (
+                    <View style={{ paddingHorizontal: 20 }}>
+                        <View style={[styles.reviewHeader, { marginBottom: 16 }]}>
+                            <ExpoImage
+                                source={selectedReview.avatar ? { uri: selectedReview.avatar } : require('@/assets/images/icon.png')}
+                                style={[styles.avatar, { width: 48, height: 48, borderRadius: 24 }]}
+                            />
+                            <View>
+                                <Typography variant="h3" weight="bold" style={{ color: theme.colors.onSurface }}>
+                                    {selectedReview.author}
+                                </Typography>
+                                {selectedReview.rating && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                        <Star size={14} color="#F5C518" fill="#F5C518" />
+                                        <Typography variant="label" weight="medium" style={{ color: theme.colors.primary }}>
+                                            {selectedReview.rating}/10
+                                        </Typography>
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                        <Typography
+                            variant="body"
+                            style={{
+                                color: theme.colors.onSurface,
+                                lineHeight: 28,
+                                fontSize: 17,
+                                opacity: 0.9
+                            }}
+                        >
+                            {selectedReview.content}
+                        </Typography>
                     </View>
-                    <StreamSelector
-                        type={type as string}
-                        id={id as string}
-                        onSelect={handleStreamSelect}
-                    />
-                </View>
-            </Modal>
+                )}
+            </CustomBottomSheet>
         </View>
     );
 }

@@ -19,6 +19,8 @@ Codebase mapping complete.
 - Implemented native `LoadingIndicatorView.kt` in `crispy-native-core` module.
 - Exposed native indicator via Expo module and CDK component.
 - Standardized container and indicator sizes for a fluid native feel.
+- **Meta Details Usability**: Implemented clickable episodes, robust series detection, and native animation for season selection.
+- **BottomSheet Migration**: Converted both Review and Stream Selection views to premium MD3 Bottom Sheets.
 
 ## Next Steps
 - Gather feedback on Trakt sync performance.

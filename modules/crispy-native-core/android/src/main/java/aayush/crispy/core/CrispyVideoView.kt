@@ -6,10 +6,11 @@ import android.view.SurfaceView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import is.xyz.mpv.MPVLib
 
 class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
     private val surfaceView = SurfaceView(context)
-    private var player: MpvPlayer? = null
+    private var isMpvInitialized = false
     
     // Event dispatchers
     val onLoad by EventDispatcher<Map<String, Any>>()
@@ -21,27 +22,37 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                player = MpvPlayer(context)
-                player?.setSurface(holder.surface)
+                MPVLib.create(context.applicationContext)
+                
+                // Basic configuration
+                MPVLib.setPropertyString("vo", "gpu")
+                MPVLib.setPropertyString("hwdec", "auto")
+                MPVLib.setPropertyString("save-position-on-quit", "no")
+                
+                MPVLib.init()
+                MPVLib.attachSurface(holder.surface)
+                isMpvInitialized = true
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                player?.setSurface(null)
-                player?.destroy()
-                player = null
+                if (isMpvInitialized) {
+                    MPVLib.detachSurface()
+                    MPVLib.destroy()
+                    isMpvInitialized = false
+                }
             }
         })
         
         // Polling for progress (simple for now)
         postDelayed(object : Runnable {
             override fun run() {
-                player?.let { p ->
-                    val pos = p.getPosition()
-                    val dur = p.getDuration()
+                if (isMpvInitialized) {
+                    val pos = (MPVLib.getPropertyDouble("time-pos") ?: 0.0) * 1000
+                    val dur = (MPVLib.getPropertyDouble("duration") ?: 0.0) * 1000
                     if (pos > 0 || dur > 0) {
-                        onProgress(mapOf("position" to pos, "duration" to dur))
+                        onProgress(mapOf("position" to pos.toLong(), "duration" to dur.toLong()))
                     }
                 }
                 postDelayed(this, 1000)
@@ -51,18 +62,25 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun setSource(url: String?) {
         url?.let {
-            player?.load(it)
-            player?.play()
-            // In a real impl, we'd wait for on-metadata event from JNI
-            onLoad(mapOf("status" to "loading"))
+            if (isMpvInitialized) {
+                MPVLib.command(arrayOf("loadfile", it))
+                MPVLib.setPropertyString("pause", "no")
+                // In a real impl, we'd wait for on-metadata event from JNI
+                onLoad(mapOf("status" to "loading"))
+            }
         }
     }
 
     fun setPaused(paused: Boolean) {
-        if (paused) player?.pause() else player?.play()
+        if (isMpvInitialized) {
+            MPVLib.setPropertyString("pause", if (paused) "yes" else "no")
+        }
     }
 
     fun seek(positionMs: Long) {
-        player?.seek(positionMs)
+        if (isMpvInitialized) {
+            val seconds = positionMs / 1000.0
+            MPVLib.command(arrayOf("seek", seconds.toString(), "absolute"))
+        }
     }
 }

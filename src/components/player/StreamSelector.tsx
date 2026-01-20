@@ -6,97 +6,157 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { Cpu, Globe, Play } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 interface StreamSelectorProps {
     type: string;
     id: string;
     onSelect: (stream: any) => void;
+    hideHeader?: boolean;
 }
 
-export const StreamSelector = ({ type, id, onSelect }: StreamSelectorProps) => {
+export const StreamSelector = ({ type, id, onSelect, hideHeader = false }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { manifests } = useAddonStore();
 
     const { data: streams, isLoading } = useQuery({
         queryKey: ['streams', type, id],
         queryFn: async () => {
+            console.log(`[StreamSelector] Fetching streams for type: ${type}, id: ${id}`);
             const addonUrls = Object.keys(manifests);
+
+            const streamAddons = addonUrls.filter(url => {
+                const m = manifests[url];
+                const supportsStreams = m?.resources?.some(r =>
+                    typeof r === 'string' ? r === 'stream' : r?.name === 'stream'
+                );
+                console.log(`[StreamSelector] Addon ${m?.name || url} supports streams: ${supportsStreams}`);
+                return supportsStreams;
+            });
+
+            if (streamAddons.length === 0) {
+                console.warn('[StreamSelector] No addons support "stream" resource');
+                return [];
+            }
+
             const results = await Promise.allSettled(
-                addonUrls.map(url => AddonService.getStreams(url, type, id))
+                streamAddons.map(url => {
+                    console.log(`[StreamSelector] Calling AddonService.getStreams for ${url}`);
+                    return AddonService.getStreams(url, type, id);
+                })
             );
 
-            return results
+            const fetchedStreams = results
                 .filter((r): r is PromiseFulfilledResult<{ streams: any[] }> => r.status === 'fulfilled')
-                .flatMap(r => r.value.streams)
-                .filter(Boolean); // Defensive: filter out null/undefined
+                .flatMap(r => r.value.streams || [])
+                .filter(Boolean);
+
+            console.log(`[StreamSelector] Found ${fetchedStreams.length} streams`);
+            return fetchedStreams;
         },
     });
+
+    const renderBadges = (title: string) => {
+        const badges = [];
+        const lowerTitle = title.toLowerCase();
+
+        if (lowerTitle.includes('4k') || lowerTitle.includes('2160p')) badges.push({ text: '4K', color: '#FFD700' });
+        else if (lowerTitle.includes('1080p')) badges.push({ text: '1080p', color: '#E0E0E0' });
+        else if (lowerTitle.includes('720p')) badges.push({ text: '720p', color: '#BDBDBD' });
+
+        if (lowerTitle.includes('hdr')) badges.push({ text: 'HDR', color: '#FF4081' });
+        if (lowerTitle.includes('dv') || lowerTitle.includes('vision')) badges.push({ text: 'DV', color: '#7C4DFF' });
+        if (lowerTitle.includes('dolby') || lowerTitle.includes('5.1') || lowerTitle.includes('7.1')) badges.push({ text: 'DDP', color: '#00E5FF' });
+
+        if (badges.length === 0) return null;
+
+        return (
+            <View style={styles.badgeRow}>
+                {badges.map((b, i) => (
+                    <View key={i} style={[styles.badge, { borderColor: b.color + '40' }]}>
+                        <Typography variant="label-small" weight="black" style={{ color: b.color, fontSize: 9 }}>
+                            {b.text}
+                        </Typography>
+                    </View>
+                ))}
+            </View>
+        );
+    };
 
     if (isLoading) {
         return (
             <View style={styles.loading}>
                 <ActivityIndicator color={theme.colors.primary} />
-                <Text style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>Searching for streams...</Text>
+                <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
+                    Searching for streams...
+                </Typography>
             </View>
         );
     }
 
     return (
-        <View style={styles.container}>
-            <Typography variant="h3" className="text-white mb-6">Available Streams</Typography>
+        <View style={[styles.container, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
+            {!hideHeader && (
+                <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
+                    <Typography variant="headline-small" weight="black" style={{ color: theme.colors.onSurface }}>
+                        Available Streams
+                    </Typography>
+                </View>
+            )}
 
-            <FlatList
-                data={streams}
-                keyExtractor={(_, index) => index.toString()}
-                contentContainerStyle={{ gap: 12 }}
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <Typography variant="body" className="text-zinc-500 text-center">
-                            No streams found for this content. Try adding more addons in Settings.
-                        </Typography>
-                    </View>
-                }
-                renderItem={({ item }) => {
-                    if (!item) return null; // Defensive check
+            {(!streams || streams.length === 0) ? (
+                <View style={styles.empty}>
+                    <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+                        No streams found for this content. Try adding more addons in Settings.
+                    </Typography>
+                </View>
+            ) : (
+                <View style={{ gap: 12, paddingHorizontal: hideHeader ? 0 : 24 }}>
+                    {(streams || []).map((item, index) => {
+                        if (!item) return null;
 
-                    // Align with Crispy-webui: stream.name is the addon/source, stream.title is metadata
-                    const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
-                    const subtitle = item.title || item.description || "No description available";
+                        const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
+                        const subtitle = item.title || item.description || "";
 
-                    const isTorrent = !!item.infoHash;
-                    const isYT = !!item.ytId;
-                    const isExternal = !!item.externalUrl;
+                        const isTorrent = !!item.infoHash;
+                        const isYT = !!item.ytId;
 
-                    return (
-                        <ExpressiveSurface
-                            variant="filled"
-                            rounding="xl"
-                            onPress={() => onSelect(item)}
-                            style={styles.streamItem}
-                        >
-                            <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceVariant }]}>
-                                {isTorrent ? (
-                                    <Cpu size={20} color={theme.colors.primary} />
-                                ) : isYT ? (
-                                    <Globe size={20} color={"#FF0000"} />
-                                ) : (
-                                    <Globe size={20} color={theme.colors.secondary} />
-                                )}
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <Typography variant="body" weight="black" style={{ color: 'white' }} numberOfLines={1}>
-                                    {mainTitle}
-                                </Typography>
-                                <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.6, fontSize: 12 }} numberOfLines={2}>
-                                    {subtitle}
-                                </Typography>
-                            </View>
-                            <Play size={20} color={theme.colors.primary} fill={theme.colors.primary} style={{ opacity: 0.7 }} />
-                        </ExpressiveSurface>
-                    );
-                }}
-            />
+                        return (
+                            <ExpressiveSurface
+                                key={index}
+                                variant="tonal"
+                                rounding="xl"
+                                onPress={() => onSelect(item)}
+                                style={styles.streamItem}
+                            >
+                                <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceContainer }]}>
+                                    {isTorrent ? (
+                                        <Cpu size={22} color={theme.colors.primary} />
+                                    ) : isYT ? (
+                                        <Globe size={22} color={"#FF0000"} />
+                                    ) : (
+                                        <Globe size={22} color={theme.colors.secondary} />
+                                    )}
+                                </View>
+                                <View style={{ flex: 1, gap: 2 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
+                                            {mainTitle}
+                                        </Typography>
+                                        {renderBadges(subtitle)}
+                                    </View>
+                                    <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
+                                        {subtitle}
+                                    </Typography>
+                                </View>
+                                <View style={[styles.playButton, { backgroundColor: theme.colors.primary + '15' }]}>
+                                    <Play size={16} color={theme.colors.primary} fill={theme.colors.primary} />
+                                </View>
+                            </ExpressiveSurface>
+                        );
+                    })}
+                </View>
+            )}
         </View>
     );
 };
@@ -104,7 +164,6 @@ export const StreamSelector = ({ type, id, onSelect }: StreamSelectorProps) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingHorizontal: 24,
         paddingTop: 32,
     },
     loading: {
@@ -118,15 +177,33 @@ const styles = StyleSheet.create({
     },
     streamItem: {
         padding: 16,
+        paddingLeft: 12,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
+        gap: 12,
     },
     iconBox: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    playButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    badgeRow: {
+        flexDirection: 'row',
+        gap: 4,
+    },
+    badge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
     }
 });

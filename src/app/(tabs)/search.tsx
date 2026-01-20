@@ -11,7 +11,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { Film, Info, LayoutGrid, Search as SearchIcon, Tv, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 type SearchType = 'all' | 'movie' | 'series';
