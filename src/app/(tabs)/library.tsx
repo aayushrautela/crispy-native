@@ -1,5 +1,6 @@
 import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { Screen } from '@/src/cdk/layout/Screen';
 import { CatalogCard } from '@/src/components/CatalogCard';
@@ -20,7 +21,7 @@ import {
     Star
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
     interpolate,
     useAnimatedScrollHandler,
@@ -188,7 +189,7 @@ export default function LibraryScreen() {
             {/* Grid */}
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : filteredAndSortedItems.length > 0 ? (
                 <Animated.FlatList

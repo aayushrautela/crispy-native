@@ -10,15 +10,14 @@ Codebase mapping complete.
 - Phase 10: Trakt Integration completed.
 
 ## Current Position
-- **Phase:** Phase 4: Discover Page - Catalog Rows (Extension)
-- **Task:** Dynamic Catalog Screen Implementation
+- **Phase:** Phase 6: Material Expressive Refinement
+- **Task:** Replace loading spinners
 - **Status:** COMPLETED
 
 ### Accomplishments
-- Implemented dynamic `CatalogScreen` with `usePaginatedCatalog` for infinite scrolling.
-- Integrated MD3 filters (Genre, Rating) with custom animations and bottom sheets.
-- Updated `CatalogRow` to handle automatic navigation to the specific catalog view.
-- Standardized header behavior with collapsible animation and back navigation.
+- Replaced all 10 occurrences of standard `ActivityIndicator` with native `LoadingIndicator`.
+- Integrated Material Expressive loading animations into screens (Player, Catalog, Person, Library, Discover, Search).
+- Updated CDK components (`ExpressiveButton`) to use the new premium loading indicator.
 
 ## Next Steps
 - Implement "See All" for Continue Watching if needed.

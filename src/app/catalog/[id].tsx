@@ -1,5 +1,6 @@
 import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
 import { EmptyState } from '@/src/components/EmptyState';
@@ -10,7 +11,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, ChevronDown, Filter, Star } from 'lucide-react-native';
 import * as React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Animated, {
     interpolate,
     useAnimatedScrollHandler,
@@ -138,7 +139,7 @@ export default function CatalogScreen() {
         if (!isFetchingMore) return null;
         return (
             <View style={styles.footerLoader}>
-                <ActivityIndicator color={theme.colors.primary} />
+                <LoadingIndicator color={theme.colors.primary} />
             </View>
         );
     };
@@ -148,7 +149,7 @@ export default function CatalogScreen() {
             {/* Grid */}
             {isLoading && items.length === 0 ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : filteredItems.length > 0 ? (
                 <Animated.FlatList

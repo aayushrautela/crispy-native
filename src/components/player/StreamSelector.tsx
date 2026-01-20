@@ -1,4 +1,5 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { AddonService } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
@@ -6,7 +7,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { Cpu, Globe, Play } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 interface StreamSelectorProps {
     type: string;
@@ -86,7 +87,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false }: Strea
     if (isLoading) {
         return (
             <View style={styles.loading}>
-                <ActivityIndicator color={theme.colors.primary} />
+                <LoadingIndicator color={theme.colors.primary} />
                 <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
                     Searching for streams...
                 </Typography>

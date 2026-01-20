@@ -2,9 +2,10 @@ import { MetaPreview } from '@/src/core/api/AddonService';
 import { TraktService } from '@/src/core/api/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { LoadingIndicator } from '@cdk/components/LoadingIndicator';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from '../CatalogCard';
 import { SectionHeader } from '../SectionHeader';
 
@@ -115,7 +116,7 @@ export const ContinueWatchingRow = () => {
 
             {loading && items.length === 0 ? (
                 <View style={[styles.scrollContent, { height: (CARD_WIDTH / 1.77) + 30, justifyContent: 'center' }]}>
-                    <ActivityIndicator color={theme.colors.primary} />
+                    <LoadingIndicator color={theme.colors.primary} />
                 </View>
             ) : (
                 <FlatList

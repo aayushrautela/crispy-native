@@ -2,11 +2,12 @@ import CrispyNativeCore from '@/modules/crispy-native-core';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { LoadingIndicator } from '@cdk/components/LoadingIndicator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ChevronLeft, Pause, Play, RotateCcw, RotateCw, Settings } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 const SafeOrientation = ScreenOrientation || {};
@@ -151,7 +152,7 @@ export default function PlayerScreen() {
                 />
             ) : (
                 <View style={styles.centerLoading}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <LoadingIndicator size="large" color={theme.colors.primary} />
                     <Text style={{ color: '#fff', marginTop: 10 }}>Resolving Stream...</Text>
                 </View>
             )}

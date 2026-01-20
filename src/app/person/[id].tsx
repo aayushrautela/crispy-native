@@ -1,4 +1,5 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { TMDBPerson, TMDBService } from '@/src/core/api/TMDBService';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -8,7 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, ChevronDown, ChevronUp, Instagram, Twitter } from 'lucide-react-native';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Dimensions, Linking, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
     Extrapolation,
     interpolate,
@@ -62,7 +63,7 @@ export default function PersonDetailsScreen() {
     if (loading) {
         return (
             <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <LoadingIndicator size="large" color={theme.colors.primary} />
             </View>
         );
     }

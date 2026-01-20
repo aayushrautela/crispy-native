@@ -1,7 +1,8 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { LoadingIndicator } from './LoadingIndicator';
 
 interface ExpressiveButtonProps {
     onPress: () => void;
@@ -112,7 +113,7 @@ export const ExpressiveButton = ({
         >
             <View style={styles.content}>
                 {isLoading ? (
-                    <ActivityIndicator color={colors.text} size="small" />
+                    <LoadingIndicator color={colors.text} size="small" />
                 ) : (
                     <>
                         {icon && <View style={styles.iconContainer}>{icon}</View>}

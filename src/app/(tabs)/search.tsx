@@ -1,4 +1,5 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Touchable } from '@/src/cdk/components/Touchable';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
@@ -11,7 +12,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { Film, Info, LayoutGrid, Search as SearchIcon, Tv, X } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 type SearchType = 'all' | 'movie' | 'series';
@@ -177,7 +178,7 @@ export default function SearchScreen() {
         >
             {isLoading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : results?.tmdb?.length > 0 || results?.addonGroups?.length > 0 ? (
                 <Animated.FlatList

@@ -1,5 +1,6 @@
 import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
 import { EmptyState } from '@/src/components/EmptyState';
@@ -9,7 +10,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
 import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
     interpolate,
     useAnimatedScrollHandler,
@@ -183,7 +184,7 @@ export default function DiscoverScreen() {
             {/* Grid */}
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : filteredItems.length > 0 ? (
                 <Animated.FlatList

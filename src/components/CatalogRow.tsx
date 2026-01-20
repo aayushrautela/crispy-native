@@ -1,9 +1,10 @@
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
 import { SectionHeader } from './SectionHeader';
 
@@ -65,7 +66,7 @@ export const CatalogRow = ({
         if (!isFetchingMore) return null;
         return (
             <View style={styles.footerLoader}>
-                <ActivityIndicator color={theme.colors.primary} />
+                <LoadingIndicator color={theme.colors.primary} />
             </View>
         );
     };
