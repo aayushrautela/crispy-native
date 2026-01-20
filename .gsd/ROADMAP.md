@@ -67,3 +67,28 @@
 **Verification**:
 - [ ] TBD
 
+## Phase 11: Settings UI Redesign
+**Status**: 🚧 IN_PROGRESS (Updated 2026-01-20)
+**Objective**: Refactor Settings into a menu-based navigation hub with subpages, matching `crispy-webui` mobile.
+- [x] Implement `SettingsItem` and `SettingsGroup` CDK components.
+- [x] Refactor `(tabs)/settings.tsx` to a menu hub.
+- [x] Implement subpages for Account, Addons, Player, and Support.
+- [ ] Refine headers with scroll-to-hide behavior (Matching Search/Discover).
+
+## Phase 12: Android 16 UI Polish
+**Status**: 🚧 IN_PROGRESS
+**Objective**: Redesign Settings UI to match Android 16 visuals (Big Cards, Circular Icons, Expressive Switches).
+- [ ] Create `ExpressiveSwitch` component.
+- [ ] Update `SettingsGroup` to use card style with margins.
+- [ ] Update `SettingsItem` to use circular icons and dividers.
+
+## Phase 13: Player Side Tabs
+**Status**: ⬜ Not Started
+**Objective**: Implement side tabs in the video player, similar to `crispy-webui` mobile player in look and functionality.
+**Depends on**: Phase 12
+
+**Tasks**:
+- [ ] TBD (run /plan 13 to create)
+
+**Verification**:
+- [ ] TBD

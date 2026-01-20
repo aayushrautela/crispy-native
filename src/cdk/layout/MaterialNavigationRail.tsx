@@ -47,9 +47,10 @@ const NavigationRailItem = ({
         return {
             height: withSpring(isFocused ? 32 : 0, { damping: 15, stiffness: 150 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
-            backgroundColor: theme.colors.secondaryContainer,
         };
     });
+
+    const indicatorBgColor = theme.colors.secondaryContainer;
 
     return (
         <Touchable
@@ -58,7 +59,7 @@ const NavigationRailItem = ({
             style={styles.tab}
         >
             <View style={styles.iconContainer}>
-                <Animated.View style={[styles.indicator, indicatorStyle]} />
+                <Animated.View style={[styles.indicator, indicatorStyle, { backgroundColor: indicatorBgColor }]} />
                 {options.tabBarIcon && options.tabBarIcon({
                     focused: isFocused,
                     color: isFocused ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,

@@ -48,9 +48,10 @@ const MaterialTabItem = ({
         return {
             width: withTiming(isFocused ? 64 : 0, { duration: 250 }),
             opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
-            backgroundColor: theme.colors.secondaryContainer,
         };
     });
+
+    const indicatorBgColor = theme.colors.secondaryContainer;
 
     return (
         <Touchable
@@ -59,7 +60,7 @@ const MaterialTabItem = ({
             style={styles.tab}
         >
             <View style={styles.iconContainer}>
-                <Animated.View style={[styles.indicator, indicatorStyle]} />
+                <Animated.View style={[styles.indicator, indicatorStyle, { backgroundColor: indicatorBgColor }]} />
                 {options.tabBarIcon && options.tabBarIcon({
                     focused: isFocused,
                     color: isFocused ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,

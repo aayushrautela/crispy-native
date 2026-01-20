@@ -3,10 +3,12 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
+    interpolate,
     LinearTransition,
     useAnimatedStyle,
     useSharedValue,
     withSequence,
+    withSpring,
     withTiming
 } from 'react-native-reanimated';
 
@@ -48,6 +50,7 @@ export const ExpressiveSurface = ({
     // PixelPlayer style shared values
     const scale = useSharedValue(1);
     const offsetX = useSharedValue(0);
+    const focusAnim = useSharedValue(0);
 
     const getRounding = () => {
         if (rounding === 'full') return 999;
@@ -108,11 +111,8 @@ export const ExpressiveSurface = ({
                 // PixelPlayer ONLY changes horizontal stuff (scaleX)
                 { scaleX: scale.value },
                 { translateX: offsetX.value },
-                { scale: withTiming(focused ? 1.02 : 1, { duration: 200 }) }
+                { scale: withTiming(interpolate(focusAnim.value, [0, 1], [1, 1.02]), { duration: 200 }) }
             ],
-            borderWidth: variant === 'outlined' ? 1.5 : 0,
-            borderColor: selected ? theme.colors.primary : theme.colors.outlineVariant,
-            elevation: withTiming(focused || selected ? 4 : variant === 'elevated' ? 2 : 0, { duration: 200 }),
         };
     });
 
@@ -135,10 +135,12 @@ export const ExpressiveSurface = ({
             pointerEvents={pointerEvents}
             onFocus={() => {
                 setFocused(true);
+                focusAnim.value = withSpring(1);
                 onFocusChange?.(true);
             }}
             onBlur={() => {
                 setFocused(false);
+                focusAnim.value = withSpring(0);
                 onFocusChange?.(false);
             }}
             layout={LinearTransition.duration(300)}
@@ -147,6 +149,9 @@ export const ExpressiveSurface = ({
                 {
                     backgroundColor: getBackgroundColor(),
                     borderRadius: getRounding(),
+                    borderWidth: variant === 'outlined' ? 1.5 : 0,
+                    borderColor: selected ? theme.colors.primary : theme.colors.outlineVariant,
+                    elevation: focused || selected ? 4 : variant === 'elevated' ? 2 : 0,
                 },
                 animatedStyle,
                 style,

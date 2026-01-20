@@ -1,7 +1,7 @@
 import { useMaterial3Theme } from '@pchmn/expo-material3-theme';
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useColorScheme } from 'react-native';
-import { MD3DarkTheme, MD3LightTheme, MD3Theme, Provider as PaperProvider } from 'react-native-paper';
+import { MD3DarkTheme, MD3Theme, Provider as PaperProvider } from 'react-native-paper';
 import { useUserStore } from './stores/userStore';
 
 interface ThemeContextType {
@@ -12,32 +12,60 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// Map accent color names to hex values
+const getAccentHex = (colorName: string): string => {
+    switch (colorName) {
+        case 'Golden Amber': return '#FFC107';
+        case 'Sunset Orange': return '#FF5722';
+        case 'Crimson Rose': return '#E91E63';
+        case 'Neon Violet': return '#9C27B0';
+        case 'Cosmic Purple': return '#673AB7';
+        case 'Ocean Blue': return '#2196F3';
+        case 'Cyber Teal': return '#00BCD4';
+        case 'Toxic Emerald': return '#4CAF50';
+        default: return '#FFC107';
+    }
+};
+
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
     const colorScheme = useColorScheme();
     const { settings } = useUserStore();
-    const { amoledMode, accentColor } = settings;
+    const { amoledMode, accentColor, useMaterialYou } = settings;
+    const isFirstMount = useRef(true);
+    const prevAccentColor = useRef(accentColor);
+    const prevUseMaterialYou = useRef(useMaterialYou);
 
-    // Custom palettes for "Crispy" curated colors
-    const fallbackSourceColor = useMemo(() => {
-        switch (accentColor) {
-            case 'Golden Amber': return '#FFC107';
-            case 'Deep Amber': return '#FFA000';
-            case 'Neon Purple': return '#9C27B0';
-            case 'Crispy Blue': return '#2196F3';
-            case 'Vibrant Red': return '#F44336';
-            default: return undefined;
-        }
-    }, [accentColor]);
+    const fallbackSourceColor = getAccentHex(accentColor);
 
-    const { theme } = useMaterial3Theme({
-        fallbackSourceColor,
+    const { theme, updateTheme, resetTheme } = useMaterial3Theme({
+        fallbackSourceColor: fallbackSourceColor,
     });
 
-    const isDark = colorScheme === 'dark';
+    // Update theme ONLY when accent color or Material You setting actually changes
+    // Skip the initial mount to prevent unnecessary re-renders
+    useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
+
+        // Only update if values actually changed
+        if (accentColor !== prevAccentColor.current || useMaterialYou !== prevUseMaterialYou.current) {
+            if (useMaterialYou) {
+                resetTheme();
+            } else {
+                updateTheme(getAccentHex(accentColor));
+            }
+            prevAccentColor.current = accentColor;
+            prevUseMaterialYou.current = useMaterialYou;
+        }
+    }, [accentColor, useMaterialYou]);
+
+    const isDark = true; // App is dark mode only as per user request
 
     const paperTheme = useMemo(() => {
-        const baseTheme = isDark ? MD3DarkTheme : MD3LightTheme;
-        const m3Colors = isDark ? theme.dark : theme.light;
+        const baseTheme = MD3DarkTheme;
+        const m3Colors = theme.dark;
 
         const finalTheme = {
             ...baseTheme,
@@ -45,23 +73,36 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
                 ...baseTheme.colors,
                 ...m3Colors,
                 // Material You / AMOLED support
-                ...(isDark && amoledMode ? {
+                ...(amoledMode ? {
                     background: '#000000',
                     surface: '#000000',
-                    surfaceVariant: '#121212',
+                    surfaceVariant: '#000000', // Deep black for surfaces in AMOLED
                     onSurface: '#ECEDEE',
-                } : {}),
+                    elevation: {
+                        level0: 'transparent',
+                        level1: '#121212', // Subtle elevation even in AMOLED
+                        level2: '#181818',
+                        level3: '#1c1c1c',
+                        level4: '#202020',
+                        level5: '#242424',
+                    }
+                } : {
+                    // Standard Dark Colors (Slightly tinted based on accent)
+                    background: m3Colors.background,
+                    surface: m3Colors.surface,
+                }),
             },
         };
 
         return finalTheme;
-    }, [isDark, theme, amoledMode]);
+    }, [theme, amoledMode, accentColor, useMaterialYou]);
 
     const contextValue = useMemo(() => ({
         theme: paperTheme,
         isDark,
         amoledMode,
-    }), [paperTheme, isDark, amoledMode]);
+        useMaterialYou,
+    }), [paperTheme, isDark, amoledMode, useMaterialYou]);
 
     return (
         <ThemeContext.Provider value={contextValue}>

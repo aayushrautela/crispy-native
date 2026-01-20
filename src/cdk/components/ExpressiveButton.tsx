@@ -77,16 +77,16 @@ export const ExpressiveButton = ({
     }, [variant, theme]);
 
     const pressed = useSharedValue(0);
+    const focusAnim = useSharedValue(0);
 
     const animatedStyle = useAnimatedStyle(() => {
         return {
             transform: [
-                { scale: withSpring(interpolate(pressed.value, [0, 1], [focused ? 1.05 : 1, 0.96])) }
+                {
+                    scale: withSpring(interpolate(pressed.value, [0, 1], [interpolate(focusAnim.value, [0, 1], [1, 1.05]), 0.96]))
+                }
             ],
-            opacity: withSpring(interpolate(pressed.value, [0, 1], [focused ? 0.9 : 1, 0.8])),
-            borderWidth: variant === 'outline' ? 1 : (focused ? 2 : 0),
-            borderColor: focused ? theme.colors.primary : colors.border || 'transparent',
-            elevation: withSpring(focused ? 4 : 0),
+            opacity: withSpring(interpolate(pressed.value, [0, 1], [interpolate(focusAnim.value, [0, 1], [1, 0.9]), 0.8])),
         };
     });
 
@@ -95,8 +95,14 @@ export const ExpressiveButton = ({
             onPress={isLoading ? undefined : onPress}
             onPressIn={() => !isLoading && (pressed.value = 1)}
             onPressOut={() => (pressed.value = 0)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onFocus={() => {
+                setFocused(true);
+                focusAnim.value = withSpring(1);
+            }}
+            onBlur={() => {
+                setFocused(false);
+                focusAnim.value = withSpring(0);
+            }}
             disabled={isLoading}
             style={[
                 styles.base,
@@ -105,6 +111,9 @@ export const ExpressiveButton = ({
                     borderRadius: getRounding(),
                     minHeight: size === 'sm' ? 32 : size === 'md' ? 40 : 48,
                     paddingHorizontal: size === 'sm' ? 16 : size === 'md' ? 24 : 32,
+                    borderWidth: variant === 'outline' ? 1 : (focused ? 2 : 0),
+                    borderColor: focused ? theme.colors.primary : colors.border || 'transparent',
+                    elevation: focused ? 4 : 0,
                     opacity: isLoading ? 0.7 : 1,
                 },
                 animatedStyle,
@@ -116,7 +125,18 @@ export const ExpressiveButton = ({
                     <LoadingIndicator color={colors.text} size="small" />
                 ) : (
                     <>
-                        {icon && <View style={styles.iconContainer}>{icon}</View>}
+                        {icon && (
+                            <View style={styles.iconContainer}>
+                                {React.isValidElement(icon) ? (
+                                    icon
+                                ) : (
+                                    React.createElement(icon as any, {
+                                        size: size === 'sm' ? 16 : size === 'md' ? 20 : 24,
+                                        color: colors.text
+                                    })
+                                )}
+                            </View>
+                        )}
                         <Text
                             style={[
                                 styles.text,

@@ -26,6 +26,7 @@ export interface AppSettings {
     showRatingBadges: boolean;
     accentColor: string;
     amoledMode: boolean;
+    useMaterialYou: boolean;
     videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
     updatedAt?: number;
 }
@@ -85,6 +86,7 @@ function getDefaultSettings(): AppSettings {
         showRatingBadges: true,
         accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
+        useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
         videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
     };
 }
@@ -157,6 +159,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
     // Theme
     if ('accentColor' in updates) StorageService.setUser('crispy-accent-color', updates.accentColor);
     if ('amoledMode' in updates) StorageService.setUser('crispy-amoled-mode', updates.amoledMode);
+    if ('useMaterialYou' in updates) StorageService.setUser('crispy-material-you', updates.useMaterialYou);
 
     // Video Player
     if ('videoPlayerEngine' in updates) StorageService.setUser('crispy-video-engine', updates.videoPlayerEngine);
