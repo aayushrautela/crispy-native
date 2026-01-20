@@ -24,3 +24,4 @@ Codebase mapping complete.
 ## Next Steps
 - Final review of all settings sections for edge-case bugs.
 - Prepare for Phase 12: Player UI Enhancements & Subtitle Font Customization.
+- Plan Phase 13: Player Side Tabs.
