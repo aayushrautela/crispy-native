@@ -4,7 +4,10 @@ import { Typography } from '@/src/cdk/components/Typography';
 import { Screen } from '@/src/cdk/layout/Screen';
 import { useTheme } from '@/src/core/ThemeContext';
 import { AddonService } from '@/src/core/api/AddonService';
+import { TraktService } from '@/src/core/api/TraktService';
+import { TraktDeviceCodeResponse } from '@/src/core/api/trakt-types';
 import { useAddonStore } from '@/src/core/stores/addonStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { Plus, Trash2 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
@@ -17,6 +20,54 @@ export default function SettingsScreen() {
     const { addonUrls, manifests, addAddon, removeAddon, updateManifest } = useAddonStore();
     const [newUrl, setNewUrl] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+
+    // Trakt State
+    const traktAuth = useUserStore(s => s.traktAuth);
+    const updateTraktAuth = useUserStore(s => s.updateTraktAuth);
+    const [traktCode, setTraktCode] = useState<TraktDeviceCodeResponse | null>(null);
+    const [isTraktLoading, setIsTraktLoading] = useState(false);
+
+    // Polling Ref
+    const pollInterval = React.useRef<NodeJS.Timeout | null>(null);
+
+    React.useEffect(() => {
+        return () => {
+            if (pollInterval.current) clearInterval(pollInterval.current);
+        };
+    }, []);
+
+    const handleConnectTrakt = async () => {
+        setIsTraktLoading(true);
+        try {
+            const code = await TraktService.oauthDeviceCode();
+            setTraktCode(code);
+
+            // Start Polling
+            pollInterval.current = setInterval(async () => {
+                try {
+                    await TraktService.oauthToken(code.device_code);
+                    // Success (store updated)
+                    if (pollInterval.current) clearInterval(pollInterval.current);
+                    setTraktCode(null);
+                    Alert.alert('Success', 'Trakt connected!');
+                } catch (e) {
+                    // Ignore pending, handle others?
+                    // console.log('Polling...', e);
+                }
+            }, code.interval * 1000);
+
+        } catch (e) {
+            Alert.alert('Error', 'Failed to initialize Trakt auth');
+        } finally {
+            setIsTraktLoading(false);
+        }
+    };
+
+    const handleDisconnectTrakt = () => {
+        if (pollInterval.current) clearInterval(pollInterval.current);
+        setTraktCode(null);
+        updateTraktAuth({}); // Clear auth
+    };
 
     const scrollY = useSharedValue(0);
 
@@ -67,6 +118,42 @@ export default function SettingsScreen() {
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
+
+                <View className="px-6 mb-8">
+                    <Typography variant="h3" className="text-white mb-4">Account</Typography>
+
+                    <ExpressiveSurface variant="filled" rounding="xl" style={{ padding: 16 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <View>
+                                <Typography variant="h4" className="text-white">Trakt.tv</Typography>
+                                <Typography variant="caption" className="text-zinc-400">
+                                    {traktAuth.accessToken ? 'Synced & Connected' : 'Sync your history & progress'}
+                                </Typography>
+                            </View>
+                            <ExpressiveButton
+                                title={traktAuth.accessToken ? "Disconnect" : "Connect"}
+                                onPress={traktAuth.accessToken ? handleDisconnectTrakt : handleConnectTrakt}
+                                variant={traktAuth.accessToken ? "tonal" : "primary"}
+                                isLoading={isTraktLoading}
+                            />
+                        </View>
+
+                        {/* Device Code Display */}
+                        {traktCode && !traktAuth.accessToken && (
+                            <View style={{ marginTop: 16, backgroundColor: theme.colors.surface, padding: 16, borderRadius: 12, alignItems: 'center' }}>
+                                <Typography variant="body" className="text-zinc-300 mb-2">
+                                    Visit <Typography variant="body" weight="bold" style={{ color: theme.colors.primary }}>{traktCode.verification_url}</Typography>
+                                </Typography>
+                                <Typography variant="display-small" weight="black" style={{ letterSpacing: 4, color: 'white', marginVertical: 8 }}>
+                                    {traktCode.user_code}
+                                </Typography>
+                                <Typography variant="caption" className="text-zinc-500 text-center">
+                                    Enter this code on your device to authorize Crispy.
+                                </Typography>
+                            </View>
+                        )}
+                    </ExpressiveSurface>
+                </View>
 
                 <View className="px-6 mb-8">
                     <Typography variant="h3" className="text-white mb-4">Addons</Typography>

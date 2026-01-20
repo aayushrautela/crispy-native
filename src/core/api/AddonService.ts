@@ -8,6 +8,14 @@ export interface MetaPreview {
     poster?: string;
     posterShape?: 'poster' | 'landscape' | 'square';
     description?: string;
+    backdrop?: string;
+    releaseInfo?: string;
+    // Trakt / Continue Watching fields
+    progressPercent?: number;
+    episodeTitle?: string;
+    airDate?: string;
+    logo?: string;
+    genres?: string[];
 }
 
 export interface CatalogResponse {

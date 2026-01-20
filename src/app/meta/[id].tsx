@@ -8,11 +8,12 @@ import { TMDBMeta, TMDBService } from '@/src/core/api/TMDBService';
 import { useAiInsights } from '@/src/core/hooks/useAiInsights';
 import { useMeta } from '@/src/core/hooks/useDiscovery';
 import { useTheme } from '@/src/core/ThemeContext';
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, List, Play, Star, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, {
     Extrapolation,
     interpolate,
@@ -29,7 +30,7 @@ const HERO_HEIGHT = 550;
 const CastItem = ({ person, theme }: { person: any; theme: any }) => {
     return (
         <View style={styles.castItem}>
-            <Image
+            <ExpoImage
                 source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
                 style={styles.castImage}
             />
@@ -56,7 +57,7 @@ const CastItem = ({ person, theme }: { person: any; theme: any }) => {
 const EpisodeItem = ({ episode, theme }: { episode: any; theme: any }) => {
     return (
         <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <Image source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
+            <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
             <View style={styles.episodeInfo}>
                 <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
                     E{episode.episode || episode.number}: {episode.name || episode.title}
@@ -91,7 +92,7 @@ const ReviewCard = ({ review, theme }: { review: any; theme: any }) => {
     return (
         <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
             <View style={styles.reviewHeader}>
-                <Image
+                <ExpoImage
                     source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')}
                     style={styles.avatar}
                 />
@@ -232,7 +233,7 @@ export default function MetaDetailsScreen() {
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Layer 1: Parallax Backdrop (Fixed at back) */}
             <Animated.View style={[styles.parallaxLayer, backdropStyle]}>
-                <Image source={{ uri: backdropUrl }} style={styles.heroImage} />
+                <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
                 <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.4)', theme.colors.background]}
                     locations={[0, 0.6, 1]}
@@ -262,16 +263,20 @@ export default function MetaDetailsScreen() {
                 <View style={{ height: HERO_HEIGHT, justifyContent: 'flex-end', paddingBottom: 40, paddingHorizontal: 20 }}>
                     <View style={styles.heroContent}>
                         {enriched.logo ? (
-                            <Image source={{ uri: enriched.logo }} style={styles.logo} resizeMode="contain" />
+                            <ExpoImage source={{ uri: enriched.logo }} style={styles.logo} contentFit="contain" />
                         ) : (
-                            <Typography variant="h1" weight="black" style={{ color: 'white', marginBottom: 8 }}>{meta?.name}</Typography>
+                            <Typography variant="h1" weight="black" style={{ color: 'white', marginBottom: 8, fontSize: 32 }}>
+                                {enriched.title || meta?.name}
+                            </Typography>
                         )}
 
                         <View style={styles.metaRow}>
-                            <Typography variant="label" weight="bold" style={{ color: 'white' }}>{enriched.year || meta?.releaseInfo || '2024'}</Typography>
-                            <View style={[styles.ratingBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                                <Typography variant="label" weight="black" style={{ color: 'white' }}>TV-MA</Typography>
-                            </View>
+                            <Typography variant="label" weight="bold" style={{ color: 'white' }}>{enriched.year || meta?.releaseInfo || 'TBA'}</Typography>
+                            {enriched.maturityRating && (
+                                <View style={[styles.ratingBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                                    <Typography variant="label" weight="black" style={{ color: 'white' }}>{enriched.maturityRating}</Typography>
+                                </View>
+                            )}
                             <Typography variant="label" style={{ color: 'white' }}>{meta?.runtime || '45 min'}</Typography>
                             <Typography variant="label" style={{ color: 'white', opacity: 0.8 }} numberOfLines={1}>
                                 • {enriched.genres?.slice(0, 3).join(' • ') || 'Drama'}

@@ -15,6 +15,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { CatalogRow } from '../../components/CatalogRow';
 import { HeroCarousel } from '../../components/HeroCarousel';
+import { ContinueWatchingRow } from '../../components/home/ContinueWatchingRow';
 
 const HEADER_HEIGHT = 100;
 
@@ -141,6 +142,7 @@ export default function HomeScreen() {
         ListHeaderComponent={() => (
           <>
             <HeroCarousel items={carouselItems} />
+            <ContinueWatchingRow />
             {homeCatalogs.length === 0 && (
               <View style={styles.emptyPrompt}>
                 <CatalogRow

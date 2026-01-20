@@ -36,3 +36,22 @@
 - **Torrent Bridge**: On-demand execution. The `jlibtorrent` server starts when a torrent stream is requested and shutdowns/pauses when not in use to save resources.
 - **Protocol**: Local HTTP bridge (`127.0.0.1:11470`) with full Range request support for seeking.
 - **Buffering**: Implement aggressive prioritization for video headers and metadata.
+
+## Phase 10: Trakt Integration
+
+**Date:** 2026-01-19
+
+### Scope
+- **Priority**: "Continue Watching" cards on Home Screen.
+- **Features**: 
+    - Auth (minimal viable UI).
+    - Sync (manual/app-open for now).
+    - Algorithm: 1:1 port of WebUI's "Continue Watching" logic.
+
+### Approach
+- **Architecture**: `TraktService` class in `src/core/api`, mirroring `TraktClient` but adapted for React Native storage.
+- **Auth**: Basic Device Code flow.
+- **UI**: New "Continue Watching" row component for Home Screen.
+
+### Constraints
+- Must match WebUI "Continue Watching" algorithm exactly (Sort recency -> Dedup -> Filter < 80%).

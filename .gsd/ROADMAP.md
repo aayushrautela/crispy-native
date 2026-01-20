@@ -56,7 +56,7 @@
 - [ ] Update `CatalogRow` with `onEndReached` logic.
 
 ## Phase 10: Trakt Integration
-**Status**: ⬜ Not Started
+**Status**: ✅ COMPLETED
 **Objective**: Port Trakt implementation from `Crispy-webui`, adapting it for `crispy-native`.
 **Depends on**: Phase 9
 

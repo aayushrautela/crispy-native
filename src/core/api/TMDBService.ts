@@ -28,20 +28,21 @@ export interface TMDBCollection {
 }
 
 export interface TMDBMeta {
-    id: string;
+    id: string; // The original ID used for the fetch
     tmdbId: number;
     title: string;
     logo?: string;
     backdrop?: string;
     poster?: string;
-    year: string;
-    rating: string;
-    genres: string[];
-    description: string;
-    type: 'movie' | 'series';
+    year?: string;
+    rating?: string;
+    maturityRating?: string;
+    genres?: string[];
+    description?: string;
+    type?: 'movie' | 'series'; // Made optional as it's not always present in Partial<TMDBMeta>
     director?: string;
     cast?: TMDBCast[];
-    similar?: any[];
+    similar?: Partial<TMDBMeta>[];
     reviews?: TMDBReview[];
     collection?: TMDBCollection;
     videos?: any[]; // Episodes for series
@@ -54,10 +55,13 @@ export interface TMDBMeta {
         poster: string | null;
     }[];
     aiInsights?: {
-        keywords: string[];
         tagline: string;
         tone: string;
+        studio?: string;
+        homepage?: string;
     };
+    networks?: { id: number; name: string; logo: string | null }[];
+    productionCompanies?: { id: number; name: string; logo: string | null }[];
 }
 
 const metaCache: Record<string, Partial<TMDBMeta>> = {};
@@ -72,38 +76,119 @@ export class TMDBService {
 
         try {
             const findPath = type === 'movie' ? 'movie' : 'tv';
+            let foundTmdbId: string | number = 0;
+
             if (idStr.startsWith('tmdb:')) {
-                tmdbId = idStr.split(':')[1];
+                foundTmdbId = idStr.split(':')[1];
             } else if (idStr.startsWith('tt')) {
                 // 1. Find TMDB ID from External ID (IMDB)
                 const findUrl = `${BASE_URL}/find/${idStr}?api_key=${API_KEY}&external_source=imdb_id`;
                 const findRes = await axios.get(findUrl);
                 const result = type === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
                 if (!result) return {};
-                tmdbId = result.id;
+                foundTmdbId = result.id;
             } else {
                 // Fallback: If it's a plain number, assume it's a TMDB ID (like Web UI)
                 const n = Number(idStr);
                 if (!isNaN(n)) {
-                    tmdbId = n;
+                    foundTmdbId = n;
                 } else {
                     console.warn('[TMDBService] Unsupported ID format:', idStr);
                     return {};
                 }
             }
 
-            // 2. Get Full Details & Images & Credits & Similar & Reviews & Keywords
-            const detailUrl = `${BASE_URL}/${findPath}/${tmdbId}?api_key=${API_KEY}&append_to_response=images,content_ratings,release_dates,credits,recommendations,reviews,keywords`;
+            // 2. Get Full Details & Credits & content_ratings/release_dates & Similar & External IDs & Reviews & Keywords
+            const appendToResponse = findPath === 'movie' ? 'credits,release_dates,recommendations,similar,external_ids,videos,reviews,keywords' : 'credits,content_ratings,recommendations,similar,external_ids,videos,reviews,keywords';
+            const detailUrl = `${BASE_URL}/${findPath}/${foundTmdbId}?api_key=${API_KEY}&language=en&append_to_response=${appendToResponse}`;
             const detailRes = await axios.get(detailUrl);
             const data = detailRes.data;
 
-            // Find Logo (Clear Logo)
-            const logo = data.images?.logos?.find((l: any) => l.iso_639_1 === 'en' || !l.iso_639_1)?.file_path;
+            // Fallback metadata if overview is missing (WebUI parity)
+            if (!data.overview) {
+                const fallbackRes = await axios.get(`${BASE_URL}/${findPath}/${foundTmdbId}?api_key=${API_KEY}&language=en`);
+                const fallbackData = fallbackRes.data;
+                if (fallbackData.overview) data.overview = fallbackData.overview;
+                if (!data.title && !data.name && (fallbackData.title || fallbackData.name)) {
+                    data.title = fallbackData.title;
+                    data.name = fallbackData.name;
+                }
+            }
+
+            // 3. Fetch Images separately (Nuvio-style priority)
+            let logo: string | undefined;
+            let backdropFallback: string | undefined;
+            try {
+                const imagesUrl = `${BASE_URL}/${findPath}/${foundTmdbId}/images?api_key=${API_KEY}&include_image_language=en,null`;
+                const imagesRes = await axios.get(imagesUrl);
+                const logos = imagesRes.data.logos || [];
+
+                if (logos.length > 0) {
+                    // Selection Priority: English SVG > English PNG > Any English > Any SVG > Any PNG > First Available
+                    const enSvg = logos.find((l: any) => l.iso_639_1 === 'en' && l.file_path.endsWith('.svg'));
+                    const enPng = logos.find((l: any) => l.iso_639_1 === 'en' && l.file_path.endsWith('.png'));
+                    const enAny = logos.find((l: any) => l.iso_639_1 === 'en');
+                    const anySvg = logos.find((l: any) => l.file_path.endsWith('.svg'));
+                    const anyPng = logos.find((l: any) => l.file_path.endsWith('.png'));
+
+                    logo = (enSvg || enPng || enAny || anySvg || anyPng || logos[0]).file_path;
+                }
+
+                const backdrops = imagesRes.data.backdrops || [];
+                if (backdrops.length > 0) {
+                    backdropFallback = backdrops[0].file_path;
+                }
+            } catch (e) { }
+
+            // Fallback for Logo: Use Network/Studio logo if main logo is missing (Nuvio-style major brands fallback)
+            if (!logo) {
+                const majorBrands = ['netflix', 'amazon', 'warner bros', 'apple tv', 'paramount', 'hbo', 'hulu', 'disney', 'marvel', 'star wars', 'dc comics'];
+                if (findPath === 'tv') {
+                    const brandNetwork = data.networks?.find((n: any) =>
+                        majorBrands.some(brand => n.name.toLowerCase().includes(brand))
+                    ) || data.networks?.[0];
+                    if (brandNetwork?.logo_path) logo = brandNetwork.logo_path;
+                } else {
+                    const brandStudio = data.production_companies?.find((c: any) =>
+                        c.logo_path && majorBrands.some(brand => c.name.toLowerCase().includes(brand))
+                    ) || data.production_companies?.find((c: any) => c.logo_path);
+                    if (brandStudio?.logo_path) logo = brandStudio.logo_path;
+                }
+            }
+
+            // Robust Certification Logic (Nuvio-style priority: US > GB > Any)
+            let maturityRating: string | undefined;
+            if (findPath === 'movie') {
+                const releaseDates = data.release_dates?.results || [];
+                const usRelease = releaseDates.find((r: any) => r.iso_3166_1 === 'US');
+                const gbRelease = releaseDates.find((r: any) => r.iso_3166_1 === 'GB');
+                const prioritized = [usRelease, gbRelease, ...releaseDates.filter((r: any) => r.iso_3166_1 !== 'US' && r.iso_3166_1 !== 'GB')];
+
+                for (const rel of prioritized) {
+                    const cert = rel?.release_dates?.find((d: any) => d.certification)?.certification;
+                    if (cert) {
+                        maturityRating = cert;
+                        break;
+                    }
+                }
+            } else {
+                const contentRatings = data.content_ratings?.results || [];
+                const usRating = contentRatings.find((r: any) => r.iso_3166_1 === 'US');
+                const gbRating = contentRatings.find((r: any) => r.iso_3166_1 === 'GB');
+                const prioritized = [usRating, gbRating, ...contentRatings.filter((r: any) => r.iso_3166_1 !== 'US' && r.iso_3166_1 !== 'GB')];
+
+                for (const rat of prioritized) {
+                    if (rat?.rating) {
+                        maturityRating = rat.rating;
+                        break;
+                    }
+                }
+            }
 
             // Find Director
             const director = data.credits?.crew?.find((c: any) => c.job === 'Director')?.name;
 
-            // Map Cast
+            // Map Cast (with original sizing/path logic if preferred, keeping existing for now as it's fine)
             const cast: TMDBCast[] = data.credits?.cast?.slice(0, 10).map((c: any) => ({
                 id: c.id,
                 name: c.name,
@@ -142,22 +227,27 @@ export class TMDBService {
                 } catch (e) { console.warn('Failed to fetch collection', e); }
             }
 
-            // Mock AI Insights based on keywords/tagline
-            const keywords = (data.keywords?.keywords || data.results || []).map((k: any) => k.name).slice(0, 5);
+            // AI Insights
+            const keywords = (data.keywords?.keywords || data.keywords?.results || []).map((k: any) => k.name).slice(0, 5);
             const aiInsights = {
                 keywords,
-                tagline: data.tagline || "No tagline available.",
+                tagline: data.tagline || "",
                 tone: data.vote_average > 8 ? "Critically Acclaimed Masterpiece" : (data.vote_average > 6 ? "Solid Entertainment" : "Polarizing"),
+                studio: data.production_companies?.[0]?.name || data.networks?.[0]?.name,
+                homepage: data.homepage
             };
 
             const enriched: Partial<TMDBMeta> = {
-                tmdbId,
+                id: idStr,
+                tmdbId: Number(foundTmdbId),
+                type: findPath === 'tv' ? 'series' : 'movie',
                 title: data.title || data.name,
                 logo: logo ? `${IMAGE_BASE}/original${logo}` : undefined,
-                backdrop: data.backdrop_path ? `${IMAGE_BASE}/original${data.backdrop_path}` : undefined,
+                backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/original${data.backdrop_path || backdropFallback}` : undefined,
                 poster: data.poster_path ? `${IMAGE_BASE}/w500${data.poster_path}` : undefined,
                 year: (data.release_date || data.first_air_date || '').split('-')[0],
                 rating: data.vote_average?.toFixed(1) || '0.0',
+                maturityRating,
                 genres: data.genres?.map((g: any) => g.name) || [],
                 description: data.overview || '',
                 director,
@@ -165,6 +255,16 @@ export class TMDBService {
                 reviews,
                 collection,
                 aiInsights,
+                networks: data.networks?.map((n: any) => ({
+                    id: n.id,
+                    name: n.name,
+                    logo: n.logo_path ? `${IMAGE_BASE}/w92${n.logo_path}` : null
+                })),
+                productionCompanies: data.production_companies?.map((c: any) => ({
+                    id: c.id,
+                    name: c.name,
+                    logo: c.logo_path ? `${IMAGE_BASE}/w92${c.logo_path}` : null
+                })),
                 seasons: data.seasons?.map((s: any) => ({
                     id: s.id,
                     name: s.name,
@@ -174,11 +274,11 @@ export class TMDBService {
                     poster: s.poster_path ? `${IMAGE_BASE}/w500${s.poster_path}` : null,
                 })) || [],
                 similar: data.recommendations?.results?.slice(0, 10).map((r: any) => ({
-                    id: r.id, // Warning: These are TMDB IDs
+                    id: r.id.toString(),
                     name: r.title || r.name,
                     poster: r.poster_path ? `${IMAGE_BASE}/w500${r.poster_path}` : null,
                     year: (r.release_date || r.first_air_date || '').split('-')[0],
-                    type: r.media_type || (type === 'movie' ? 'movie' : 'series'),
+                    type: r.media_type || (findPath === 'movie' ? 'movie' : 'series'),
                     tmdbId: r.id,
                 })) || [],
             };
