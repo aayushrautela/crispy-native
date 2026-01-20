@@ -22,6 +22,9 @@ Codebase mapping complete.
 - **Meta Details Usability**: Implemented clickable episodes, robust series detection, and native animation for season selection.
 - **BottomSheet Migration**: Converted both Review and Stream Selection views to premium MD3 Bottom Sheets.
 
+- **AI Insights Integration**: Aligned logic with WebUI, added OpenRouter key management, and configurable AI modes/models.
+
 ## Next Steps
-- Gather feedback on Trakt sync performance.
+- Verify AI generation with various models.
+- Gather feedback on AI Insights quality.
 - Explore Trakt "Watchlist" or "History" pages for future phases.

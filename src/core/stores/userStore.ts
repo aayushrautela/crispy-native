@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { StorageService } from '../storage';
 import { getStoredLanguage, setStoredLanguage } from '../languages';
+import { StorageService } from '../storage';
 
 // --- Interfaces ---
 
@@ -77,10 +77,10 @@ function getDefaultSettings(): AppSettings {
         subtitleBorderColor: '#000000',
         introSkipMode: (StorageService.getUser<string>('crispy-intro-skip-mode') as any) || 'manual',
         mobileNavbarStyle: (StorageService.getUser<string>('crispy-mobile-navbar-style') as any) || 'floating',
-        openRouterKey: '',
-        aiInsightsMode: 'off',
-        aiModelType: 'deepseek-r1',
-        aiCustomModelName: '',
+        openRouterKey: StorageService.getUser<string>('crispy-openrouter-key') || '',
+        aiInsightsMode: (StorageService.getUser<string>('crispy-ai-insights-mode') as any) || 'off',
+        aiModelType: (StorageService.getUser<string>('crispy-ai-model-type') as any) || 'deepseek-r1',
+        aiCustomModelName: StorageService.getUser<string>('crispy-ai-custom-model-name') || '',
         showRatingBadges: true,
         accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
@@ -145,6 +145,12 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
         if (updates.tmdbKey) StorageService.setUser('crispy-tmdb-key', updates.tmdbKey);
         else StorageService.removeUser('crispy-tmdb-key');
     }
+
+    // AI
+    if ('openRouterKey' in updates) StorageService.setUser('crispy-openrouter-key', updates.openRouterKey);
+    if ('aiInsightsMode' in updates) StorageService.setUser('crispy-ai-insights-mode', updates.aiInsightsMode);
+    if ('aiModelType' in updates) StorageService.setUser('crispy-ai-model-type', updates.aiModelType);
+    if ('aiCustomModelName' in updates) StorageService.setUser('crispy-ai-custom-model-name', updates.aiCustomModelName);
 
     // Theme
     if ('accentColor' in updates) StorageService.setUser('crispy-accent-color', updates.accentColor);

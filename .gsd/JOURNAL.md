@@ -26,5 +26,13 @@
   - **Key Change**: Based on user feedback, removed the "Direct-then-Proxy" logic. Realized that since we are running in a pure React Native environment, browser-level CORS restrictions are non-existent for native fetches. This simplified the `CrispyServer` to a pure streaming engine and `AddonService` to standard direct fetches.
 - **Decision**: Keep the local server purely for torrent piece serving (required for MPV playback) but stop using it as an API proxy.
 
-## 2026-01-19
-- Completed codebase mapping and generated ARCHITECTURE.md and STACK.md.
+## 2026-01-20
+
+### AI Insights & Settings Integration
+- **Action**: Integrated user-configurable AI insights and OpenRouter key management.
+- **Rationale**: Allow users to use their own AI keys and models for personalized meta insights.
+- **Details**:
+    - Aligned `useAiInsights` prompt and logic with the WebUI implementation.
+    - Updated `UserStore` and `SettingsScreen` with MD3 Expressive UI for AI configuration.
+    - Enhanced `ExpressiveButton` with native loading indicators.
+

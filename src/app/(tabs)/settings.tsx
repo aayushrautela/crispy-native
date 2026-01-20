@@ -220,6 +220,81 @@ export default function SettingsScreen() {
                     )}
                 </View>
 
+                <View className="px-6 mb-8">
+                    <Typography variant="h3" className="text-white mb-4">AI Insights</Typography>
+                    <ExpressiveSurface variant="filled" rounding="xl" style={{ padding: 16 }}>
+                        <Typography variant="label" className="text-zinc-500 mb-2">OpenRouter API Key</Typography>
+                        <TextInput
+                            placeholder="sk-or-v1-..."
+                            placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
+                            style={{
+                                backgroundColor: theme.colors.surfaceVariant,
+                                color: theme.colors.onSurface,
+                                paddingHorizontal: 16,
+                                height: 56,
+                                borderRadius: 16,
+                                fontSize: 14,
+                                marginBottom: 16
+                            }}
+                            value={useUserStore.getState().settings.openRouterKey}
+                            onChangeText={(key) => useUserStore.getState().updateSettings({ openRouterKey: key })}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            secureTextEntry
+                        />
+
+                        <Typography variant="label" className="text-zinc-500 mb-2">Insights Mode</Typography>
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                            {(['off', 'on-demand', 'always'] as const).map(mode => (
+                                <ExpressiveButton
+                                    key={mode}
+                                    title={mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                    variant={useUserStore.getState().settings.aiInsightsMode === mode ? 'primary' : 'tonal'}
+                                    onPress={() => useUserStore.getState().updateSettings({ aiInsightsMode: mode })}
+                                    style={{ flex: 1 }}
+                                    size="sm"
+                                />
+                            ))}
+                        </View>
+
+                        <Typography variant="label" className="text-zinc-500 mb-2">AI Model</Typography>
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                            {(['deepseek-r1', 'nvidia-nemotron', 'custom'] as const).map(model => (
+                                <ExpressiveButton
+                                    key={model}
+                                    title={model === 'deepseek-r1' ? 'R1' : model === 'nvidia-nemotron' ? 'Nvidia' : 'Custom'}
+                                    variant={useUserStore.getState().settings.aiModelType === model ? 'primary' : 'tonal'}
+                                    onPress={() => useUserStore.getState().updateSettings({ aiModelType: model })}
+                                    style={{ flex: 1 }}
+                                    size="sm"
+                                />
+                            ))}
+                        </View>
+
+                        {useUserStore.getState().settings.aiModelType === 'custom' && (
+                            <>
+                                <Typography variant="label" className="text-zinc-500 mb-2">Custom Model Name</Typography>
+                                <TextInput
+                                    placeholder="e.g. meta-llama/llama-3.1-405b"
+                                    placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
+                                    style={{
+                                        backgroundColor: theme.colors.surfaceVariant,
+                                        color: theme.colors.onSurface,
+                                        paddingHorizontal: 16,
+                                        height: 56,
+                                        borderRadius: 16,
+                                        fontSize: 14
+                                    }}
+                                    value={useUserStore.getState().settings.aiCustomModelName}
+                                    onChangeText={(name) => useUserStore.getState().updateSettings({ aiCustomModelName: name })}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+                            </>
+                        )}
+                    </ExpressiveSurface>
+                </View>
+
                 <View className="px-6 mb-20">
                     <Typography variant="h3" className="text-white mb-4">Appearance</Typography>
                     <ExpressiveSurface variant="filled" rounding="xl" style={{ padding: 16 }}>

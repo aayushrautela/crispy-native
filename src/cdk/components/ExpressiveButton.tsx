@@ -1,6 +1,6 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 interface ExpressiveButtonProps {
@@ -11,6 +11,7 @@ interface ExpressiveButtonProps {
     style?: ViewStyle;
     textStyle?: TextStyle;
     icon?: React.ReactNode;
+    isLoading?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -23,6 +24,7 @@ export const ExpressiveButton = ({
     style,
     textStyle,
     icon,
+    isLoading = false,
 }: ExpressiveButtonProps) => {
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -89,11 +91,12 @@ export const ExpressiveButton = ({
 
     return (
         <AnimatedPressable
-            onPress={onPress}
-            onPressIn={() => (pressed.value = 1)}
+            onPress={isLoading ? undefined : onPress}
+            onPressIn={() => !isLoading && (pressed.value = 1)}
             onPressOut={() => (pressed.value = 0)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
+            disabled={isLoading}
             style={[
                 styles.base,
                 {
@@ -101,26 +104,33 @@ export const ExpressiveButton = ({
                     borderRadius: getRounding(),
                     minHeight: size === 'sm' ? 32 : size === 'md' ? 40 : 48,
                     paddingHorizontal: size === 'sm' ? 16 : size === 'md' ? 24 : 32,
+                    opacity: isLoading ? 0.7 : 1,
                 },
                 animatedStyle,
                 style,
             ]}
         >
             <View style={styles.content}>
-                {icon && <View style={styles.iconContainer}>{icon}</View>}
-                <Text
-                    style={[
-                        styles.text,
-                        {
-                            color: colors.text,
-                            fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16,
-                            fontWeight: '500' // Label Large/Medium/Small
-                        },
-                        textStyle,
-                    ]}
-                >
-                    {title}
-                </Text>
+                {isLoading ? (
+                    <ActivityIndicator color={colors.text} size="small" />
+                ) : (
+                    <>
+                        {icon && <View style={styles.iconContainer}>{icon}</View>}
+                        <Text
+                            style={[
+                                styles.text,
+                                {
+                                    color: colors.text,
+                                    fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16,
+                                    fontWeight: '500' // Label Large/Medium/Small
+                                },
+                                textStyle,
+                            ]}
+                        >
+                            {title}
+                        </Text>
+                    </>
+                )}
             </View>
         </AnimatedPressable>
     );

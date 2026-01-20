@@ -1,6 +1,7 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import expo.modules.kotlin.AppContext
@@ -9,8 +10,13 @@ import expo.modules.kotlin.views.ExpoView
 import `is`.xyz.mpv.MPVLib
 
 class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+    companion object {
+        private const val TAG = "CrispyVideoView"
+    }
+
     private val surfaceView = SurfaceView(context)
     private var isMpvInitialized = false
+    private var pendingSource: String? = null
     
     // Event dispatchers
     val onLoad by EventDispatcher<Map<String, Any>>()
@@ -22,21 +28,38 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
-                MPVLib.create(context.applicationContext)
-                
-                // Basic configuration
-                MPVLib.setPropertyString("vo", "gpu")
-                MPVLib.setPropertyString("hwdec", "auto")
-                MPVLib.setPropertyString("save-position-on-quit", "no")
-                
-                MPVLib.init()
-                MPVLib.attachSurface(holder.surface)
-                isMpvInitialized = true
+                Log.d(TAG, "Surface created, initializing MPV")
+                try {
+                    MPVLib.create(context.applicationContext)
+                    
+                    // Options MUST be set before init()
+                    initOptions()
+                    
+                    MPVLib.init()
+                    MPVLib.attachSurface(holder.surface)
+                    isMpvInitialized = true
+                    Log.d(TAG, "MPV initialized successfully")
+                    
+                    // Load pending source if any
+                    pendingSource?.let { url ->
+                        Log.d(TAG, "Loading pending source: $url")
+                        loadFile(url)
+                        pendingSource = null
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to initialize MPV", e)
+                }
             }
 
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                Log.d(TAG, "Surface changed: ${width}x${height}")
+                if (isMpvInitialized) {
+                    MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+                }
+            }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
+                Log.d(TAG, "Surface destroyed, cleaning up MPV")
                 if (isMpvInitialized) {
                     MPVLib.detachSurface()
                     MPVLib.destroy()
@@ -45,14 +68,18 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             }
         })
         
-        // Polling for progress (simple for now)
+        // Polling for progress
         postDelayed(object : Runnable {
             override fun run() {
                 if (isMpvInitialized) {
-                    val pos = (MPVLib.getPropertyDouble("time-pos") ?: 0.0) * 1000
-                    val dur = (MPVLib.getPropertyDouble("duration") ?: 0.0) * 1000
-                    if (pos > 0 || dur > 0) {
-                        onProgress(mapOf("position" to pos.toLong(), "duration" to dur.toLong()))
+                    try {
+                        val pos = (MPVLib.getPropertyDouble("time-pos") ?: 0.0) * 1000
+                        val dur = (MPVLib.getPropertyDouble("duration") ?: 0.0) * 1000
+                        if (pos > 0 || dur > 0) {
+                            onProgress(mapOf("position" to pos.toLong(), "duration" to dur.toLong()))
+                        }
+                    } catch (e: Exception) {
+                        // Ignore errors during polling
                     }
                 }
                 postDelayed(this, 1000)
@@ -60,13 +87,55 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }, 1000)
     }
 
+    private fun initOptions() {
+        // GPU rendering
+        MPVLib.setOptionString("vo", "gpu")
+        MPVLib.setOptionString("gpu-context", "android")
+        MPVLib.setOptionString("opengl-es", "yes")
+        
+        // Hardware decoding (auto-copy is safest)
+        MPVLib.setOptionString("hwdec", "auto-copy")
+        
+        // Audio output
+        MPVLib.setOptionString("ao", "audiotrack,opensles")
+        
+        // Cache settings
+        MPVLib.setOptionString("cache", "yes")
+        MPVLib.setOptionString("cache-secs", "30")
+        MPVLib.setOptionString("demuxer-max-bytes", "${32 * 1024 * 1024}")
+        MPVLib.setOptionString("demuxer-max-back-bytes", "${32 * 1024 * 1024}")
+        
+        // Network
+        MPVLib.setOptionString("network-timeout", "60")
+        MPVLib.setOptionString("tls-verify", "no")
+        MPVLib.setOptionString("http-reconnect", "yes")
+        
+        // Subtitles
+        MPVLib.setOptionString("sub-auto", "fuzzy")
+        MPVLib.setOptionString("sub-visibility", "yes")
+        
+        // Disable on-screen controls
+        MPVLib.setOptionString("osc", "no")
+        MPVLib.setOptionString("terminal", "no")
+        MPVLib.setOptionString("input-default-bindings", "no")
+        
+        Log.d(TAG, "MPV options configured")
+    }
+
+    private fun loadFile(url: String) {
+        Log.d(TAG, "Loading file: $url")
+        MPVLib.command(arrayOf("loadfile", url))
+        MPVLib.setPropertyString("pause", "no")
+        onLoad(mapOf("status" to "loading"))
+    }
+
     fun setSource(url: String?) {
         url?.let {
             if (isMpvInitialized) {
-                MPVLib.command(arrayOf("loadfile", it))
-                MPVLib.setPropertyString("pause", "no")
-                // In a real impl, we'd wait for on-metadata event from JNI
-                onLoad(mapOf("status" to "loading"))
+                loadFile(it)
+            } else {
+                Log.d(TAG, "MPV not ready, queueing source: $it")
+                pendingSource = it
             }
         }
     }

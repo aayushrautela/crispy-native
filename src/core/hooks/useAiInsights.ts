@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { AIService } from '../api/AIService';
 import { StorageService } from '../storage';
+import { useUserStore } from '../stores/userStore';
 
 export interface InsightCard {
     type: 'consensus' | 'performance' | 'theme' | 'vibe' | 'style' | 'performance_actor' | 'controversy' | 'character';
@@ -17,6 +18,7 @@ export interface AiInsightsResult {
 const CACHE_PREFIX = 'ai_ins_';
 
 export function useAiInsights() {
+    const { settings } = useUserStore();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
     const [insights, setInsights] = useState<AiInsightsResult | null>(null);
@@ -46,15 +48,28 @@ export function useAiInsights() {
             return;
         }
 
+        // Determine model
+        const MODELS: Record<string, string> = {
+            'deepseek-r1': 'deepseek/deepseek-r1:free',
+            'nvidia-nemotron': 'nvidia/nemotron-3-nano-30b-a3b:free'
+        };
+
+        let model = MODELS['deepseek-r1'];
+        if (settings.aiModelType === 'custom' && settings.aiCustomModelName) {
+            model = settings.aiCustomModelName;
+        } else if (settings.aiModelType === 'nvidia-nemotron') {
+            model = MODELS['nvidia-nemotron'];
+        }
+
         const hasReviews = reviews && reviews.length > 0;
         const context = {
             title: meta.title || meta.name,
-            year: meta.year,
+            year: meta.year || meta.releaseInfo?.split('-')[0],
             description: meta.description,
             rating: meta.rating,
             genres: meta.genres,
             reviews: hasReviews
-                ? reviews.slice(0, 10).map(r => `(Rating: ${r.rating}) "${r.content.slice(0, 300)}..."`).join('\n---\n')
+                ? reviews.slice(0, 10).map(r => `(Likes: ${r.likes || 0}) "${r.comment?.slice(0, 500) || r.content?.slice(0, 500)}..."`).join('\n---\n')
                 : "No user reviews available."
         };
 
@@ -62,7 +77,7 @@ export function useAiInsights() {
 Analyze the following movie/show data ${hasReviews ? 'and user reviews' : ''} to generate engaging insights.
 Be a film enthusiast, not a critic. Use simple, conversational, and exciting English.
 Avoid complex words, academic jargon, or flowery prose. Write like you're talking to a friend.
-If reviews are provided, give more weight to opinions with higher ratings.
+If reviews are provided, give more weight to opinions with higher 'Like' counts or ratings, but consider all perspectives.
 Do NOT use generic headings.
 
 Context:
@@ -88,13 +103,12 @@ Return ONLY valid JSON.
         try {
             const response = await AIService.generateResponse([
                 { role: 'user', content: prompt }
-            ], 'deepseek/deepseek-r1:free', { // Default to free Deepseek on OpenRouter
+            ], model, {
                 response_format: { type: 'json_object' }
             });
 
             if (response && response.content) {
                 let jsonString = response.content;
-                // Basic cleanup
                 const jsonMatch = response.content.match(/\{[\s\S]*\}/);
                 if (jsonMatch) jsonString = jsonMatch[0];
                 else jsonString = response.content.replace(/```json\n|\n```/g, '').trim();
@@ -109,7 +123,7 @@ Return ONLY valid JSON.
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [settings.aiModelType, settings.aiCustomModelName]);
 
     const clearInsights = useCallback(() => {
         setInsights(null);

@@ -1,12 +1,31 @@
 package `is`.xyz.mpv
 
 import android.content.Context
+import android.util.Log
 import android.view.Surface
 
 object MPVLib {
     init {
-        System.loadLibrary("mpv")
-        System.loadLibrary("player")
+        // Order matters! Dependencies first.
+        val libs = arrayOf(
+            "c++_shared",
+            "avutil",
+            "swresample",
+            "swscale",
+            "avcodec",
+            "avformat",
+            "avfilter",
+            "avdevice",
+            "mpv",
+            "player"
+        )
+        for (lib in libs) {
+            try {
+                System.loadLibrary(lib)
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e("MPVLib", "Failed to load $lib: ${e.message}")
+            }
+        }
     }
 
     @JvmStatic external fun create(context: Context)
