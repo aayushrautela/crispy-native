@@ -79,14 +79,30 @@ class CrispyNativeCoreModule : Module() {
         view.setSource(url)
       }
 
+      Prop("headers") { view: CrispyVideoView, headers: Map<String, String>? ->
+        view.setHeaders(headers)
+      }
+
       Prop("paused") { view: CrispyVideoView, paused: Boolean ->
         view.setPaused(paused)
       }
 
-      Events("onLoad", "onProgress", "onEnd")
+      Prop("resizeMode") { view: CrispyVideoView, mode: String? ->
+        view.setResizeMode(mode)
+      }
+
+      Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
 
       AsyncFunction("seek") { view: CrispyVideoView, positionMs: Long ->
         view.seek(positionMs)
+      }
+
+      AsyncFunction("setAudioTrack") { view: CrispyVideoView, trackId: Int ->
+        view.setAudioTrack(trackId)
+      }
+
+      AsyncFunction("setSubtitleTrack") { view: CrispyVideoView, trackId: Int ->
+        view.setSubtitleTrack(trackId)
       }
     }
 

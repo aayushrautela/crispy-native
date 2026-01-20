@@ -1,4 +1,3 @@
-import CrispyNativeCore from '@/modules/crispy-native-core';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
@@ -208,19 +207,27 @@ export default function MetaDetailsScreen() {
         return `${baseId}:${activeSeason}:${selectedEpisode.episode}`;
     };
 
-    const handleStreamSelect = async (stream: any) => {
+    const handleStreamSelect = (stream: any) => {
         streamBottomSheetRef.current?.dismiss();
-        let playbackUrl = stream.url;
+
+        const params: any = {
+            url: stream.url,
+            title: meta?.name || 'Video',
+        };
+
         if (stream.infoHash) {
-            const localUrl = await CrispyNativeCore.resolveStream(stream.infoHash, stream.fileIdx || -1);
-            if (localUrl) playbackUrl = localUrl;
+            params.infoHash = stream.infoHash;
+            if (stream.fileIdx !== undefined) params.fileIdx = stream.fileIdx;
         }
-        if (playbackUrl) {
-            router.push({
-                pathname: '/player',
-                params: { url: playbackUrl, title: meta?.name || 'Video' }
-            });
+
+        if (stream.behaviorHints && stream.behaviorHints.headers) {
+            params.headers = JSON.stringify(stream.behaviorHints.headers);
         }
+
+        router.push({
+            pathname: '/player',
+            params
+        });
     };
 
     const seasons = useMemo(() => {

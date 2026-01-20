@@ -1,142 +1,203 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.util.Log
-import android.view.SurfaceHolder
-import android.view.SurfaceView
+import android.view.Surface
+import android.view.TextureView
+import android.view.View
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import `is`.xyz.mpv.MPVLib
+import kotlin.math.abs
 
-class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver {
     companion object {
         private const val TAG = "CrispyVideoView"
     }
 
-    private val surfaceView = SurfaceView(context)
+    private val surfaceView = TextureView(context)
     private var isMpvInitialized = false
     private var pendingSource: String? = null
+    private var pendingPosition: Long = -1
     
+    // Track info
+    private var duration: Long = 0
+    private var position: Long = 0
+    private var isSeeking = false
+
     // Event dispatchers
     val onLoad by EventDispatcher<Map<String, Any>>()
     val onProgress by EventDispatcher<Map<String, Any>>()
     val onEnd by EventDispatcher<Unit>()
+    val onError by EventDispatcher<Map<String, String>>()
+    val onTracksChanged by EventDispatcher<Map<String, Any>>()
 
     init {
-        addView(surfaceView)
-        
-        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                Log.d(TAG, "Surface created, initializing MPV")
-                try {
-                    MPVLib.create(context.applicationContext)
-                    
-                    // Options MUST be set before init()
-                    initOptions()
-                    
-                    MPVLib.init()
-                    MPVLib.attachSurface(holder.surface)
-                    isMpvInitialized = true
-                    Log.d(TAG, "MPV initialized successfully")
-                    
-                    // Load pending source if any
-                    pendingSource?.let { url ->
-                        Log.d(TAG, "Loading pending source: $url")
-                        loadFile(url)
-                        pendingSource = null
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to initialize MPV", e)
-                }
-            }
-
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                Log.d(TAG, "Surface changed: ${width}x${height}")
-                if (isMpvInitialized) {
-                    MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
-                }
-            }
-
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                Log.d(TAG, "Surface destroyed, cleaning up MPV")
-                if (isMpvInitialized) {
-                    MPVLib.detachSurface()
-                    MPVLib.destroy()
-                    isMpvInitialized = false
-                }
-            }
-        })
-        
-        // Polling for progress
-        postDelayed(object : Runnable {
-            override fun run() {
-                if (isMpvInitialized) {
-                    try {
-                        val pos = (MPVLib.getPropertyDouble("time-pos") ?: 0.0) * 1000
-                        val dur = (MPVLib.getPropertyDouble("duration") ?: 0.0) * 1000
-                        if (pos > 0 || dur > 0) {
-                            onProgress(mapOf("position" to pos.toLong(), "duration" to dur.toLong()))
-                        }
-                    } catch (e: Exception) {
-                        // Ignore errors during polling
-                    }
-                }
-                postDelayed(this, 1000)
-            }
-        }, 1000)
+        surfaceView.surfaceTextureListener = this
+        addView(surfaceView, android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        ))
     }
 
+    // --- TextureView.SurfaceTextureListener ---
+
+    override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+        Log.d(TAG, "Surface available: ${width}x${height}")
+        initMpv(Surface(surface))
+    }
+
+    override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+        Log.d(TAG, "Surface size changed: ${width}x${height}")
+        if (isMpvInitialized) {
+            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        }
+    }
+
+    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+        Log.d(TAG, "Surface destroyed")
+        destroyMpv()
+        return true
+    }
+
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+        // No-op
+    }
+
+    // --- MPV Initialization ---
+
+    private fun initMpv(surface: Surface) {
+        try {
+            MPVLib.create(context.applicationContext)
+            initOptions()
+            MPVLib.init()
+            MPVLib.attachSurface(surface)
+            MPVLib.addObserver(this)
+            
+            // Observe properties for events
+            MPVLib.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
+            MPVLib.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
+            MPVLib.observeProperty("track-list", MPVLib.MpvFormat.MPV_FORMAT_NONE)
+            MPVLib.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_Boolean)
+            
+            isMpvInitialized = true
+            Log.d(TAG, "MPV initialized successfully")
+
+            // Restore state if needed
+            pendingSource?.let { 
+                loadFile(it)
+                pendingSource = null 
+            }
+            if (pendingPosition >= 0) {
+                seek(pendingPosition)
+                pendingPosition = -1
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize MPV", e)
+            onError(mapOf("error" to (e.message ?: "Initialization failed")))
+        }
+    }
+    
     private fun initOptions() {
-        // GPU rendering
+        // Hardware decoding
+        MPVLib.setOptionString("hwdec", "auto")
+        MPVLib.setOptionString("hwdec-codecs", "all")
+        
+        // Video output
         MPVLib.setOptionString("vo", "gpu")
         MPVLib.setOptionString("gpu-context", "android")
         MPVLib.setOptionString("opengl-es", "yes")
         
-        // Hardware decoding (auto-copy is safest)
-        MPVLib.setOptionString("hwdec", "auto-copy")
-        
-        // Audio output
+        // Audio output - standard android
         MPVLib.setOptionString("ao", "audiotrack,opensles")
         
-        // Cache settings
-        MPVLib.setOptionString("cache", "yes")
-        MPVLib.setOptionString("cache-secs", "30")
-        MPVLib.setOptionString("demuxer-max-bytes", "${32 * 1024 * 1024}")
-        MPVLib.setOptionString("demuxer-max-back-bytes", "${32 * 1024 * 1024}")
-        
-        // Network
+        // Network behavior
         MPVLib.setOptionString("network-timeout", "60")
         MPVLib.setOptionString("tls-verify", "no")
         MPVLib.setOptionString("http-reconnect", "yes")
-        
+        // Improve buffer for streaming
+        MPVLib.setOptionString("cache", "yes")
+        MPVLib.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
+        MPVLib.setOptionString("demuxer-max-back-bytes", "${64 * 1024 * 1024}")
+
         // Subtitles
         MPVLib.setOptionString("sub-auto", "fuzzy")
         MPVLib.setOptionString("sub-visibility", "yes")
+        MPVLib.setOptionString("embeddedfonts", "yes")
         
-        // Disable on-screen controls
+        // Android-specific
+        MPVLib.setOptionString("android-surface-size", "${surfaceView.width}x${surfaceView.height}")
+
+        // UI
         MPVLib.setOptionString("osc", "no")
-        MPVLib.setOptionString("terminal", "no")
+        MPVLib.setOptionString("osd-level", "1") // Show basic OSD
         MPVLib.setOptionString("input-default-bindings", "no")
-        
-        Log.d(TAG, "MPV options configured")
     }
+
+    private fun destroyMpv() {
+        if (isMpvInitialized) {
+            MPVLib.removeObserver(this)
+            MPVLib.detachSurface()
+            MPVLib.destroy()
+            isMpvInitialized = false
+        }
+    }
+
+    // --- MPVLib.EventObserver ---
+
+    override fun eventProperty(property: String) { }
+    override fun eventProperty(property: String, value: Long) { }
+    override fun eventProperty(property: String, value: Boolean) { 
+        if (property == "eof-reached" && value) {
+            onEnd(Unit)
+        }
+    }
+    override fun eventProperty(property: String, value: String) { }
+
+    override fun eventProperty(property: String, value: Double) {
+        if (property == "time-pos") {
+            position = (value * 1000).toLong()
+            if (!isSeeking && duration > 0) {
+                onProgress(mapOf("position" to position, "duration" to duration))
+            }
+        } else if (property == "duration") {
+            duration = (value * 1000).toLong()
+            onLoad(mapOf("duration" to duration, "width" to 0, "height" to 0))
+        }
+    }
+
+    override fun event(eventId: Int) {
+        when (eventId) {
+           MPVLib.MpvEvent.MPV_EVENT_END_FILE -> onEnd(Unit)
+           // Add track change detection if needed via MPV_EVENT_PROPERTY_CHANGE logic on 'track-list'
+        }
+    }
+
+    // --- Public API ---
 
     private fun loadFile(url: String) {
         Log.d(TAG, "Loading file: $url")
         MPVLib.command(arrayOf("loadfile", url))
         MPVLib.setPropertyString("pause", "no")
-        onLoad(mapOf("status" to "loading"))
     }
 
     fun setSource(url: String?) {
-        url?.let {
-            if (isMpvInitialized) {
-                loadFile(it)
-            } else {
-                Log.d(TAG, "MPV not ready, queueing source: $it")
-                pendingSource = it
-            }
+        if (url == null) return
+        if (isMpvInitialized) {
+            loadFile(url)
+        } else {
+            pendingSource = url
+        }
+    }
+    
+    // Headers support for debrid streams
+    fun setHeaders(headers: Map<String, String>?) {
+        if (headers.isNullOrEmpty()) return
+        val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
+        if (isMpvInitialized) {
+            MPVLib.setOptionString("http-header-fields", headerString)
         }
     }
 
@@ -148,8 +209,41 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun seek(positionMs: Long) {
         if (isMpvInitialized) {
+            isSeeking = true
             val seconds = positionMs / 1000.0
             MPVLib.command(arrayOf("seek", seconds.toString(), "absolute"))
+            // Optimization: Assume seek happens instantly for UI purposes or wait for event
+            mainHandler.postDelayed({ isSeeking = false }, 500)
+        } else {
+            pendingPosition = positionMs
         }
     }
+    
+    fun setAudioTrack(trackId: Int) {
+        if (isMpvInitialized) {
+            MPVLib.setPropertyString("aid", trackId.toString())
+        }
+    }
+    
+    fun setSubtitleTrack(trackId: Int) {
+        if (isMpvInitialized) {
+            MPVLib.setPropertyString("sid", trackId.toString())
+        }
+    }
+    
+    fun setResizeMode(mode: String?) {
+         // "contain" (default), "cover" (crop), "stretch" (stretch)
+         // MPV 'video-aspect-override' or 'video-scale' could be used, or View layout params
+         // Simple pan&scan for cover:
+         when(mode) {
+             "cover" -> {
+                 if(isMpvInitialized) MPVLib.setPropertyDouble("panscan", 1.0)
+             }
+             else -> {
+                 if(isMpvInitialized) MPVLib.setPropertyDouble("panscan", 0.0)
+             }
+         }
+    }
+    
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 }

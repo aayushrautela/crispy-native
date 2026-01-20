@@ -1,22 +1,71 @@
-import { CrispyVideoView } from '@/modules/crispy-native-core';
+import CrispyNativeCore, { CrispyVideoView, CrispyVideoViewRef } from '@/modules/crispy-native-core';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ChevronLeft, Pause, Play, RotateCcw, RotateCw, Settings } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 const SafeOrientation = ScreenOrientation || {};
 
 export default function PlayerScreen() {
-    const { url, title } = useLocalSearchParams();
+    const params = useLocalSearchParams();
+    const { url, title, infoHash, fileIdx, headers: headersParam } = params;
     const { theme } = useTheme();
     const router = useRouter();
 
+    const [finalUrl, setFinalUrl] = useState<string | null>(null);
+    const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
     const [paused, setPaused] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [showControls, setShowControls] = useState(true);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
+
+    const videoRef = useRef<CrispyVideoViewRef>(null);
     const controlsTimer = useRef<NodeJS.Timeout | null>(null);
+
+    // Parse headers if present
+    useEffect(() => {
+        if (headersParam && typeof headersParam === 'string') {
+            try {
+                setHeaders(JSON.parse(headersParam));
+            } catch (e) {
+                console.error("Failed to parse headers", e);
+            }
+        }
+    }, [headersParam]);
+
+    // Resolve stream logic
+    useEffect(() => {
+        let isMounted = true;
+        const resolve = async () => {
+            setLoading(true);
+            const rawUrl = url as string;
+
+            // 1. Magnet link or infoHash -> Torrent
+            if (rawUrl?.startsWith('magnet:') || infoHash) {
+                const hash = (infoHash as string) || extractInfoHash(rawUrl);
+                const idx = fileIdx ? parseInt(fileIdx as string) : -1;
+
+                if (hash) {
+                    console.log("Resolving torrent module...", hash, idx);
+                    const localUrl = await CrispyNativeCore.resolveStream(hash, idx);
+                    if (isMounted && localUrl) {
+                        console.log("Resolved to local URL:", localUrl);
+                        setFinalUrl(localUrl);
+                    }
+                }
+            }
+            // 2. HTTP/HTTPS -> Debrid or Direct
+            else {
+                if (isMounted) setFinalUrl(rawUrl);
+            }
+            setLoading(false);
+        };
+
+        resolve();
+        return () => { isMounted = false; };
+    }, [url, infoHash, fileIdx]);
 
     useEffect(() => {
         // Lock to landscape
@@ -40,6 +89,18 @@ export default function PlayerScreen() {
         resetControlsTimer();
     };
 
+    const handleSeekForward = () => {
+        const newPos = progress.position + 10000;
+        videoRef.current?.seek(newPos);
+        resetControlsTimer();
+    };
+
+    const handleSeekBackward = () => {
+        const newPos = Math.max(0, progress.position - 10000);
+        videoRef.current?.seek(newPos);
+        resetControlsTimer();
+    };
+
     const formatTime = (ms: number) => {
         const totalSeconds = Math.floor(ms / 1000);
         const minutes = Math.floor(totalSeconds / 60);
@@ -47,14 +108,34 @@ export default function PlayerScreen() {
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
+    const extractInfoHash = (magnet: string): string | null => {
+        const match = magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/);
+        return match ? match[1] : null;
+    };
+
     return (
         <View style={[styles.container, { backgroundColor: '#000' }]}>
-            <CrispyVideoView
-                style={styles.video}
-                source={url as string}
-                paused={paused}
-                onProgress={(e) => setProgress(e.nativeEvent)}
-            />
+            {finalUrl ? (
+                <CrispyVideoView
+                    ref={videoRef}
+                    style={styles.video}
+                    source={finalUrl} // Fixed: use finalUrl
+                    headers={headers}
+                    paused={paused}
+                    onProgress={(e) => setProgress(e.nativeEvent)}
+                    onLoad={(e) => {
+                        console.log("Video loaded", e.nativeEvent);
+                        setLoading(false);
+                    }}
+                    onEnd={() => router.back()}
+                    onError={(e) => console.error("Playback error", e.nativeEvent)}
+                />
+            ) : (
+                <View style={styles.centerLoading}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <Text style={{ color: '#fff', marginTop: 10 }}>Resolving Stream...</Text>
+                </View>
+            )}
 
             <Pressable style={StyleSheet.absoluteFill} onPress={resetControlsTimer}>
                 {showControls && (
@@ -78,13 +159,13 @@ export default function PlayerScreen() {
 
                         {/* Center Controls */}
                         <View style={styles.centerControls}>
-                            <Pressable onPress={() => { }} style={styles.sideBtn}>
+                            <Pressable onPress={handleSeekBackward} style={styles.sideBtn}>
                                 <RotateCcw color="#fff" size={32} />
                             </Pressable>
                             <Pressable onPress={togglePlay} style={styles.playBtn}>
                                 {paused ? <Play color="#fff" size={48} fill="#fff" /> : <Pause color="#fff" size={48} fill="#fff" />}
                             </Pressable>
-                            <Pressable onPress={() => { }} style={styles.sideBtn}>
+                            <Pressable onPress={handleSeekForward} style={styles.sideBtn}>
                                 <RotateCw color="#fff" size={32} />
                             </Pressable>
                         </View>
@@ -100,7 +181,7 @@ export default function PlayerScreen() {
                                                 styles.progressFill,
                                                 {
                                                     backgroundColor: theme.colors.primary,
-                                                    width: `${(progress.position / (progress.duration || 1)) * 100}%`
+                                                    width: `${(progress.position / (Math.max(progress.duration, 1))) * 100}%`
                                                 }
                                             ]}
                                         />
@@ -122,6 +203,12 @@ const styles = StyleSheet.create({
     },
     video: {
         flex: 1,
+    },
+    centerLoading: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
     },
     overlay: {
         flex: 1,

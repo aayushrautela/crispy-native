@@ -6,10 +6,22 @@ const CrispyNativeCore = requireNativeModule('CrispyNativeCore');
 
 export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
+    headers?: Record<string, string>;
     paused?: boolean;
-    onLoad?: (event: { nativeEvent: { status: string } }) => void;
+    resizeMode?: 'contain' | 'cover' | 'stretch';
+
+    // Events
+    onLoad?: (event: { nativeEvent: { duration: number, width: number, height: number } }) => void;
     onProgress?: (event: { nativeEvent: { position: number, duration: number } }) => void;
     onEnd?: () => void;
+    onError?: (event: { nativeEvent: { error: string } }) => void;
+    onTracksChanged?: (event: { nativeEvent: any }) => void;
+}
+
+export interface CrispyVideoViewRef {
+    seek: (positionMs: number) => void;
+    setAudioTrack: (trackId: number) => void;
+    setSubtitleTrack: (trackId: number) => void;
 }
 
 export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
