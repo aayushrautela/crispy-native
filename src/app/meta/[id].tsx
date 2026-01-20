@@ -212,8 +212,12 @@ export default function MetaDetailsScreen() {
 
         const params: any = {
             url: stream.url,
-            title: meta?.name || 'Video',
+            title: enriched?.title || meta?.name || 'Video',
         };
+
+        if (selectedEpisode) {
+            params.episodeTitle = `S${activeSeason}:E${selectedEpisode.episode} - ${selectedEpisode.name || selectedEpisode.title}`;
+        }
 
         if (stream.infoHash) {
             params.infoHash = stream.infoHash;

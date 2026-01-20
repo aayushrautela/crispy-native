@@ -1,14 +1,33 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
+import { Typography } from '@/src/cdk/components/Typography';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { ChevronLeft, Pause, Play, RotateCcw, RotateCw, Settings } from 'lucide-react-native';
+import {
+    ArrowLeft,
+    Headphones,
+    Info,
+    Languages,
+    Layers,
+    Pause,
+    Play,
+    Settings,
+    StepBack,
+    StepForward
+} from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Animated, {
+    FadeIn,
+    FadeOut,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withTiming
+} from 'react-native-reanimated';
 
 const SafeOrientation = ScreenOrientation || {};
 
@@ -25,6 +44,20 @@ export default function PlayerScreen() {
     const [loading, setLoading] = useState(true);
     const [showControls, setShowControls] = useState(true);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
+    const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
+    const [isSeeking, setIsSeeking] = useState(false);
+
+    // Gesture & Feedback State
+    const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
+    const seekAccumulationTimer = useRef<NodeJS.Timeout | null>(null);
+    const seekBasePosition = useRef<number | null>(null);
+    const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
+    const { width } = useWindowDimensions();
+
+    // Play/Pause Animation State
+    const playPauseScale = useSharedValue(1);
+    const [isIconAnimating, setIsIconAnimating] = useState(false);
+
 
     // Dual-engine state
     const [useExoPlayer, setUseExoPlayer] = useState(() => {
@@ -97,21 +130,78 @@ export default function PlayerScreen() {
     };
 
     const togglePlay = () => {
-        setPaused(!paused);
+        const nextPaused = !paused;
+        setPaused(nextPaused);
+
+        // Simple single bounce animation (no oscillation)
+        playPauseScale.value = withSequence(
+            withTiming(0.85, { duration: 100 }),
+            withTiming(1, { duration: 150 })
+        );
+
         resetControlsTimer();
     };
 
-    const handleSeekForward = () => {
-        const newPos = progress.position + 10;
-        videoRef.current?.seek(newPos);
+    const handleSeek = (direction: 'forward' | 'backward') => {
+        if (seekAccumulationTimer.current) clearTimeout(seekAccumulationTimer.current);
+
+        setSeekAccumulation(prev => {
+            const isSameDirection = prev.direction === direction;
+            const newAmount = isSameDirection ? prev.amount + 10 : 10;
+
+            if (seekBasePosition.current === null || !isSameDirection) {
+                seekBasePosition.current = progress.position;
+            }
+
+            const totalDelta = direction === 'forward' ? newAmount : -newAmount;
+            const targetPos = Math.max(0, Math.min(stableDuration || progress.duration, seekBasePosition.current + totalDelta));
+
+            // Convert to milliseconds for the player
+            videoRef.current?.seek(targetPos * 1000);
+            setProgress(p => ({ ...p, position: targetPos }));
+
+            return { amount: newAmount, direction };
+        });
+
+        seekAccumulationTimer.current = setTimeout(() => {
+            setSeekAccumulation({ amount: 0, direction: null });
+            seekBasePosition.current = null;
+        }, 800);
+
         resetControlsTimer();
     };
 
-    const handleSeekBackward = () => {
-        const newPos = Math.max(0, progress.position - 10);
-        videoRef.current?.seek(newPos);
-        resetControlsTimer();
+    const handleTouchEnd = (e: any) => {
+        const now = Date.now();
+        const { locationX: x } = e.nativeEvent;
+
+        if (now - lastTapRef.current.time < 300) {
+            // Double Tap Detected
+            if (x < width * 0.3) {
+                handleSeek('backward');
+            } else if (x > width * 0.7) {
+                handleSeek('forward');
+            }
+        } else {
+            // Single Tap - Toggle Controls
+            if (showControls) {
+                setShowControls(false);
+                if (controlsTimer.current) clearTimeout(controlsTimer.current);
+            } else {
+                resetControlsTimer();
+            }
+        }
+
+        lastTapRef.current = { time: now, x };
     };
+
+    const playPauseAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: playPauseScale.value }],
+    }));
+
+    const feedbackAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: withTiming(seekAccumulation.direction ? 1 : 0, { duration: 150 }),
+    }));
 
     // Handle codec errors - switch to MPV
     const handleCodecError = () => {
@@ -122,8 +212,10 @@ export default function PlayerScreen() {
     };
 
     const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
+        if (!seconds || !isFinite(seconds) || isNaN(seconds)) return '0:00';
+        const totalSecs = Math.floor(seconds);
+        const mins = Math.floor(totalSecs / 60);
+        const secs = totalSecs % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
@@ -142,10 +234,22 @@ export default function PlayerScreen() {
                     paused={paused}
                     useExoPlayer={useExoPlayer}
                     onCodecError={handleCodecError}
-                    onProgress={(data) => setProgress({ position: data.currentTime, duration: data.duration })}
+                    onProgress={(data) => {
+                        // Don't overwrite progress while user is seeking
+                        if (!isSeeking) {
+                            // Values come in milliseconds with 'position' property (not currentTime)
+                            const positionSec = (data.position ?? data.currentTime ?? 0) / 1000;
+                            const durationSec = (data.duration ?? 0) / 1000;
+                            setProgress({ position: positionSec, duration: durationSec });
+                        }
+                    }}
                     onLoad={(data) => {
-                        console.log("Video loaded", data);
                         setLoading(false);
+                        // Duration comes in milliseconds
+                        const durationSec = (data.duration ?? 0) / 1000;
+                        if (durationSec > 0) {
+                            setStableDuration(durationSec);
+                        }
                     }}
                     onEnd={() => router.back()}
                     onError={(e) => console.error("Playback error", e.message)}
@@ -153,61 +257,172 @@ export default function PlayerScreen() {
             ) : (
                 <View style={styles.centerLoading}>
                     <LoadingIndicator size="large" color={theme.colors.primary} />
-                    <Text style={{ color: '#fff', marginTop: 10 }}>Resolving Stream...</Text>
+                    <Typography variant="body" className="text-white mt-4">Resolving Stream...</Typography>
                 </View>
             )}
 
-            <Pressable style={StyleSheet.absoluteFill} onPress={resetControlsTimer}>
+            {/* Gesture Layer & Main UI Wrapper */}
+            <Pressable style={StyleSheet.absoluteFill} onPress={handleTouchEnd}>
                 {showControls && (
                     <Animated.View
-                        entering={FadeIn}
-                        exiting={FadeOut}
+                        entering={FadeIn.duration(300)}
+                        exiting={FadeOut.duration(300)}
                         style={styles.overlay}
                     >
-                        {/* Top Bar */}
+                        {/* 1. Top Bar - Simple Row (No Pill) */}
                         <View style={styles.topBar}>
-                            <Pressable onPress={() => router.back()} style={styles.iconBtn}>
-                                <ChevronLeft color="#fff" size={28} />
+                            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+                                <ArrowLeft color="#fff" size={24} />
                             </Pressable>
-                            <Text style={styles.title} numberOfLines={1}>{title as string}</Text>
-                            <View style={styles.row}>
-                                <Pressable style={styles.iconBtn}>
-                                    <Settings color="#fff" size={24} />
-                                </Pressable>
+                            <View style={styles.titlesContainer}>
+                                <Text style={styles.mainTitle} numberOfLines={1}>
+                                    {title as string}
+                                </Text>
+                                {params.episodeTitle && (
+                                    <Text style={styles.subTitle} numberOfLines={1}>
+                                        {params.episodeTitle as string}
+                                    </Text>
+                                )}
                             </View>
                         </View>
 
-                        {/* Center Controls */}
-                        <View style={styles.centerControls}>
-                            <Pressable onPress={handleSeekBackward} style={styles.sideBtn}>
-                                <RotateCcw color="#fff" size={32} />
-                            </Pressable>
-                            <Pressable onPress={togglePlay} style={styles.playBtn}>
-                                {paused ? <Play color="#fff" size={48} fill="#fff" /> : <Pause color="#fff" size={48} fill="#fff" />}
-                            </Pressable>
-                            <Pressable onPress={handleSeekForward} style={styles.sideBtn}>
-                                <RotateCw color="#fff" size={32} />
-                            </Pressable>
+                        {/* 2. Center Area: Feedback & Play/Pause */}
+                        <View style={styles.centerArea} pointerEvents="box-none">
+                            {/* YouTube-style Seek Feedback - Left */}
+                            {seekAccumulation.direction === 'backward' && (
+                                <Animated.View style={[styles.seekFeedbackLeft, feedbackAnimatedStyle]}>
+                                    <StepBack color="#fff" size={24} />
+                                    <Text style={styles.seekFeedbackText}>{seekAccumulation.amount}s</Text>
+                                </Animated.View>
+                            )}
+
+                            {/* YouTube-style Seek Feedback - Right */}
+                            {seekAccumulation.direction === 'forward' && (
+                                <Animated.View style={[styles.seekFeedbackRight, feedbackAnimatedStyle]}>
+                                    <StepForward color="#fff" size={24} />
+                                    <Text style={styles.seekFeedbackText}>{seekAccumulation.amount}s</Text>
+                                </Animated.View>
+                            )}
+
+                            {/* Play/Pause Pop */}
+                            {!loading && (
+                                <Animated.View style={[styles.centerPlayBtn, playPauseAnimatedStyle]}>
+                                    <Pressable onPress={togglePlay} style={styles.centerPlayPressable}>
+                                        {paused ? (
+                                            <Play color="#fff" size={32} fill="#fff" style={{ marginLeft: 3 }} />
+                                        ) : (
+                                            <Pause color="#fff" size={32} fill="#fff" />
+                                        )}
+                                    </Pressable>
+                                </Animated.View>
+                            )}
                         </View>
 
-                        {/* Bottom Bar */}
-                        <View style={styles.bottomBar}>
-                            <View style={styles.progressRow}>
-                                <Text style={styles.timeText}>{formatTime(progress.position)}</Text>
-                                <View style={styles.progressBarContainer}>
-                                    <View style={[styles.progressBar, { backgroundColor: theme.colors.surfaceVariant + '40' }]}>
-                                        <View
-                                            style={[
-                                                styles.progressFill,
-                                                {
-                                                    backgroundColor: theme.colors.primary,
-                                                    width: `${(progress.position / (Math.max(progress.duration, 1))) * 100}%`
-                                                }
-                                            ]}
-                                        />
-                                    </View>
+                        {/* 3. Bottom Controls */}
+                        <View style={styles.bottomArea}>
+                            {/* Material 3 Expressive Slider */}
+                            <View
+                                style={styles.progressContainer}
+                                onStartShouldSetResponder={() => true}
+                                onMoveShouldSetResponder={() => true}
+                                onResponderGrant={(e) => {
+                                    setIsSeeking(true);
+                                    const { pageX } = e.nativeEvent;
+                                    const percentage = Math.max(0, Math.min(1, pageX / width));
+                                    const targetPos = (stableDuration || progress.duration) * percentage;
+                                    // Convert to milliseconds for the player
+                                    videoRef.current?.seek(targetPos * 1000);
+                                    resetControlsTimer();
+                                    setProgress(p => ({ ...p, position: targetPos }));
+                                }}
+                                onResponderMove={(e) => {
+                                    const { pageX } = e.nativeEvent;
+                                    const percentage = Math.max(0, Math.min(1, pageX / width));
+                                    const targetPos = (stableDuration || progress.duration) * percentage;
+                                    // Convert to milliseconds for the player
+                                    videoRef.current?.seek(targetPos * 1000);
+                                    resetControlsTimer();
+                                    setProgress(p => ({ ...p, position: targetPos }));
+                                }}
+                                onResponderRelease={() => {
+                                    // Allow a small delay for the video to catch up before re-enabling progress updates
+                                    setTimeout(() => setIsSeeking(false), 500);
+                                }}
+                            >
+                                {(() => {
+                                    // Pre-compute safe percentage values
+                                    const duration = stableDuration || progress.duration || 1;
+                                    const rawPercent = (progress.position / duration) * 100;
+                                    const percent = Math.max(0, Math.min(100, rawPercent));
+                                    const fillWidth = Math.max(0, percent - 0.8);
+                                    const inactiveLeft = Math.min(100, percent + 0.8);
+
+                                    return (
+                                        <View style={styles.progressBackground}>
+                                            {/* Active Track with Gap */}
+                                            <View
+                                                style={[
+                                                    styles.progressFill,
+                                                    {
+                                                        backgroundColor: theme.colors.primary,
+                                                        width: `${fillWidth}%`
+                                                    }
+                                                ]}
+                                            />
+                                            {/* Inactive Track with Gap */}
+                                            <View
+                                                style={[
+                                                    styles.progressInactive,
+                                                    {
+                                                        left: `${inactiveLeft}%`,
+                                                        right: 0
+                                                    }
+                                                ]}
+                                            />
+                                            {/* Expressive Thumb (Vertical Handle) */}
+                                            <View
+                                                style={[
+                                                    styles.progressThumb,
+                                                    {
+                                                        left: `${percent}%`,
+                                                        backgroundColor: '#fff'
+                                                    }
+                                                ]}
+                                            />
+                                        </View>
+                                    );
+                                })()}
+                            </View>
+
+                            {/* Control Pills Row */}
+                            <View style={styles.controlsRow}>
+                                {/* Time Pill - Simple View */}
+                                <View style={styles.timePill}>
+                                    <Text style={styles.timeText}>
+                                        {formatTime(progress.position)}
+                                    </Text>
+                                    <Text style={[styles.timeText, { opacity: 0.5, marginHorizontal: 4 }]}>
+                                        /
+                                    </Text>
+                                    <Text style={styles.timeText}>
+                                        {formatTime(stableDuration || progress.duration)}
+                                    </Text>
                                 </View>
-                                <Text style={styles.timeText}>{formatTime(progress.duration)}</Text>
+
+                                {/* Actions Pill - Simple View */}
+                                <View style={styles.actionsPill}>
+                                    {[
+                                        { icon: Headphones, key: 'audio' },
+                                        { icon: Languages, key: 'subtitles' },
+                                        { icon: Layers, key: 'streams' },
+                                        { icon: Settings, key: 'settings' },
+                                        { icon: Info, key: 'info' }
+                                    ].map((item, i) => (
+                                        <Pressable key={i} style={styles.actionIconBtn} onPress={resetControlsTimer}>
+                                            <item.icon color="#fff" size={20} />
+                                        </Pressable>
+                                    ))}
+                                </View>
                             </View>
                         </View>
                     </Animated.View>
@@ -229,70 +444,157 @@ const styles = StyleSheet.create({
     },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'space-between',
-        padding: 24,
+        paddingVertical: 24,
+        paddingHorizontal: Platform.OS === 'ios' ? 48 : 32, // Accommodate safe area/notches
     },
     topBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
+        gap: 12,
     },
-    title: {
+    backBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    titlesContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    mainTitle: {
         color: '#fff',
         fontSize: 18,
         fontWeight: '700',
+    },
+    subTitle: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 13,
+        marginTop: 2,
+    },
+    centerArea: {
         flex: 1,
-    },
-    row: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    iconBtn: {
-        padding: 8,
-    },
-    centerControls: {
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 64,
     },
-    playBtn: {
+    seekFeedbackLeft: {
+        position: 'absolute',
+        left: '15%',
+        alignItems: 'center',
+        justifyContent: 'center',
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        gap: 4,
+    },
+    seekFeedbackRight: {
+        position: 'absolute',
+        right: '15%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        gap: 4,
+    },
+    seekFeedbackText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    centerPlayBtn: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: 'rgba(0,0,0,0.4)',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    sideBtn: {
-        padding: 12,
-    },
-    bottomBar: {
-        gap: 8,
-    },
-    progressRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    progressBarContainer: {
+    centerPlayPressable: {
         flex: 1,
-        height: 48,
+        alignItems: 'center',
         justifyContent: 'center',
     },
-    progressBar: {
-        height: 4,
-        borderRadius: 2,
-        overflow: 'hidden',
+    bottomArea: {
+        gap: 8, // Reduced gap as requested
+    },
+    progressContainer: {
+        height: 44,
+        justifyContent: 'center',
+        // No negative margins - keep within the overlay padding
+    },
+    progressBackground: {
+        height: 10, // Thicker expressive track
+        borderRadius: 5,
+        position: 'relative',
+        width: '100%',
     },
     progressFill: {
-        height: '100%',
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        borderTopLeftRadius: 5,
+        borderBottomLeftRadius: 5,
+        borderTopRightRadius: 2, // Less rounded next to handle
+        borderBottomRightRadius: 2, // Less rounded next to handle
+    },
+    progressInactive: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        borderTopLeftRadius: 2, // Less rounded next to handle
+        borderBottomLeftRadius: 2, // Less rounded next to handle
+        borderTopRightRadius: 5,
+        borderBottomRightRadius: 5,
+    },
+    progressThumb: {
+        position: 'absolute',
+        top: -8, // Center 26px handle on 10px track
+        height: 26,
+        width: 4,
+        borderRadius: 2,
+        marginLeft: -2,
+        zIndex: 2,
+    },
+    controlsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    timePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.4)',
     },
     timeText: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: 14,
         fontWeight: '600',
-        minWidth: 40,
+    },
+    actionsPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    actionIconBtn: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginHorizontal: 2,
     },
 });

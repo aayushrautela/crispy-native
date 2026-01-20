@@ -121,7 +121,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     const handleExoProgress = (data: any) => {
         onProgress?.({
             currentTime: data.currentTime,
-            duration: data.playableDuration || data.currentTime,
+            duration: data.seekableDuration || data.playableDuration || data.duration || 0,
         });
     };
 

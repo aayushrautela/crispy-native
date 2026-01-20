@@ -295,6 +295,28 @@ export default function SettingsScreen() {
                     </ExpressiveSurface>
                 </View>
 
+                <View className="px-6 mb-8">
+                    <Typography variant="h3" className="text-white mb-4">Playback</Typography>
+                    <ExpressiveSurface variant="filled" rounding="xl" style={{ padding: 16 }}>
+                        <Typography variant="label" className="text-zinc-500 mb-2">Video Player Engine</Typography>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            {(['auto', 'exoplayer', 'mpv'] as const).map(engine => (
+                                <ExpressiveButton
+                                    key={engine}
+                                    title={engine === 'auto' ? 'Auto' : engine === 'exoplayer' ? 'ExoPlayer' : 'MPV'}
+                                    variant={useUserStore.getState().settings.videoPlayerEngine === engine ? 'primary' : 'tonal'}
+                                    onPress={() => useUserStore.getState().updateSettings({ videoPlayerEngine: engine })}
+                                    style={{ flex: 1 }}
+                                    size="sm"
+                                />
+                            ))}
+                        </View>
+                        <Typography variant="caption" className="text-zinc-500 mt-3">
+                            Choose 'mpv' for advanced codec support (HEVC/HVEC, Dolby Vision) or 'ExoPlayer' for standard reliability.
+                        </Typography>
+                    </ExpressiveSurface>
+                </View>
+
                 <View className="px-6 mb-20">
                     <Typography variant="h3" className="text-white mb-4">Appearance</Typography>
                     <ExpressiveSurface variant="filled" rounding="xl" style={{ padding: 16 }}>
