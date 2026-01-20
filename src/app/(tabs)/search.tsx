@@ -124,7 +124,6 @@ export default function SearchScreen() {
                     style={[styles.input, { color: theme.colors.onSurface }]}
                     value={query}
                     onChangeText={setQuery}
-                    autoFocus
                 />
                 {query.length > 0 && (
                     <Touchable onPress={() => setQuery('')}>

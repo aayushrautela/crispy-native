@@ -1,6 +1,6 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
     LinearTransition,
@@ -43,6 +43,7 @@ export const ExpressiveSurface = ({
 }: ExpressiveSurfaceProps) => {
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
+    const isFirstMount = useRef(true);
 
     // PixelPlayer style shared values
     const scale = useSharedValue(1);
@@ -63,6 +64,8 @@ export const ExpressiveSurface = ({
 
     // Selection Pulse Effect (1:1 PixelPlayer logic)
     useEffect(() => {
+        if (isFirstMount.current) return;
+
         if (selected && !disablePulse) {
             // PixelPlayer uses 250ms intervals
             scale.value = withSequence(
@@ -74,6 +77,11 @@ export const ExpressiveSurface = ({
 
     // Neighbor Squeeze Effect (1:1 PixelPlayer logic)
     useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
+
         if (index !== undefined && activeIndex !== undefined && !selected && !disablePulse) {
             const distance = index - activeIndex;
             if (Math.abs(distance) === 1) { // Direct neighbor
