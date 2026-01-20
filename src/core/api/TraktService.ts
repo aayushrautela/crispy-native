@@ -1,6 +1,15 @@
 import { useUserStore } from '../stores/userStore';
 import { TMDBService } from './TMDBService';
-import { TraktDeviceCodeResponse, TraktPlaybackItem, TraktTokenResponse } from './trakt-types';
+import {
+    TraktCollectionItem,
+    TraktDeviceCodeResponse,
+    TraktPlaybackItem,
+    TraktRatingItem,
+    TraktTokenResponse,
+    TraktWatchedMovie,
+    TraktWatchedShow,
+    TraktWatchlistItem
+} from './trakt-types';
 
 const TRAKT_API_BASE = 'https://api.trakt.tv';
 const TRAKT_CLIENT_ID = process.env.EXPO_PUBLIC_TRAKT_CLIENT_ID || 'd69e855c94e09d57a66164f9b889370773d226a267d344ad161b979f454792eb'; // Fallback or Env
@@ -400,4 +409,100 @@ export class TraktService {
             return null;
         }
     }
+
+    // --- Library Fetchers ---
+
+    static async getWatchlist(): Promise<TraktPlaybackItem[]> {
+        if (!this.auth.accessToken) return [];
+        try {
+            const res = await fetch(`${TRAKT_API_BASE}/sync/watchlist?extended=images,full`, { headers: this.headers });
+            const items: TraktWatchlistItem[] = await res.json();
+            return items.map(item => this.hydrateLibraryItem(item, item.listed_at));
+        } catch (e) {
+            console.error('Trakt getWatchlist error', e);
+            return [];
+        }
+    }
+
+    static async getWatched(): Promise<TraktPlaybackItem[]> {
+        if (!this.auth.accessToken) return [];
+        try {
+            const movieRes = await fetch(`${TRAKT_API_BASE}/sync/watched/movies?extended=images,full`, { headers: this.headers });
+            const movies: TraktWatchedMovie[] = await movieRes.json();
+
+            const showRes = await fetch(`${TRAKT_API_BASE}/sync/watched/shows?extended=images,full`, { headers: this.headers });
+            const shows: TraktWatchedShow[] = await showRes.json();
+
+            const items = [
+                ...movies.map(m => ({ movie: m.movie, type: 'movie' as const, paused_at: m.last_watched_at })),
+                ...shows.map(s => ({ show: s.show, type: 'episode' as const, paused_at: s.last_watched_at }))
+            ];
+
+            return items.map(item => this.hydrateLibraryItem(item, item.paused_at));
+        } catch (e) {
+            console.error('Trakt getWatched error', e);
+            return [];
+        }
+    }
+
+    static async getCollection(): Promise<TraktPlaybackItem[]> {
+        if (!this.auth.accessToken) return [];
+        try {
+            const res = await fetch(`${TRAKT_API_BASE}/sync/collection/movies?extended=images,full`, { headers: this.headers });
+            const movies: TraktCollectionItem[] = await res.json();
+
+            const showRes = await fetch(`${TRAKT_API_BASE}/sync/collection/shows?extended=images,full`, { headers: this.headers });
+            const shows: TraktCollectionItem[] = await showRes.json();
+
+            const items = [
+                ...movies.map(m => ({ movie: m.movie, type: 'movie' as const, paused_at: m.collected_at })),
+                ...shows.map(s => ({ show: s.show, type: 'episode' as const, paused_at: s.last_collected_at || s.collected_at }))
+            ];
+
+            return items.map(item => this.hydrateLibraryItem(item, item.paused_at));
+        } catch (e) {
+            console.error('Trakt getCollection error', e);
+            return [];
+        }
+    }
+
+    static async getRated(): Promise<TraktPlaybackItem[]> {
+        if (!this.auth.accessToken) return [];
+        try {
+            const res = await fetch(`${TRAKT_API_BASE}/sync/ratings?extended=images,full`, { headers: this.headers });
+            const items: TraktRatingItem[] = await res.json();
+            return items.map(item => this.hydrateLibraryItem(item, item.rated_at));
+        } catch (e) {
+            console.error('Trakt getRated error', e);
+            return [];
+        }
+    }
+
+    private static hydrateLibraryItem(item: any, timestamp: string): TraktPlaybackItem {
+        const type = item.type === 'show' ? 'episode' : item.type;
+        const media = item.movie || item.show;
+        const ids = media?.ids;
+        const id = ids?.imdb || (ids?.tmdb ? `tmdb:${ids.tmdb}` : String(ids?.trakt || ''));
+
+        let poster = media?.images?.poster?.[0];
+        if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
+
+        return {
+            id: ids?.trakt || Math.random(),
+            progress: 0,
+            paused_at: timestamp,
+            type: type,
+            movie: item.movie,
+            show: item.show,
+            meta: {
+                id: id,
+                name: media?.title || 'Unknown',
+                poster: poster,
+                year: media?.year?.toString(),
+                genres: media?.genres,
+                rating: media?.rating?.toFixed(1),
+            }
+        };
+    }
 }
+

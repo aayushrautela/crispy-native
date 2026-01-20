@@ -2,6 +2,7 @@ import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSh
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
+import { EmptyState } from '@/src/components/EmptyState';
 import { AddonService, MetaPreview } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -202,13 +203,11 @@ export default function DiscoverScreen() {
                     showsVerticalScrollIndicator={false}
                 />
             ) : (
-                <View style={styles.emptyContainer}>
-                    <View style={[styles.emptyIcon, { backgroundColor: theme.colors.surfaceContainerHighest }]}>
-                        <Filter size={32} color={theme.colors.onSurfaceVariant} />
-                    </View>
-                    <Typography variant="title-large" weight="bold" style={{ marginTop: 24, color: theme.colors.onSurface }}>No results found</Typography>
-                    <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>Try adjusting your filters.</Typography>
-                </View>
+                <EmptyState
+                    icon={Filter}
+                    title="No results found"
+                    description="Try adjusting your filters."
+                />
             )}
 
             {/* Header */}
@@ -457,18 +456,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 100,
-    },
-    emptyContainer: {
-        flex: 1,
-        paddingTop: 200,
-        alignItems: 'center',
-    },
-    emptyIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     sheetContent: {
         paddingHorizontal: 24,

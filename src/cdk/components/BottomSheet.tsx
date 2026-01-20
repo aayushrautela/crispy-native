@@ -49,6 +49,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             backdropComponent={renderBackdrop}
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleStyle}
+            enablePanDownToClose={true}
         >
             <View style={styles.container}>
                 {title && (

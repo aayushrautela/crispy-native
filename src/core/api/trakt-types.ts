@@ -106,3 +106,59 @@ export interface TraktPlaybackItem {
         episodeTitle?: string;
     };
 }
+
+export interface TraktWatchedMovie {
+    plays: number;
+    last_watched_at: string;
+    last_updated_at: string;
+    movie: TraktMediaItem;
+}
+
+export interface TraktWatchedShow {
+    plays: number;
+    last_watched_at: string;
+    last_updated_at: string;
+    reset_at: string | null;
+    show: TraktMediaItem;
+    seasons: {
+        number: number;
+        episodes: {
+            number: number;
+            plays: number;
+            last_watched_at: string;
+        }[];
+    }[];
+}
+
+export interface TraktWatchlistItem {
+    rank: number;
+    id: number;
+    listed_at: string;
+    notes: string | null;
+    type: 'movie' | 'show';
+    movie?: TraktMediaItem;
+    show?: TraktMediaItem;
+}
+
+export interface TraktCollectionItem {
+    collected_at: string;
+    updated_at: string;
+    type: 'movie' | 'show';
+    movie?: TraktMediaItem;
+    show?: TraktMediaItem;
+    last_collected_at?: string;
+}
+
+export interface TraktRatingItem {
+    rated_at: string;
+    rating: number;
+    type: 'movie' | 'show' | 'episode';
+    movie?: TraktMediaItem;
+    show?: TraktMediaItem;
+    episode?: {
+        season: number;
+        number: number;
+        title: string;
+        ids: any;
+    };
+}

@@ -3,6 +3,7 @@ import { Touchable } from '@/src/cdk/components/Touchable';
 import { Typography } from '@/src/cdk/components/Typography';
 import { CatalogCard } from '@/src/components/CatalogCard';
 import { CatalogRow } from '@/src/components/CatalogRow';
+import { EmptyState } from '@/src/components/EmptyState';
 import { AddonService } from '@/src/core/api/AddonService';
 import { TMDBService } from '@/src/core/api/TMDBService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
@@ -175,55 +176,53 @@ export default function SearchScreen() {
             style={[styles.container, { backgroundColor: theme.colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-            <Animated.FlatList
-                key={numColumns}
-                data={results?.tmdb || []}
-                keyExtractor={(item, index) => `${item.id}-${index}`}
-                numColumns={numColumns}
-                onScroll={onScroll}
-                scrollEventThrottle={16}
-                showsVerticalScrollIndicator={false}
-                ListHeaderComponent={() => (
-                    <>
-                        <View style={{ height: HEADER_HEIGHT + 16 }} />
-                        {results?.addonGroups?.map((group, idx) => (
-                            <View key={`${group.addonName}-${idx}`} style={styles.addonSection}>
-                                <CatalogRow
-                                    title={`${group.addonName}${group.catalogName ? ` - ${group.catalogName}` : ''}`}
-                                    items={group.metas}
-                                />
-                            </View>
-                        ))}
-                    </>
-                )}
-                contentContainerStyle={styles.listContent}
-                columnWrapperStyle={[styles.columnWrapper, { gap }]}
-                renderItem={({ item }) => (
-                    <View style={{ width: itemWidth }}>
-                        <CatalogCard item={item} width={itemWidth} />
-                    </View>
-                )}
-                ListEmptyComponent={() => !isLoading && query.length > 2 && (
-                    <View style={styles.empty}>
-                        <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
-                            <Info size={32} color={theme.colors.onSurfaceVariant} />
+            {isLoading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                </View>
+            ) : results?.tmdb?.length > 0 || results?.addonGroups?.length > 0 ? (
+                <Animated.FlatList
+                    key={numColumns}
+                    data={results?.tmdb || []}
+                    keyExtractor={(item, index) => `${item.id}-${index}`}
+                    numColumns={numColumns}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                    ListHeaderComponent={() => (
+                        <>
+                            <View style={{ height: HEADER_HEIGHT + 16 }} />
+                            {results?.addonGroups?.map((group, idx) => (
+                                <View key={`${group.addonName}-${idx}`} style={styles.addonSection}>
+                                    <CatalogRow
+                                        title={`${group.addonName}${group.catalogName ? ` - ${group.catalogName}` : ''}`}
+                                        items={group.metas}
+                                    />
+                                </View>
+                            ))}
+                        </>
+                    )}
+                    contentContainerStyle={styles.listContent}
+                    columnWrapperStyle={[styles.columnWrapper, { gap }]}
+                    renderItem={({ item }) => (
+                        <View style={{ width: itemWidth }}>
+                            <CatalogCard item={item} width={itemWidth} />
                         </View>
-                        <Typography variant="body" className="text-zinc-500 mt-4">
-                            No results found for "{query}"
-                        </Typography>
-                    </View>
-                )}
-                ListFooterComponent={() => query.length <= 2 && (
-                    <View style={styles.empty}>
-                        <View style={[styles.infoIcon, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
-                            <SearchIcon size={32} color={theme.colors.onSurfaceVariant} />
-                        </View>
-                        <Typography variant="body" className="text-zinc-500 mt-4">
-                            Search across TMDB and all your addons
-                        </Typography>
-                    </View>
-                )}
-            />
+                    )}
+                />
+            ) : query.length > 2 ? (
+                <EmptyState
+                    icon={Info}
+                    title="No results found"
+                    description={`No results found for "${query}"`}
+                />
+            ) : (
+                <EmptyState
+                    icon={SearchIcon}
+                    title="Search"
+                    description="Search across TMDB and all your addons"
+                />
+            )}
             {renderHeader()}
         </KeyboardAvoidingView>
     );
@@ -286,16 +285,10 @@ const styles = StyleSheet.create({
     addonSection: {
         marginBottom: 12,
     },
-    empty: {
+    loadingContainer: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
         paddingTop: 100,
     },
-    infoIcon: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    }
 });

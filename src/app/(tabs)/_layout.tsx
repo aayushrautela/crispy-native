@@ -1,10 +1,14 @@
+import { MaterialNavigationRail } from '@/src/cdk/layout/MaterialNavigationRail';
+import { SplitTabBar } from '@/src/cdk/layout/SplitTabBar';
+import { useTheme } from '@/src/core/ThemeContext';
 import { Tabs } from 'expo-router';
+import { Compass, Home, Library, Search, Settings as SettingsIcon } from 'lucide-react-native';
 import React from 'react';
 import { useWindowDimensions } from 'react-native';
-import { SplitTabBar } from '@/src/cdk/layout/SplitTabBar';
-import { MaterialNavigationRail } from '@/src/cdk/layout/MaterialNavigationRail';
-import { Home, Search, Compass, Library, Settings as SettingsIcon } from 'lucide-react-native';
-import { useTheme } from '@/src/core/ThemeContext';
+
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 export default function TabLayout() {
   const { width } = useWindowDimensions();
@@ -14,8 +18,10 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={(props) => isTablet ? <MaterialNavigationRail {...props} /> : <SplitTabBar {...props} />}
+      backBehavior="firstRoute"
       screenOptions={{
         headerShown: false,
+        animation: 'fade',
         tabBarStyle: isTablet ? {
           position: 'absolute',
           left: 0,
@@ -66,3 +72,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
