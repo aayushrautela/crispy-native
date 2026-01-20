@@ -18,6 +18,7 @@ Codebase mapping complete.
 - Replaced all 10 occurrences of standard `ActivityIndicator` with native `LoadingIndicator`.
 - Integrated Material Expressive loading animations into screens (Player, Catalog, Person, Library, Discover, Search).
 - Updated CDK components (`ExpressiveButton`) to use the new premium loading indicator.
+- Removed boilerplate `explore.tsx` tab to clean up navigation bar.
 
 ## Next Steps
 - Implement "See All" for Continue Watching if needed.
