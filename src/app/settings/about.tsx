@@ -66,7 +66,6 @@ export default function AboutScreen() {
 
 const styles = StyleSheet.create({
     header: {
-        itemsCenter: 'center',
         paddingVertical: 32,
         alignItems: 'center',
     },

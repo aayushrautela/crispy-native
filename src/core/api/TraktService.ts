@@ -99,29 +99,28 @@ export class TraktService {
             const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
             const resultItems: TraktPlaybackItem[] = [];
 
-            // STEP 1: Process playback progress items
+            // STEP 1: Process playback progress items (Parallelized)
             const sortedPlayback = [...playbackItems]
                 .sort((a: any, b: any) => new Date(b.paused_at).getTime() - new Date(a.paused_at).getTime())
                 .slice(0, 30);
 
-            for (const item of sortedPlayback) {
-                if (item.progress < 2) continue;
+            const playbackResults = await Promise.all(sortedPlayback.map(async (item) => {
+                if (item.progress < 2) return null;
                 const pausedAt = new Date(item.paused_at).getTime();
-                if (pausedAt < thirtyDaysAgo) continue;
+                if (pausedAt < thirtyDaysAgo) return null;
 
                 const type = item.type;
                 const media = type === 'movie' ? item.movie : item.show;
-                if (!media) continue;
+                if (!media) return null;
 
                 const ids = media.ids;
                 const id = ids.imdb || (ids.tmdb ? `tmdb:${ids.tmdb}` : undefined);
-                if (!id) continue;
+                if (!id) return null;
 
                 let poster = media.images?.poster?.[0];
                 let background = media.images?.fanart?.[0];
                 let logo = media.images?.logo?.[0];
 
-                // Safe prefixing for Trakt images
                 if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
                 if (background && !background.startsWith('http')) background = `https://${background}`;
                 if (logo && !logo.startsWith('http')) logo = `https://${logo}`;
@@ -156,8 +155,8 @@ export class TraktService {
                 const resultTmdbId = meta?.tmdbId;
 
                 if (type === 'movie') {
-                    if (item.progress >= 85) continue;
-                    resultItems.push({
+                    if (item.progress >= 85) return null;
+                    return {
                         ...item,
                         meta: {
                             id: id,
@@ -170,13 +169,13 @@ export class TraktService {
                             rating: rating,
                             description: description
                         }
-                    });
+                    };
                 } else if (type === 'episode' && item.show && item.episode) {
                     const showImdb = item.show.ids.imdb;
                     if (item.progress >= 85 && showImdb) {
                         const nextEp = await this.findNextEpisodeFromTMDB(showImdb, item.episode.season, item.episode.number);
                         if (nextEp) {
-                            resultItems.push({
+                            return {
                                 ...item,
                                 progress: 0,
                                 episode: {
@@ -199,11 +198,11 @@ export class TraktService {
                                     episodeTitle: nextEp.title,
                                     airDate: nextEp.airDate
                                 }
-                            });
+                            };
                         }
-                        continue;
+                        return null;
                     }
-                    resultItems.push({
+                    return {
                         ...item,
                         meta: {
                             id: id,
@@ -218,25 +217,28 @@ export class TraktService {
                             episodeTitle: episodeTitle,
                             airDate: episodeAirDate
                         }
-                    });
+                    };
                 }
-            }
+                return null;
+            }));
 
-            // STEP 2: Process watched shows (Up Next)
+            resultItems.push(...playbackResults.filter((r): r is TraktPlaybackItem => r !== null));
+
+            // STEP 2: Process watched shows (Up Next) (Parallelized)
             const sortedWatched = [...watchedShows]
                 .sort((a: any, b: any) => new Date(b.last_watched_at).getTime() - new Date(a.last_watched_at).getTime())
                 .slice(0, 20);
 
-            for (const watchedShow of sortedWatched) {
+            const watchedResults = await Promise.all(sortedWatched.map(async (watchedShow) => {
                 try {
-                    if (!watchedShow.show?.ids?.imdb && !watchedShow.show?.ids?.tmdb) continue;
+                    if (!watchedShow.show?.ids?.imdb && !watchedShow.show?.ids?.tmdb) return null;
                     const lastWatchedAt = new Date(watchedShow.last_watched_at).getTime();
-                    if (lastWatchedAt < thirtyDaysAgo) continue;
+                    if (lastWatchedAt < thirtyDaysAgo) return null;
 
                     const showImdb = watchedShow.show.ids.imdb;
                     const showIds = watchedShow.show.ids;
                     const id = showIds.imdb || (showIds.tmdb ? `tmdb:${showIds.tmdb}` : undefined);
-                    if (!id) continue;
+                    if (!id) return null;
 
                     let lastWatchedSeason = 0;
                     let lastWatchedEpisode = 0;
@@ -256,16 +258,15 @@ export class TraktService {
                         }
                     }
 
-                    if (lastWatchedSeason === 0 && lastWatchedEpisode === 0) continue;
+                    if (lastWatchedSeason === 0 && lastWatchedEpisode === 0) return null;
 
                     const nextEp = await this.findNextEpisodeFromTMDB(showImdb, lastWatchedSeason, lastWatchedEpisode);
-                    if (!nextEp) continue;
+                    if (!nextEp) return null;
 
                     let poster = watchedShow.show.images?.poster?.[0];
                     let background = watchedShow.show.images?.fanart?.[0];
                     let logo = watchedShow.show.images?.logo?.[0];
 
-                    // Safe prefixing for Trakt images
                     if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
                     if (background && !background.startsWith('http')) background = `https://${background}`;
                     if (logo && !logo.startsWith('http')) logo = `https://${logo}`;
@@ -284,7 +285,6 @@ export class TraktService {
                         rating = meta.rating;
                         description = meta.description;
 
-                        // Get next episode specific thumbnail if possible
                         if (meta.tmdbId) {
                             const episodes = await TMDBService.getSeasonEpisodes(meta.tmdbId, nextEp.season);
                             const found = episodes.find(e => e.episode === nextEp.episode);
@@ -294,11 +294,11 @@ export class TraktService {
 
                     const resultTmdbId = meta?.tmdbId;
 
-                    resultItems.push({
+                    return {
                         id: Math.floor(Math.random() * 1000000), // temp id
                         progress: 0,
                         paused_at: watchedShow.last_watched_at,
-                        type: 'episode',
+                        type: 'episode' as const,
                         show: watchedShow.show,
                         episode: {
                             season: nextEp.season,
@@ -319,9 +319,11 @@ export class TraktService {
                             episodeTitle: nextEp.title,
                             airDate: nextEp.airDate
                         }
-                    });
-                } catch (e) { }
-            }
+                    };
+                } catch (e) { return null; }
+            }));
+
+            resultItems.push(...watchedResults.filter((r): r is TraktPlaybackItem => r !== null));
 
             // Deduplicate
             const deduped = new Map<string, TraktPlaybackItem>();

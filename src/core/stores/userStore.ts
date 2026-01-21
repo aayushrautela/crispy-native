@@ -92,11 +92,18 @@ function getDefaultSettings(): AppSettings {
 }
 
 function getDefaultAddons(): Addon[] {
-    return [{
-        url: 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibzo6dXM6MTc2Njk2NjU3MDcwNA%3D%3D/manifest.json',
-        enabled: true,
-        name: 'Streaming Catalogs'
-    }];
+    return [
+        {
+            url: 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGRucCxhbXAsYXRwLGhibzo6dXM6MTc2Njk2NjU3MDcwNA%3D%3D/manifest.json',
+            enabled: true,
+            name: 'Streaming Catalogs'
+        },
+        {
+            url: 'https://opensubtitles-v3.strem.io/manifest.json',
+            enabled: true,
+            name: 'OpenSubtitles v3'
+        }
+    ];
 }
 
 const DEFAULT_CATALOG_PREFS: CatalogPreferences = {

@@ -93,8 +93,8 @@ class CrispyNativeCoreModule : Module() {
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
 
-      AsyncFunction("seek") { view: CrispyVideoView, positionMs: Long ->
-        view.seek(positionMs)
+      AsyncFunction("seek") { view: CrispyVideoView, positionSec: Double ->
+        view.seek(positionSec)
       }
 
       AsyncFunction("setAudioTrack") { view: CrispyVideoView, trackId: Int ->
@@ -103,6 +103,14 @@ class CrispyNativeCoreModule : Module() {
 
       AsyncFunction("setSubtitleTrack") { view: CrispyVideoView, trackId: Int ->
         view.setSubtitleTrack(trackId)
+      }
+
+      AsyncFunction("addExternalSubtitle") { view: CrispyVideoView, url: String, title: String?, lang: String? ->
+        view.addExternalSubtitle(url, title, lang)
+      }
+
+      AsyncFunction("setSubtitleDelay") { view: CrispyVideoView, delay: Double ->
+        view.setSubtitleDelay(delay)
       }
     }
 

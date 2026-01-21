@@ -1,14 +1,17 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, View } from 'react-native';
 import { Typography } from './Typography';
 
 interface BottomSheetProps {
     title?: string;
     children: React.ReactNode;
-    snapPoints?: string[];
+    snapPoints?: (string | number)[];
     index?: number;
+    scrollable?: boolean;
+    enableDynamicSizing?: boolean;
+    maxHeight?: number;
 }
 
 export type BottomSheetRef = BottomSheetModal;
@@ -16,10 +19,21 @@ export type BottomSheetRef = BottomSheetModal;
 export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     title,
     children,
-    snapPoints = ['45%', '90%'],
-    index = 0
+    snapPoints,
+    index = 0,
+    scrollable = true,
+    enableDynamicSizing = true,
+    maxHeight
 }, ref) => {
     const { theme } = useTheme();
+    const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+    const finalMaxHeight = maxHeight || SCREEN_HEIGHT * 0.7;
+
+    const finalSnapPoints = useMemo(() => {
+        if (enableDynamicSizing) return undefined;
+        return snapPoints || ['50%', '90%'];
+    }, [enableDynamicSizing, snapPoints]);
 
     const renderBackdrop = useCallback(
         (props: any) => (
@@ -45,45 +59,57 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
         <BottomSheetModal
             ref={ref}
             index={index}
-            snapPoints={snapPoints}
+            snapPoints={finalSnapPoints}
+            enableDynamicSizing={enableDynamicSizing}
+            maxDynamicContentSize={finalMaxHeight}
             backdropComponent={renderBackdrop}
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
+            style={styles.modal}
         >
             <View style={styles.container}>
                 {title && (
                     <View style={styles.header}>
                         <Typography
                             variant="display-small"
-                            weight="bold"
+                            weight="black"
                             rounded={true}
                             style={{
                                 color: theme.colors.onSurface,
                                 letterSpacing: -0.5,
-                                fontSize: 34,
+                                fontSize: 32,
                             }}
                         >
                             {title}
                         </Typography>
                     </View>
                 )}
-                <BottomSheetScrollView contentContainerStyle={styles.content}>
-                    {children}
-                </BottomSheetScrollView>
+                {scrollable ? (
+                    <BottomSheetScrollView contentContainerStyle={styles.content}>
+                        {children}
+                    </BottomSheetScrollView>
+                ) : (
+                    <View style={styles.container}>
+                        {children}
+                    </View>
+                )}
             </View>
         </BottomSheetModal>
     );
 });
 
 const styles = StyleSheet.create({
+    modal: {
+        // MD3 sheets are full width on mobile
+    },
     container: {
-        flex: 1,
+        // Removed flex: 1 to allow stable measurement with enableDynamicSizing
     },
     header: {
-        paddingHorizontal: 26,
-        paddingBottom: 24,
-        paddingTop: 24,
+        paddingHorizontal: 20,
+        paddingBottom: 20,
+        paddingTop: 12, // Space from handle
     },
     content: {
         paddingBottom: 40,

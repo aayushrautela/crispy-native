@@ -348,7 +348,7 @@ export default function LibraryScreen() {
             </Animated.View>
 
             {/* Bottom Sheets */}
-            <CustomBottomSheet ref={genreSheetRef} title="Select Genre">
+            <CustomBottomSheet ref={genreSheetRef} title="Select Genre" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {genres.map((g) => {
                         const isSelected = selectedGenre === g.value;
@@ -390,7 +390,7 @@ export default function LibraryScreen() {
                 </View>
             </CustomBottomSheet>
 
-            <CustomBottomSheet ref={sortSheetRef} title="Sort By">
+            <CustomBottomSheet ref={sortSheetRef} title="Sort By" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {SORT_OPTIONS.map((s) => {
                         const isSelected = selectedSort === s.value;

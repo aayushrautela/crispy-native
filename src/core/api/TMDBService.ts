@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { StorageService } from '../storage';
 
 const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -94,6 +95,14 @@ export class TMDBService {
 
         const cacheKey = `${idStr}_${type}`;
         if (metaCache[cacheKey]) return metaCache[cacheKey];
+
+        // 0. Check Persistent Cache
+        const persistentKey = `tmdb_cache_${cacheKey}` as any;
+        const cached = StorageService.getGlobal<Partial<TMDBMeta>>(persistentKey);
+        if (cached) {
+            metaCache[cacheKey] = cached;
+            return cached;
+        }
 
         try {
             const findPath = type === 'movie' ? 'movie' : 'tv';
@@ -310,6 +319,7 @@ export class TMDBService {
             });
 
             metaCache[cacheKey] = enriched;
+            StorageService.setGlobal(persistentKey, enriched);
             return enriched;
         } catch (e) {
             console.error('[TMDBService] Failed to enrich:', stremioId, e);

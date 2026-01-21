@@ -8,7 +8,6 @@ import { MetaPreview } from '@/src/core/api/AddonService';
 import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, ChevronDown, Filter, Star } from 'lucide-react-native';
 import * as React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';
@@ -288,7 +287,7 @@ export default function CatalogScreen() {
             </Animated.View>
 
             {/* Bottom Sheets */}
-            <CustomBottomSheet ref={genreSheetRef} title="Select Genre">
+            <CustomBottomSheet ref={genreSheetRef} title="Select Genre" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {genres.map((g) => {
                         const isSelected = selectedGenre === g.value;
@@ -330,7 +329,7 @@ export default function CatalogScreen() {
                 </View>
             </CustomBottomSheet>
 
-            <CustomBottomSheet ref={ratingSheetRef} title="Filter by Rating">
+            <CustomBottomSheet ref={ratingSheetRef} title="Filter by Rating" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {RATING_OPTIONS.map((r) => {
                         const isSelected = selectedRating === r.value;

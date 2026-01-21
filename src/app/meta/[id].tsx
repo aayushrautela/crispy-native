@@ -212,6 +212,8 @@ export default function MetaDetailsScreen() {
         streamBottomSheetRef.current?.dismiss();
 
         const params: any = {
+            id: getStreamId(),
+            type: isSeries ? 'series' : 'movie',
             url: stream.url,
             title: enriched?.title || meta?.name || 'Video',
         };
@@ -479,7 +481,13 @@ export default function MetaDetailsScreen() {
                 <View style={{ height: 100 }} />
             </Animated.ScrollView>
 
-            <CustomBottomSheet ref={streamBottomSheetRef} title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`} snapPoints={['60%', '90%']}>
+            <CustomBottomSheet
+                ref={streamBottomSheetRef}
+                title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`}
+                scrollable={false}
+                enableDynamicSizing={true}
+                maxHeight={Dimensions.get('window').height * 0.7}
+            >
                 <StreamSelector
                     type={isSeries ? 'series' : 'movie'}
                     id={getStreamId()}

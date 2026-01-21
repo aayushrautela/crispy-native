@@ -20,12 +20,15 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private val surfaceView = TextureView(context)
     private var isMpvInitialized = false
     private var pendingSource: String? = null
-    private var pendingPosition: Long = -1
-    
+    private var pendingPosition: Double = -1.0
+    private var pendingHeaders: Map<String, String>? = null
+    private var isPaused = true // Default to paused until told otherwise
+
     // Track info
-    private var duration: Long = 0
-    private var position: Long = 0
+    private var durationSec: Double = 0.0
+    private var positionSec: Double = 0.0
     private var isSeeking = false
+    private var hasLoadEventFired = false
 
     // Event dispatchers
     val onLoad by EventDispatcher<Map<String, Any>>()
@@ -92,7 +95,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             }
             if (pendingPosition >= 0) {
                 seek(pendingPosition)
-                pendingPosition = -1
+                pendingPosition = -1.0
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize MPV", e)
@@ -117,6 +120,14 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         MPVLib.setOptionString("network-timeout", "60")
         MPVLib.setOptionString("tls-verify", "no")
         MPVLib.setOptionString("http-reconnect", "yes")
+        MPVLib.setOptionString("stream-reconnect", "yes")
+        
+        // Apply headers as options if we have them early
+        pendingHeaders?.let { headers ->
+            val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
+            MPVLib.setOptionString("http-header-fields", headerString)
+        }
+
         // Improve buffer for streaming
         MPVLib.setOptionString("cache", "yes")
         MPVLib.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
@@ -147,31 +158,94 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     // --- MPVLib.EventObserver ---
 
-    override fun eventProperty(property: String) { }
+    override fun eventProperty(property: String) {
+        if (property == "track-list") {
+            parseAndSendTracks()
+        }
+    }
     override fun eventProperty(property: String, value: Long) { }
     override fun eventProperty(property: String, value: Boolean) { 
-        if (property == "eof-reached" && value) {
+        if (property == "eof-reached" && value && !isSeeking) {
             onEnd(Unit)
         }
     }
     override fun eventProperty(property: String, value: String) { }
 
+    private fun parseAndSendTracks() {
+        try {
+            val trackCount = MPVLib.getPropertyInt("track-list/count") ?: 0
+            Log.d(TAG, "Track count: $trackCount")
+            
+            val audioTracks = mutableListOf<Map<String, Any>>()
+            val subtitleTracks = mutableListOf<Map<String, Any>>()
+            
+            for (i in 0 until trackCount) {
+                val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
+                val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
+                val title = MPVLib.getPropertyString("track-list/$i/title") ?: ""
+                val lang = MPVLib.getPropertyString("track-list/$i/lang") ?: ""
+                val codec = MPVLib.getPropertyString("track-list/$i/codec") ?: ""
+                
+                val trackName = when {
+                    title.isNotEmpty() -> title
+                    lang.isNotEmpty() -> lang.uppercase()
+                    else -> "Track $id"
+                }
+                
+                val track = mapOf(
+                    "id" to id,
+                    "name" to trackName,
+                    "language" to lang,
+                    "codec" to codec
+                )
+                
+                when (type) {
+                    "audio" -> audioTracks.add(track)
+                    "sub" -> subtitleTracks.add(track)
+                }
+            }
+            
+            Log.d(TAG, "Sending tracks - Audio: ${audioTracks.size}, Subtitles: ${subtitleTracks.size}")
+            onTracksChanged(mapOf(
+                "audioTracks" to audioTracks,
+                "subtitleTracks" to subtitleTracks
+            ))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing tracks", e)
+        }
+    }
+
     override fun eventProperty(property: String, value: Double) {
         if (property == "time-pos") {
-            position = (value * 1000).toLong()
-            if (!isSeeking && duration > 0) {
-                onProgress(mapOf("position" to position, "duration" to duration))
+            val positionSec = value
+            if (!isSeeking && durationSec > 0) {
+                onProgress(mapOf("position" to positionSec, "duration" to durationSec))
             }
         } else if (property == "duration") {
-            duration = (value * 1000).toLong()
-            onLoad(mapOf("duration" to duration, "width" to 0, "height" to 0))
+            durationSec = value
+            // Fire onLoad only once when we have valid duration and ideally dimensions
+            if (!hasLoadEventFired && durationSec > 0) {
+                val width = MPVLib.getPropertyInt("width") ?: 0
+                val height = MPVLib.getPropertyInt("height") ?: 0
+                if (width > 0 && height > 0) {
+                    hasLoadEventFired = true
+                    onLoad(mapOf("duration" to durationSec, "width" to width, "height" to height))
+                } else if (durationSec > 0) {
+                    // Fallback if dimensions take too long
+                    onLoad(mapOf("duration" to durationSec, "width" to 1920, "height" to 1080))
+                    hasLoadEventFired = true
+                }
+            }
         }
     }
 
     override fun event(eventId: Int) {
         when (eventId) {
            MPVLib.MpvEvent.MPV_EVENT_END_FILE -> onEnd(Unit)
-           // Add track change detection if needed via MPV_EVENT_PROPERTY_CHANGE logic on 'track-list'
+           MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {
+               // Re-sync tracks when file is fully loaded
+               parseAndSendTracks()
+           }
         }
     }
 
@@ -179,8 +253,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private fun loadFile(url: String) {
         Log.d(TAG, "Loading file: $url")
+        hasLoadEventFired = false
         MPVLib.command(arrayOf("loadfile", url))
-        MPVLib.setPropertyString("pause", "no")
+        MPVLib.setPropertyString("pause", if (isPaused) "yes" else "no")
     }
 
     fun setSource(url: String?) {
@@ -194,40 +269,74 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     
     // Headers support for debrid streams
     fun setHeaders(headers: Map<String, String>?) {
-        if (headers.isNullOrEmpty()) return
-        val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
-        if (isMpvInitialized) {
+        pendingHeaders = headers
+        if (isMpvInitialized && !headers.isNullOrEmpty()) {
+            val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
             MPVLib.setOptionString("http-header-fields", headerString)
         }
     }
 
     fun setPaused(paused: Boolean) {
+        isPaused = paused
         if (isMpvInitialized) {
             MPVLib.setPropertyString("pause", if (paused) "yes" else "no")
         }
     }
 
-    fun seek(positionMs: Long) {
+    fun seek(positionSec: Double) {
         if (isMpvInitialized) {
             isSeeking = true
-            val seconds = positionMs / 1000.0
-            MPVLib.command(arrayOf("seek", seconds.toString(), "absolute"))
+            MPVLib.command(arrayOf("seek", positionSec.toString(), "absolute"))
             // Optimization: Assume seek happens instantly for UI purposes or wait for event
             mainHandler.postDelayed({ isSeeking = false }, 500)
         } else {
-            pendingPosition = positionMs
+            pendingPosition = positionSec
         }
     }
     
     fun setAudioTrack(trackId: Int) {
         if (isMpvInitialized) {
-            MPVLib.setPropertyString("aid", trackId.toString())
+            if (trackId == -1) {
+                MPVLib.setPropertyString("aid", "no")
+            } else {
+                MPVLib.setPropertyInt("aid", trackId)
+            }
         }
     }
     
     fun setSubtitleTrack(trackId: Int) {
         if (isMpvInitialized) {
-            MPVLib.setPropertyString("sid", trackId.toString())
+            if (trackId == -1) {
+                MPVLib.setPropertyString("sid", "no")
+                MPVLib.setPropertyString("sub-visibility", "no")
+            } else {
+                MPVLib.setPropertyInt("sid", trackId)
+                MPVLib.setPropertyString("sub-visibility", "yes")
+            }
+        }
+    }
+
+    fun addExternalSubtitle(url: String, title: String? = null, language: String? = null) {
+        if (isMpvInitialized) {
+            // sub-add: [url], [flags], [title], [lang]
+            // flags: "select" to make it active, "auto" to use sub-auto logic
+            val titleStr = title ?: "External"
+            val langStr = language ?: "eng"
+            Log.d(TAG, "Adding external subtitle: $url ($titleStr)")
+            MPVLib.command(arrayOf("sub-add", url, "auto", titleStr, langStr))
+        }
+    }
+    
+    fun setSubtitleVisibility(visible: Boolean) {
+        if (isMpvInitialized) {
+            MPVLib.setPropertyString("sub-visibility", if (visible) "yes" else "no")
+        }
+    }
+
+    fun setSubtitleDelay(delaySec: Double) {
+        if (isMpvInitialized) {
+            Log.d(TAG, "Setting subtitle delay: $delaySec")
+            MPVLib.setPropertyDouble("sub-delay", delaySec)
         }
     }
     

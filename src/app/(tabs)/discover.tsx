@@ -330,7 +330,7 @@ export default function DiscoverScreen() {
             </Animated.View>
 
             {/* Bottom Sheets */}
-            <CustomBottomSheet ref={genreSheetRef} title="Select Genre">
+            <CustomBottomSheet ref={genreSheetRef} title="Select Genre" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {genres.map((g) => {
                         const isSelected = selectedGenre === g.value;
@@ -372,7 +372,7 @@ export default function DiscoverScreen() {
                 </View>
             </CustomBottomSheet>
 
-            <CustomBottomSheet ref={ratingSheetRef} title="Filter by Rating">
+            <CustomBottomSheet ref={ratingSheetRef} title="Filter by Rating" scrollable={true}>
                 <View style={styles.sheetContent}>
                     {RATING_OPTIONS.map((r) => {
                         const isSelected = selectedRating === r.value;

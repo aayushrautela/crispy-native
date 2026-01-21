@@ -18,10 +18,11 @@ export const useAddonStore = create<AddonState>()(
             addonUrls: [],
             manifests: {},
             addAddon: async (url) => {
-                const manifest = await AddonService.fetchManifest(url);
+                const normalizedUrl = AddonService.normalizeAddonUrl(url);
+                const manifest = await AddonService.fetchManifest(normalizedUrl);
                 set((state) => ({
-                    addonUrls: state.addonUrls.includes(url) ? state.addonUrls : [...state.addonUrls, url],
-                    manifests: { ...state.manifests, [url]: manifest }
+                    addonUrls: state.addonUrls.includes(normalizedUrl) ? state.addonUrls : [...state.addonUrls, normalizedUrl],
+                    manifests: { ...state.manifests, [normalizedUrl]: manifest }
                 }));
             },
             removeAddon: (url) => set((state) => {

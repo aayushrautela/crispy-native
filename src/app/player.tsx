@@ -8,6 +8,8 @@ import { SettingsTab } from '@/src/components/player/tabs/SettingsTab';
 import { StreamsTab } from '@/src/components/player/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/components/player/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
+import { AddonService } from '@/src/core/api/AddonService';
+import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -24,7 +26,7 @@ import {
     StepBack,
     StepForward
 } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
@@ -41,7 +43,7 @@ type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info
 
 export default function PlayerScreen() {
     const params = useLocalSearchParams();
-    const { url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam } = params;
+    const { id, type, url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam } = params;
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
@@ -65,8 +67,20 @@ export default function PlayerScreen() {
     // Tracks State
     const [audioTracks, setAudioTracks] = useState<any[]>([]);
     const [subtitleTracks, setSubtitleTracks] = useState<any[]>([]);
-    const [selectedAudioId, setSelectedAudioId] = useState<number | string>(0); // Default to first?
-    const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | string | null>(null); // Default to Off
+    const [externalSubtitles, setExternalSubtitles] = useState<any[]>([]);
+    const [subtitleDelay, setSubtitleDelay] = useState(0);
+
+    // Combine embedded and external subtitles for the UI
+    const allSubtitleTracks = useMemo(() => {
+        const combined = [
+            ...subtitleTracks.map(t => ({ ...t, isExternal: false })),
+            ...externalSubtitles.map(t => ({ ...t, isExternal: true }))
+        ];
+        console.log(`[Player] Combined ${combined.length} subtitle tracks (${subtitleTracks.length} embedded, ${externalSubtitles.length} external)`);
+        return combined;
+    }, [subtitleTracks, externalSubtitles]);
+    const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<{ type: 'index' | 'language' | 'title' | 'disabled', value?: number | string }>({ type: 'disabled' });
+    const [selectedAudioTrack, setSelectedAudioTrack] = useState<{ type: 'index', value: number } | undefined>();
 
     // Gesture & Feedback State
     const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
@@ -108,6 +122,8 @@ export default function PlayerScreen() {
         }
     }, [headersParam]);
 
+    const { manifests } = useAddonStore(); // Use addonStore instead of userStore
+
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
@@ -121,6 +137,7 @@ export default function PlayerScreen() {
             setLoading(true);
             setFinalUrl(null); // Clear previous URL to ensure reload/feedback
             setStableDuration(0); // Reset duration for new stream
+            setExternalSubtitles([]); // Clear previous subtitles
 
             // 1. Magnet link or infoHash -> Torrent
             if (currentUrl?.startsWith('magnet:') || currentInfoHash) {
@@ -140,20 +157,59 @@ export default function PlayerScreen() {
             else {
                 if (isMounted) setFinalUrl(currentUrl);
             }
+
+            // 3. Fetch External Subtitles (Addon-based)
+            if (isMounted && id && type) {
+                try {
+                    const addonUrls = Object.keys(manifests);
+                    // console.log(`[Player] Fetching external subs for ${type}/${id}. Addons: ${addonUrls.length}`);
+                    const subs = await AddonService.fetchAllSubtitles(addonUrls, type as string, id as string);
+                    // console.log(`[Player] fetchAllSubtitles returned ${subs.length} results`);
+                    if (isMounted) {
+                        setExternalSubtitles(subs.map((s, i) => ({
+                            id: `external-${i}`,
+                            title: s.name || s.lang || 'External',
+                            language: s.lang,
+                            url: s.url,
+                            isExternal: true,
+                            addonName: s.addonName // Pass addonName for UI
+                        })));
+                    }
+                } catch (e) {
+                    console.error("[Player] Failed to fetch external subtitles", e);
+                }
+            }
+
             setLoading(false);
         };
 
         resolve();
         return () => { isMounted = false; };
-    }, [url, infoHash, fileIdx, activeStream]); // Re-run when activeStream changes
+    }, [url, infoHash, fileIdx, activeStream, id, type]); // Re-run when activeStream or content changes
 
     useEffect(() => {
         // Lock to landscape
-        SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.LANDSCAPE);
+        const lock = async () => {
+            try {
+                await SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.LANDSCAPE);
+            } catch (e) {
+                console.warn("[Player] Failed to lock orientation:", e);
+            }
+        };
+
+        lock();
         StatusBar.setHidden(true);
 
         return () => {
-            SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.PORTRAIT_UP);
+            const unlock = async () => {
+                try {
+                    await SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.PORTRAIT_UP);
+                } catch (e) {
+                    console.warn("[Player] Failed to unlock orientation:", e);
+                }
+            };
+
+            unlock();
             StatusBar.setHidden(false);
         };
     }, []);
@@ -204,8 +260,8 @@ export default function PlayerScreen() {
             const totalDelta = direction === 'forward' ? newAmount : -newAmount;
             const targetPos = Math.max(0, Math.min(stableDuration || progress.duration, seekBasePosition.current + totalDelta));
 
-            // Convert to milliseconds for the player
-            videoRef.current?.seek(targetPos * 1000);
+            // Seek expects seconds
+            videoRef.current?.seek(targetPos);
             setProgress(p => ({ ...p, position: targetPos }));
 
             return { amount: newAmount, direction };
@@ -281,6 +337,14 @@ export default function PlayerScreen() {
                     headers={headers}
                     paused={paused}
                     useExoPlayer={useExoPlayer}
+                    selectedAudioTrack={selectedAudioTrack}
+                    selectedTextTrack={selectedSubtitleTrack}
+                    subtitleDelay={subtitleDelay}
+                    externalSubtitles={externalSubtitles.map(s => ({
+                        url: s.url,
+                        title: s.title,
+                        language: s.language
+                    }))}
                     onCodecError={handleCodecError}
                     onTracksChanged={(data) => {
                         console.log("Tracks changed", data);
@@ -311,7 +375,12 @@ export default function PlayerScreen() {
                             setResumePosition(null); // Consumed
                         }
                     }}
-                    onEnd={() => router.back()}
+                    onEnd={() => {
+                        // Only exit if we are not loading a new stream
+                        if (!loading) {
+                            router.back();
+                        }
+                    }}
                     onError={(e) => console.error("Playback error", e.message)}
                 />
             ) : (
@@ -390,8 +459,8 @@ export default function PlayerScreen() {
                                     const { pageX } = e.nativeEvent;
                                     const percentage = Math.max(0, Math.min(1, pageX / width));
                                     const targetPos = (stableDuration || progress.duration) * percentage;
-                                    // Convert to milliseconds for the player
-                                    videoRef.current?.seek(targetPos * 1000);
+                                    // Seek expects seconds
+                                    videoRef.current?.seek(targetPos);
                                     resetControlsTimer();
                                     setProgress(p => ({ ...p, position: targetPos }));
                                 }}
@@ -399,8 +468,8 @@ export default function PlayerScreen() {
                                     const { pageX } = e.nativeEvent;
                                     const percentage = Math.max(0, Math.min(1, pageX / width));
                                     const targetPos = (stableDuration || progress.duration) * percentage;
-                                    // Convert to milliseconds for the player
-                                    videoRef.current?.seek(targetPos * 1000);
+                                    // Seek expects seconds
+                                    videoRef.current?.seek(targetPos);
                                     resetControlsTimer();
                                     setProgress(p => ({ ...p, position: targetPos }));
                                 }}
@@ -506,21 +575,32 @@ export default function PlayerScreen() {
                     {activeTab === 'audio' && (
                         <AudioTab
                             tracks={audioTracks}
-                            selectedTrackId={selectedAudioId}
+                            selectedTrackId={selectedAudioTrack?.value as number}
                             onSelectTrack={(track) => {
-                                videoRef.current?.setAudioTrack?.(Number(track.id));
-                                setSelectedAudioId(track.id);
+                                setSelectedAudioTrack({ type: 'index', value: Number(track.id) });
                                 setActiveTab('none');
                             }}
                         />
                     )}
                     {activeTab === 'subtitles' && (
                         <SubtitlesTab
-                            tracks={subtitleTracks}
-                            selectedTrackId={selectedSubtitleId}
+                            tracks={allSubtitleTracks}
+                            selectedTrackId={
+                                selectedSubtitleTrack.type === 'disabled' ? 'off' :
+                                    selectedSubtitleTrack.type === 'index' ? selectedSubtitleTrack.value :
+                                        selectedSubtitleTrack.value // For titles/other IDs
+                            }
+                            delay={subtitleDelay}
+                            onUpdateDelay={setSubtitleDelay}
                             onSelectTrack={(track) => {
-                                videoRef.current?.setSubtitleTrack?.(Number(track?.id ?? -1));
-                                setSelectedSubtitleId(track?.id ?? null);
+                                if (!track) {
+                                    setSelectedSubtitleTrack({ type: 'disabled' });
+                                } else if (track.isExternal) {
+                                    // For external, we select by title/id which we'll handle in VideoSurface
+                                    setSelectedSubtitleTrack({ type: 'title', value: track.title });
+                                } else {
+                                    setSelectedSubtitleTrack({ type: 'index', value: track.id as number });
+                                }
                                 setActiveTab('none');
                             }}
                         />
@@ -551,14 +631,6 @@ export default function PlayerScreen() {
                                     setHeaders(undefined);
                                 }
 
-                                // Update Active Stream (triggers resolve effect)
-                                setActiveStream({
-                                    url: stream.url,
-                                    infoHash: stream.infoHash,
-                                    fileIdx: stream.fileIdx
-                                });
-
-                                setActiveTab('none');
                             }}
                         />
                     )}

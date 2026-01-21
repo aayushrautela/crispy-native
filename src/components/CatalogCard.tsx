@@ -1,7 +1,7 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
 import { MetaPreview } from '@/src/core/api/AddonService';
-import { TMDBMeta, TMDBService } from '@/src/core/api/TMDBService';
+import { TMDBMeta } from '@/src/core/api/TMDBService';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -24,12 +24,15 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const [meta, setMeta] = useState<Partial<TMDBMeta>>({});
 
     useEffect(() => {
-        // Hydrate if images are missing OR if it's a generic item
+        // DISABLED AS REQUESTED: No automatic TMDB hydration for catalog cards.
+        // We only use cached metadata or data provided by the parent.
+        /*
         const needsHydration = !item.poster || (item.posterShape === 'landscape' && !item.backdrop) || !item.logo;
 
         if ((item.type === 'movie' || item.type === 'series') && (needsHydration || !item.poster)) {
             TMDBService.getEnrichedMeta(item.id, item.type as any).then(setMeta);
         }
+        */
     }, [item.id, item.type, item.poster, item.backdrop, item.logo, item.posterShape]);
 
     const aspectRatio = item.posterShape === 'landscape' ? 16 / 9 : item.posterShape === 'square' ? 1 : 2 / 3;
@@ -103,11 +106,11 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                     )}
 
                     {/* Rating Overlay */}
-                    {(meta.rating || (item as any).rating) && (
+                    {(item.imdbRating || item.rating || meta.rating) && (
                         <View style={styles.ratingOverlay}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
                             <Typography variant="label-small" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                                {meta.rating || (item as any).rating}
+                                {item.imdbRating || item.rating || meta.rating}
                             </Typography>
                         </View>
                     )}

@@ -4,10 +4,11 @@ import { Typography } from '@/src/cdk/components/Typography';
 import { AddonService } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useQuery } from '@tanstack/react-query';
 import { Cpu, Globe, Play } from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ListRenderItem, StyleSheet, View } from 'react-native';
 
 interface StreamSelectorProps {
     type: string;
@@ -108,6 +109,51 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         );
     };
 
+    const renderItem: ListRenderItem<any> = ({ item, index }) => {
+        if (!item) return null;
+
+        const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
+        const subtitle = item.title || item.description || "";
+
+        const isTorrent = !!item.infoHash;
+        const isYT = !!item.ytId;
+
+        return (
+            <View style={{ paddingHorizontal: hideHeader ? 20 : 24, marginBottom: 12 }}>
+                <ExpressiveSurface
+                    variant="tonal"
+                    rounding="xl"
+                    onPress={() => onSelect(item)}
+                    style={styles.streamItem}
+                >
+                    <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceContainer }]}>
+                        {isTorrent ? (
+                            <Cpu size={22} color={theme.colors.primary} />
+                        ) : isYT ? (
+                            <Globe size={22} color={"#FF0000"} />
+                        ) : (
+                            <Globe size={22} color={theme.colors.secondary} />
+                        )}
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
+                                {mainTitle}
+                            </Typography>
+                            {renderBadges(subtitle)}
+                        </View>
+                        <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
+                            {subtitle}
+                        </Typography>
+                    </View>
+                    <View style={[styles.playButton, { backgroundColor: theme.colors.primary + '15' }]}>
+                        <Play size={16} color={theme.colors.primary} fill={theme.colors.primary} />
+                    </View>
+                </ExpressiveSurface>
+            </View>
+        );
+    };
+
     if (isLoading) {
         return (
             <View style={styles.loading}>
@@ -129,66 +175,25 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 </View>
             )}
 
-            {(!streams || streams.length === 0) ? (
-                <View style={styles.empty}>
-                    <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
-                        No streams found for this content. Try adding more addons in Settings.
-                    </Typography>
-                </View>
-            ) : (
-                <View style={{ gap: 12, paddingHorizontal: hideHeader ? 0 : 24 }}>
-                    {(streams || []).map((item, index) => {
-                        if (!item) return null;
-
-                        const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
-                        const subtitle = item.title || item.description || "";
-
-                        const isTorrent = !!item.infoHash;
-                        const isYT = !!item.ytId;
-
-                        return (
-                            <ExpressiveSurface
-                                key={index}
-                                variant="tonal"
-                                rounding="xl"
-                                onPress={() => onSelect(item)}
-                                style={styles.streamItem}
-                            >
-                                <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceContainer }]}>
-                                    {isTorrent ? (
-                                        <Cpu size={22} color={theme.colors.primary} />
-                                    ) : isYT ? (
-                                        <Globe size={22} color={"#FF0000"} />
-                                    ) : (
-                                        <Globe size={22} color={theme.colors.secondary} />
-                                    )}
-                                </View>
-                                <View style={{ flex: 1, gap: 2 }}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
-                                            {mainTitle}
-                                        </Typography>
-                                        {renderBadges(subtitle)}
-                                    </View>
-                                    <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
-                                        {subtitle}
-                                    </Typography>
-                                </View>
-                                <View style={[styles.playButton, { backgroundColor: theme.colors.primary + '15' }]}>
-                                    <Play size={16} color={theme.colors.primary} fill={theme.colors.primary} />
-                                </View>
-                            </ExpressiveSurface>
-                        );
-                    })}
-                </View>
-            )}
+            <BottomSheetFlatList
+                data={streams || []}
+                keyExtractor={(item, index) => `${item.url || index}-${index}`}
+                renderItem={renderItem}
+                ListEmptyComponent={
+                    <View style={styles.empty}>
+                        <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+                            No streams found for this content. Try adding more addons in Settings.
+                        </Typography>
+                    </View>
+                }
+                contentContainerStyle={{ paddingBottom: 40 }}
+            />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
         paddingTop: 32,
     },
     loading: {

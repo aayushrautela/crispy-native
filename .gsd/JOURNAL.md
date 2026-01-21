@@ -36,3 +36,14 @@
     - Updated `UserStore` and `SettingsScreen` with MD3 Expressive UI for AI configuration.
     - Enhanced `ExpressiveButton` with native loading indicators.
 
+
+## Session: Player Stability & UI Refinement (2026-01-21)
+### Summary
+Focused on resolving widespread player instability and refining the bottom sheet interaction model.
+### Decisions
+- Standardized all timing to Double (Seconds) to eliminate unit conversion bugs.
+- Implemented 'Loading' guards on 'onEnd' to prevent premature player closure during stream switching.
+- Refactored Bottom Sheets to use `BottomSheetFlatList` and dynamic sizing for a native MD3 feel.
+- Established a global 70% screen height limit for all bottom sheets to maintain visual balance.
+### Outcome
+Player is stable, seeking is reliable, and UI interactions (especially stream selection) feel fast and native.

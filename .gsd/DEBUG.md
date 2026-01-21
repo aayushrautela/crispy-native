@@ -1,16 +1,11 @@
-# Debug Session: Playback Duration Display
+# Debug Session: Player Instability
 
-## Symptom
-Playback time shows "0:00/0:01" or similar tiny values.
+## Symptoms
+1. **Seeking closes player**: Seeking sometimes triggers `router.back()` (likely via `onEnd`).
+2. **Delayed Start**: Players sometimes don't start playing.
+3. **Crashes during track selection**: Crashes when switching audio/subtitles.
 
-## Resolution
-
-**Root Cause:**
-Incorrect assumption that `react-native-video` and MPV report time in **milliseconds**. They actually report in **seconds**. Dividing by 1000 converted a 3600-second movie into 3.6, hence "0:01".
-
-**Fix:**
--   Removed `/1000` divisions in `onProgress` and `onLoad` in `player.tsx`.
--   Removed `*1000` multiplier in the `videoRef.seek()` call (since seek also expects seconds).
-
-**Verified:**
--   Code review confirms correct unit handling.
+## Hypotheses
+1. `onEnd` is triggered prematurely during seeks if buffer is empty or `eof-reached` is observed too early.
+2. `seek` and `track selection` methods in `CrispyNativeCoreModule.kt` lack proper null/type safety or are called on uninitialized native state.
+3. Race conditions between `setSource`, `setHeaders`, and MPV initialization.

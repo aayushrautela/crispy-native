@@ -16,6 +16,8 @@ export interface MetaPreview {
     airDate?: string;
     logo?: string;
     genres?: string[];
+    rating?: string;
+    imdbRating?: string;
 }
 
 export interface CatalogResponse {
@@ -29,13 +31,43 @@ export interface ResourceResponse<T> {
 const STREAMING_SERVER_URL = 'http://127.0.0.1:11470';
 
 export class AddonService {
+    static normalizeAddonUrl(url: string): string {
+        const normalized = url.trim();
+
+        if (normalized.startsWith('stremio://')) {
+            return normalized.replace('stremio://', 'https://');
+        }
+
+        if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+            return normalized;
+        }
+
+        return `https://${normalized}`;
+    }
+
+    static manifestToBaseUrl(manifestUrl: string): string {
+        const normalized = this.normalizeAddonUrl(manifestUrl);
+        try {
+            const u = new URL(normalized);
+            // Drop trailing /manifest.json if present (case-insensitive)
+            u.pathname = u.pathname.replace(/\/manifest\.json$/i, '');
+            // Clear search and hash to get a clean base URL
+            u.search = '';
+            u.hash = '';
+            return u.toString().replace(/\/$/, '');
+        } catch (e) {
+            // Fallback if URL parsing fails
+            return normalized.replace(/\/manifest\.json$/i, '').replace(/\/+$/, '');
+        }
+    }
+
     private static getRootUrl(baseUrl: string): string {
-        // Strip manifest.json and any trailing slashes to prevent double slashes
-        return baseUrl.replace(/\/manifest\.json$/, '').replace(/\/+$/, '');
+        return this.manifestToBaseUrl(baseUrl);
     }
 
     static async fetchManifest(url: string): Promise<AddonManifest> {
-        const response = await axios.get<AddonManifest>(url);
+        const normalizedUrl = this.normalizeAddonUrl(url);
+        const response = await axios.get<AddonManifest>(normalizedUrl);
         return response.data;
     }
 
@@ -45,7 +77,7 @@ export class AddonService {
         id: string,
         extra?: Record<string, string | number | boolean | undefined | null>
     ): Promise<CatalogResponse> {
-        let path = `/catalog/${type}/${id}`;
+        let path = `/catalog/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 
         if (extra) {
             // Updated to handle standard Stremio extra formatting
@@ -60,7 +92,7 @@ export class AddonService {
             }
         }
 
-        const url = `${AddonService.getRootUrl(baseUrl)}${path}.json`;
+        const url = `${this.getRootUrl(baseUrl)}${path}.json`;
         console.log(`[AddonService] Fetching catalog: ${url}`);
 
         try {
@@ -74,19 +106,19 @@ export class AddonService {
     }
 
     static async getMeta(baseUrl: string, type: string, id: string): Promise<any> {
-        const url = `${AddonService.getRootUrl(baseUrl)}/meta/${type}/${id}.json`;
+        const url = `${this.getRootUrl(baseUrl)}/meta/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
         const res = await axios.get<any>(url);
         return res.data;
     }
 
     static async search(baseUrl: string, type: string, query: string): Promise<CatalogResponse> {
-        const url = `${AddonService.getRootUrl(baseUrl)}/catalog/${type}/search=${encodeURIComponent(query)}.json`;
+        const url = `${this.getRootUrl(baseUrl)}/catalog/${encodeURIComponent(type)}/search=${encodeURIComponent(query)}.json`;
         const res = await axios.get<CatalogResponse>(url);
         return res.data;
     }
 
     static async getStreams(baseUrl: string, type: string, id: string): Promise<{ streams: any[] }> {
-        const url = `${AddonService.getRootUrl(baseUrl)}/stream/${type}/${encodeURIComponent(id)}.json`;
+        const url = `${this.getRootUrl(baseUrl)}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
         console.log(`[AddonService] getStreams URL: ${url}`);
         try {
             const res = await axios.get<{ streams: any[] }>(url);
@@ -102,13 +134,92 @@ export class AddonService {
     }
 
     static async getSubtitles(baseUrl: string, type: string, id: string): Promise<{ subtitles: any[] }> {
-        const url = `${AddonService.getRootUrl(baseUrl)}/subtitles/${type}/${encodeURIComponent(id)}.json`;
+        const url = `${this.getRootUrl(baseUrl)}/subtitles/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
         try {
             const res = await axios.get<{ subtitles: any[] }>(url);
             return res.data;
         } catch (e) {
             return { subtitles: [] };
         }
+    }
+
+    /**
+     * Fetches subtitles from multiple addons in parallel.
+     * deduplicates by URL.
+     */
+    static async fetchAllSubtitles(addonUrls: string[], type: string, id: string): Promise<any[]> {
+        console.log(`[AddonService] fetchAllSubtitles START: ${type}/${id} from ${addonUrls.length} addons`);
+
+        // 1. Fetch all manifests to see which ones support subtitles
+        const manifestResults = await Promise.allSettled(
+            addonUrls.map(url => this.fetchManifest(url).then(m => ({ manifest: m, baseUrl: url })))
+        );
+
+        const subtitleAddons = manifestResults
+            .filter((r): r is PromiseFulfilledResult<{ manifest: AddonManifest; baseUrl: string }> => {
+                if (r.status === 'rejected') {
+                    console.log(`[AddonService] Manifest fetch FAILED:`, r.reason);
+                }
+                return r.status === 'fulfilled';
+            })
+            .map(r => (r as PromiseFulfilledResult<{ manifest: AddonManifest; baseUrl: string }>).value)
+            .filter(({ manifest, baseUrl }) => {
+                const hasSubResource = manifest.resources?.some(r => {
+                    if (typeof r === 'string') return r === 'subtitles';
+                    return r.name === 'subtitles';
+                });
+
+                const supportsType = manifest.types?.includes(type) || manifest.resources?.some(r =>
+                    typeof r !== 'string' && r.name === 'subtitles' && r.types?.includes(type)
+                );
+
+                if (!hasSubResource) {
+                    console.log(`[AddonService] Addon "${manifest.name}" skipped: No 'subtitles' resource`);
+                } else if (!supportsType) {
+                    console.log(`[AddonService] Addon "${manifest.name}" skipped: Does not support type '${type}'`);
+                } else {
+                    console.log(`[AddonService] Addon "${manifest.name}" matches! (${baseUrl})`);
+                }
+
+                return hasSubResource && supportsType;
+            });
+
+        console.log(`[AddonService] Found ${subtitleAddons.length} qualifying subtitle addons`);
+
+        // 2. Fetch subtitles from all qualifying addons in parallel
+        const subtitleResults = await Promise.allSettled(
+            subtitleAddons.map(async ({ manifest, baseUrl }) => {
+                try {
+                    console.log(`[AddonService] Requesting subtitles from "${manifest.name}"...`);
+                    const data = await this.getSubtitles(baseUrl, type, id);
+                    console.log(`[AddonService] Got ${data.subtitles?.length || 0} subs from "${manifest.name}"`);
+                    return (data.subtitles || []).map(sub => ({
+                        ...sub,
+                        addonId: manifest.id,
+                        addonName: manifest.name,
+                        isExternal: true
+                    }));
+                } catch (e: any) {
+                    console.error(`[AddonService] Failed to fetch from "${manifest.name}":`, e.message);
+                    return [];
+                }
+            })
+        );
+
+        const allSubtitles = subtitleResults
+            .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')
+            .flatMap(r => r.value);
+
+        // 3. De-duplicate by URL
+        const seen = new Set<string>();
+        const deduped = allSubtitles.filter(s => {
+            if (!s.url || seen.has(s.url)) return false;
+            seen.add(s.url);
+            return true;
+        });
+
+        console.log(`[AddonService] fetchAllSubtitles DONE: ${deduped.length} unique subtitles found`);
+        return deduped;
     }
 
     static async searchGrouped(manifests: Record<string, AddonManifest>, type: string, query: string): Promise<Array<{ addonName: string; catalogName?: string; metas: MetaPreview[] }>> {
@@ -124,7 +235,7 @@ export class AddonService {
 
                 if (c.type === type && isSearchable) {
                     candidates.push({
-                        baseUrl: AddonService.getRootUrl(url),
+                        baseUrl: this.getRootUrl(url),
                         addonName: m.name,
                         catalogName: c.name,
                     });
@@ -134,7 +245,7 @@ export class AddonService {
 
         const results = await Promise.allSettled(
             candidates.map((c) =>
-                axios.get<CatalogResponse>(`${c.baseUrl}/catalog/${type}/search=${encodeURIComponent(query)}.json`)
+                axios.get<CatalogResponse>(`${c.baseUrl}/catalog/${encodeURIComponent(type)}/search=${encodeURIComponent(query)}.json`)
                     .then(res => res.data)
                     .catch(() => ({ metas: [] }))
             )

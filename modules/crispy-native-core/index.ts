@@ -19,9 +19,11 @@ export interface CrispyVideoViewProps extends ViewProps {
 }
 
 export interface CrispyVideoViewRef {
-    seek: (positionMs: number) => void;
+    seek: (positionSec: number) => void;
     setAudioTrack: (trackId: number) => void;
     setSubtitleTrack: (trackId: number) => void;
+    addExternalSubtitle: (url: string, title?: string, lang?: string) => void;
+    setSubtitleDelay: (delay: number) => void;
 }
 
 export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
