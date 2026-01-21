@@ -26,6 +26,26 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     // Subtitle tracking to prevent duplicate adds
     private val addedExternalSubUrls = mutableSetOf<String>()
+    private var hasLoadEventFired = false
+    private var resumeOnForeground = false
+
+    private val lifeCycleListener = object : LifecycleEventListener {
+        override fun onHostPause() {
+            resumeOnForeground = !isPaused
+            if (resumeOnForeground) {
+                Log.d(TAG, "App backgrounded - pausing MPV")
+                setPaused(true)
+            }
+        }
+        override fun onHostResume() {
+            if (resumeOnForeground) {
+                Log.d(TAG, "App foregrounded - resuming MPV")
+                setPaused(false)
+                resumeOnForeground = false
+            }
+        }
+        override fun onHostDestroy() {}
+    }
 
     // Track info
     private var durationSec: Double = 0.0
@@ -107,30 +127,29 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     
     private fun initOptions() {
-        // Hardware decoding
-        MPVLib.setOptionString("hwdec", "auto")
-        MPVLib.setOptionString("hwdec-codecs", "all")
-        
-        // Video output
+        // Match Nuvio's performance profile
+        MPVLib.setOptionString("profile", "fast")
         MPVLib.setOptionString("vo", "gpu")
         MPVLib.setOptionString("gpu-context", "android")
         MPVLib.setOptionString("opengl-es", "yes")
         
-        // Audio output - standard android
-        MPVLib.setOptionString("ao", "audiotrack,opensles")
+        // Match Nuvio's hwdec selection (auto-copy is safest/best balance)
+        MPVLib.setOptionString("hwdec", "auto-copy")
         
-        // Network behavior
+        MPVLib.setOptionString("target-colorspace-hint", "yes")
+        MPVLib.setOptionString("vd-lavc-film-grain", "cpu")
+        
+        // Cache and Network (Matched to Nuvio)
+        val cacheMegs = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) 64 else 32
+        MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
+        MPVLib.setOptionString("demuxer-max-back-bytes", "${cacheMegs * 1024 * 1024}")
+        MPVLib.setOptionString("cache", "yes")
+        MPVLib.setOptionString("cache-secs", "30")
         MPVLib.setOptionString("network-timeout", "60")
-        MPVLib.setOptionString("tls-verify", "no")
+        
+        // HLS and Reconnect optimization
         MPVLib.setOptionString("http-reconnect", "yes")
         MPVLib.setOptionString("stream-reconnect", "yes")
-        
-        // Apply headers as options if we have them early
-        pendingHeaders?.let { headers ->
-            val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
-            MPVLib.setOptionString("http-header-fields", headerString)
-        }
-
         // Improve buffer for streaming
         MPVLib.setOptionString("cache", "yes")
         MPVLib.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
@@ -168,16 +187,6 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     // --- MPVLib.EventObserver ---
 
     override fun eventProperty(property: String) {
-        if (property == "track-list") {
-            parseAndSendTracks()
-        }
-    }
-    override fun eventProperty(property: String, value: Long) { }
-    override fun eventProperty(property: String, value: Boolean) { 
-        if (property == "eof-reached" && value && !isSeeking) {
-            onEnd(Unit)
-        }
-    }
     override fun eventProperty(property: String, value: String) { }
 
     private fun parseAndSendTracks() {
