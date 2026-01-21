@@ -105,8 +105,23 @@ export default function PlayerScreen() {
         console.log(`[Player] Combined tracks: ${merged.length} (Embedded/Merged: ${subtitleTracks.length}, Pending External: ${merged.filter((t: any) => t.source === 'external_pending').length})`);
         return merged;
     }, [subtitleTracks, externalSubtitles]);
-    const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<{ type: 'index' | 'language' | 'title' | 'disabled', value?: number | string }>({ type: 'disabled' });
-    const [selectedAudioTrack, setSelectedAudioTrack] = useState<{ type: 'index', value: number } | undefined>();
+
+    // Track selection state - simple numbers like Nuvio
+    const [selectedSubtitleId, setSelectedSubtitleId] = useState<number>(-1); // -1 = disabled
+    const [selectedAudioId, setSelectedAudioId] = useState<number | undefined>(undefined);
+
+    // Convert to react-native-video format (Nuvio's memoizedSelectedTextTrack pattern)
+    const selectedTextTrackProp = useMemo(() => {
+        return selectedSubtitleId === -1
+            ? { type: 'disabled' as const }
+            : { type: 'index' as const, value: selectedSubtitleId };
+    }, [selectedSubtitleId]);
+
+    const selectedAudioTrackProp = useMemo(() => {
+        return selectedAudioId !== undefined
+            ? { type: 'index' as const, value: selectedAudioId }
+            : undefined;
+    }, [selectedAudioId]);
 
     // Gesture & Feedback State
     const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
@@ -363,8 +378,8 @@ export default function PlayerScreen() {
                     headers={headers}
                     paused={paused}
                     useExoPlayer={useExoPlayer}
-                    selectedAudioTrack={selectedAudioTrack}
-                    selectedTextTrack={selectedSubtitleTrack}
+                    selectedAudioTrack={selectedAudioTrackProp}
+                    selectedTextTrack={selectedTextTrackProp}
                     subtitleDelay={subtitleDelay}
                     externalSubtitles={externalSubtitles.map(s => ({
                         url: s.url,
@@ -601,9 +616,10 @@ export default function PlayerScreen() {
                     {activeTab === 'audio' && (
                         <AudioTab
                             tracks={audioTracks}
-                            selectedTrackId={selectedAudioTrack?.value as number}
+                            selectedTrackId={selectedAudioId}
                             onSelectTrack={(track) => {
-                                setSelectedAudioTrack({ type: 'index', value: Number(track.id) });
+                                setSelectedAudioId(Number(track.id));
+                                if (!useExoPlayer) videoRef.current?.setAudioTrack?.(Number(track.id));
                                 setActiveTab('none');
                             }}
                         />
@@ -611,30 +627,29 @@ export default function PlayerScreen() {
                     {activeTab === 'subtitles' && (
                         <SubtitlesTab
                             tracks={allSubtitleTracks}
-                            selectedTrackId={
-                                selectedSubtitleTrack.type === 'disabled' ? 'off' :
-                                    selectedSubtitleTrack.type === 'index' ? selectedSubtitleTrack.value :
-                                        selectedSubtitleTrack.value // For titles/other IDs
-                            }
+                            selectedTrackId={selectedSubtitleId === -1 ? 'off' : selectedSubtitleId}
                             delay={subtitleDelay}
                             onUpdateDelay={setSubtitleDelay}
                             onSelectTrack={(track) => {
-                                console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal } : null);
+                                console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal, url: track.url } : null);
                                 if (!track) {
+                                    // Disable subtitles
                                     console.log('[Player] Setting subtitle to DISABLED');
-                                    setSelectedSubtitleTrack({ type: 'disabled' });
+                                    setSelectedSubtitleId(-1);
                                     if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
                                 } else {
-                                    // With smart merging, most tracks (even external) should have a numeric ID from MPV
                                     const trackId = Number(track.id);
                                     if (!isNaN(trackId)) {
-                                        console.log('[Player] Setting subtitle by index (embedded/merged):', trackId);
-                                        setSelectedSubtitleTrack({ type: 'index', value: trackId });
+                                        // Embedded or merged track - use numeric ID directly
+                                        console.log('[Player] Setting subtitle by ID:', trackId);
+                                        setSelectedSubtitleId(trackId);
                                         if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(trackId);
-                                    } else {
-                                        // Fallback for pending external tracks (no MPV ID yet)
-                                        console.log('[Player] Setting pending external subtitle by title:', track.title);
-                                        setSelectedSubtitleTrack({ type: 'title', value: track.title });
+                                    } else if (track.url && typeof track.id === 'string' && track.id.startsWith('ext-')) {
+                                        // Pending external subtitle - add it on-demand
+                                        console.log('[Player] Adding pending external subtitle:', track.title, track.url);
+                                        videoRef.current?.addExternalSubtitle?.(track.url, track.title, track.language);
+                                        // Note: Can't set by ID yet since we don't know what ID MPV will assign
+                                        // The track list will update and user can select again
                                     }
                                 }
                                 setActiveTab('none');

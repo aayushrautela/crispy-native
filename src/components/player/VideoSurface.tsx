@@ -1,8 +1,7 @@
-import { CrispyVideoView, CrispyVideoViewRef } from '@/modules/crispy-native-core';
-import * as FileSystem from 'expo-file-system';
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Video, { ResizeMode, VideoRef } from 'react-native-video';
+import MpvPlayer, { MpvPlayerRef } from './MpvPlayer';
 
 // Codec error patterns that should trigger MPV fallback
 const CODEC_ERROR_PATTERNS = [
@@ -32,6 +31,7 @@ export interface VideoSurfaceRef {
     seek: (seconds: number) => void;
     setAudioTrack?: (id: number) => void;
     setSubtitleTrack?: (id: number) => void;
+    addExternalSubtitle?: (url: string, title?: string, lang?: string) => void;
     setSubtitleDelay?: (delay: number) => void;
 }
 
@@ -43,23 +43,20 @@ interface VideoSurfaceProps {
     rate?: number;
     resizeMode?: 'contain' | 'cover' | 'stretch';
 
-    // Track selection
-    selectedAudioTrack?: { type: 'index' | 'language' | 'title', value?: number | string };
-    selectedTextTrack?: { type: 'index' | 'language' | 'title' | 'disabled', value?: number | string };
+    // Track selection - react-native-video format
+    selectedAudioTrack?: { type: 'index' | 'disabled', value?: number };
+    selectedTextTrack?: { type: 'index' | 'disabled', value?: number };
     subtitleDelay?: number;
 
-    externalSubtitles?: Array<{
-        url: string;
-        title: string;
-        language?: string;
-    }>;
+    // External subtitles for ExoPlayer (as textTracks)
+    externalSubtitles?: Array<{ url: string; title: string; language?: string }>;
 
     // Engine selection
     useExoPlayer: boolean;
     onCodecError?: () => void;
 
     // Callbacks
-    onLoad?: (data: { duration: number; width: number; height: number; audioTracks?: any[]; textTracks?: any[] }) => void;
+    onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
     onEnd?: () => void;
     onError?: (error: { message: string }) => void;
@@ -88,122 +85,9 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     } = props;
 
     const exoPlayerRef = useRef<VideoRef>(null);
-    const mpvPlayerRef = useRef<CrispyVideoViewRef>(null);
+    const mpvPlayerRef = useRef<MpvPlayerRef>(null);
 
-    // Store current tracks to lookup IDs by title
-    const [currentMpvTracks, setCurrentMpvTracks] = useState<{ audio: any[], sub: any[] }>({ audio: [], sub: [] });
-
-    // Track download cache to avoid re-downloading same URL
-    const downloadedSubs = useRef<Record<string, string>>({});
-
-    // MPV handlers
-    const handleMpvLoad = (event: any) => {
-        const data = event.nativeEvent;
-        onLoad?.({
-            duration: data.duration || 0,
-            width: data.width || 0,
-            height: data.height || 0,
-        });
-    };
-
-    const handleMpvProgress = (event: any) => {
-        const data = event.nativeEvent;
-        onProgress?.({
-            currentTime: data.position || 0,
-            duration: data.duration || 0,
-        });
-    };
-
-    const handleMpvError = (event: any) => {
-        const data = event.nativeEvent;
-        onError?.({ message: data?.error || 'MPV playback error' });
-    };
-
-    const handleMpvTracksChanged = (event: any) => {
-        const data = event.nativeEvent;
-        if (data) {
-            setCurrentMpvTracks({
-                audio: data.audioTracks || [],
-                sub: data.subtitleTracks || []
-            });
-        }
-        onTracksChanged?.(data);
-    };
-
-    // Sync track selections for MPV
-    useEffect(() => {
-        if (!useExoPlayer && mpvPlayerRef.current) {
-            if (selectedAudioTrack?.type === 'index' && typeof selectedAudioTrack.value === 'number') {
-                mpvPlayerRef.current.setAudioTrack(selectedAudioTrack.value);
-            }
-        }
-    }, [useExoPlayer, selectedAudioTrack]);
-
-    useEffect(() => {
-        // Sync track selections for MPV that were set via props (initial or title-based)
-        if (!useExoPlayer && mpvPlayerRef.current) {
-            if (selectedTextTrack?.type === 'index' && typeof selectedTextTrack.value === 'number') {
-                // Already handled by direct ref call for manual selection, 
-                // but we keep this for initial props or state restoration.
-                // Log only to avoid spam since direct call also logs.
-                console.log('[VideoSurface] Prop sync - MPV sid:', selectedTextTrack.value);
-                mpvPlayerRef.current.setSubtitleTrack(selectedTextTrack.value);
-            } else if (selectedTextTrack?.type === 'title' && typeof selectedTextTrack.value === 'string') {
-                const titleToFind = selectedTextTrack.value;
-                const track = currentMpvTracks.sub.find((t: any) =>
-                    (t.name === titleToFind) || (t.title === titleToFind)
-                );
-                if (track && typeof track.id === 'number') {
-                    console.log(`[VideoSurface] Prop sync - Selecting MPV sub by title "${titleToFind}" -> ID ${track.id}`);
-                    mpvPlayerRef.current.setSubtitleTrack(track.id);
-                }
-            } else if (selectedTextTrack?.type === 'disabled') {
-                console.log('[VideoSurface] Prop sync - Disabling MPV subtitles');
-                mpvPlayerRef.current.setSubtitleTrack(-1);
-            }
-        }
-    }, [useExoPlayer, selectedTextTrack, currentMpvTracks]);
-
-    // Download and Add external subtitles to MPV
-    useEffect(() => {
-        if (!useExoPlayer && source && mpvPlayerRef.current && externalSubtitles.length > 0) {
-            const addSubs = async () => {
-                console.log(`[VideoSurface] Processing ${externalSubtitles.length} external subtitles for MPV`);
-                for (const sub of externalSubtitles) {
-                    try {
-                        let finalUrl = sub.url;
-
-                        // Check cache first
-                        if (downloadedSubs.current[sub.url]) {
-                            finalUrl = downloadedSubs.current[sub.url];
-                        } else if (sub.url.startsWith('http')) {
-                            // Download to local file for robustness
-                            const filename = `sub_${Date.now()}_${Math.random().toString(36).substring(7)}.srt`;
-                            const fileUri = `${FileSystem.cacheDirectory}${filename}`;
-                            await FileSystem.downloadAsync(sub.url, fileUri);
-                            finalUrl = fileUri;
-                            downloadedSubs.current[sub.url] = fileUri;
-                            console.log(`[VideoSurface] Downloaded sub to ${finalUrl}`);
-                        }
-
-                        mpvPlayerRef.current?.addExternalSubtitle(finalUrl, sub.title, sub.language);
-                    } catch (e) {
-                        console.error(`[VideoSurface] Failed to load external sub ${sub.title}`, e);
-                        // Fallback to URL if download fails
-                        mpvPlayerRef.current?.addExternalSubtitle(sub.url, sub.title, sub.language);
-                    }
-                }
-            };
-            addSubs();
-        }
-    }, [useExoPlayer, source, externalSubtitles]);
-
-    useEffect(() => {
-        if (!useExoPlayer && mpvPlayerRef.current) {
-            mpvPlayerRef.current.setSubtitleDelay?.(subtitleDelay);
-        }
-    }, [useExoPlayer, subtitleDelay]);
-
+    // Imperative handle - expose methods
     useImperativeHandle(ref, () => ({
         seek: (seconds: number) => {
             if (useExoPlayer) {
@@ -222,10 +106,23 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                 mpvPlayerRef.current?.setSubtitleTrack(id);
             }
         },
+        addExternalSubtitle: (url: string, title?: string, lang?: string) => {
+            if (!useExoPlayer) {
+                mpvPlayerRef.current?.addExternalSubtitle(url, title, lang);
+            }
+        },
+        setSubtitleDelay: (delay: number) => {
+            if (!useExoPlayer) {
+                mpvPlayerRef.current?.setSubtitleDelay(delay);
+            }
+        },
     }));
 
-    // ExoPlayer handlers
+    // ========== ExoPlayer Handlers ==========
     const handleExoLoad = (data: any) => {
+        console.log('[VideoSurface] ExoPlayer onLoad:', data);
+
+        // Extract tracks - IMPORTANT: use 0-based array index for react-native-video
         const audioTracks = data.audioTracks?.map((t: any, i: number) => ({
             id: i,
             name: t.title || t.language || `Track ${i + 1}`,
@@ -252,29 +149,60 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     const handleExoProgress = (data: any) => {
         onProgress?.({
             currentTime: data.currentTime,
-            duration: data.seekableDuration || data.playableDuration || data.duration || 0,
+            duration: data.playableDuration || data.currentTime,
         });
     };
 
     const handleExoError = (error: any) => {
-        let errorString = 'Unknown error';
+        console.log('[VideoSurface] ExoPlayer onError:', JSON.stringify(error, null, 2));
 
-        if (typeof error?.error === 'string') {
-            errorString = error.error;
-        } else if (error?.error?.errorString) {
-            errorString = error.error.errorString;
-        } else if (error?.message) {
-            errorString = error.message;
-        }
+        // Extract error string from multiple possible paths
+        const errorParts: string[] = [];
+        if (typeof error?.error === 'string') errorParts.push(error.error);
+        if (error?.error?.errorString) errorParts.push(error.error.errorString);
+        if (error?.error?.errorCode) errorParts.push(String(error.error.errorCode));
+        if (error?.nativeStackAndroid) errorParts.push(error.nativeStackAndroid.join(' '));
+        if (error?.message) errorParts.push(error.message);
 
-        // Check for codec errors that should trigger MPV fallback
+        const errorString = errorParts.length > 0 ? errorParts.join(' ') : JSON.stringify(error);
+
         if (isCodecError(errorString)) {
-            console.warn('[VideoSurface] Codec error detected, triggering MPV fallback');
+            console.warn('[VideoSurface] Codec error, triggering MPV fallback');
             onCodecError?.();
             return;
         }
 
         onError?.({ message: errorString });
+    };
+
+    // ========== MPV Handlers ==========
+    const handleMpvLoad = (data: any) => {
+        console.log('[VideoSurface] MPV onLoad:', data);
+        onLoad?.({
+            duration: data?.duration || 0,
+            width: data?.width || 1920,
+            height: data?.height || 1080,
+        });
+    };
+
+    const handleMpvProgress = (data: any) => {
+        onProgress?.({
+            currentTime: data?.position || data?.currentTime || 0,
+            duration: data?.duration || 0,
+        });
+    };
+
+    const handleMpvError = (error: any) => {
+        console.log('[VideoSurface] MPV onError:', error);
+        onError?.({ message: error?.error || 'MPV error' });
+    };
+
+    const handleMpvTracksChanged = (data: any) => {
+        console.log('[VideoSurface] MPV onTracksChanged:', data);
+        onTracksChanged?.({
+            audioTracks: data?.audioTracks || [],
+            subtitleTracks: data?.subtitleTracks || [],
+        });
     };
 
     const getExoResizeMode = (): ResizeMode => {
@@ -286,11 +214,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     };
 
     if (Platform.OS !== 'android') {
-        return (
-            <View style={styles.container}>
-                {/* iOS placeholder */}
-            </View>
-        );
+        return <View style={styles.container} />;
     }
 
     return (
@@ -317,10 +241,14 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     onEnd={onEnd}
                     onError={handleExoError}
                     progressUpdateInterval={500}
+                    playInBackground={false}
+                    playWhenInactive={false}
+                    ignoreSilentSwitch="ignore"
+                    automaticallyWaitsToMinimizeStalling={true}
                     useTextureView={true}
                 />
             ) : (
-                <CrispyVideoView
+                <MpvPlayer
                     ref={mpvPlayerRef}
                     source={source}
                     headers={headers}
