@@ -4,11 +4,18 @@ import { ViewProps } from 'react-native';
 // requireNativeModule will look for a module with the same name as in CrispyNativeCoreModule.kt
 const CrispyNativeCore = requireNativeModule('CrispyNativeCore');
 
+export interface CrispyMediaMetadata {
+    title: string;
+    subtitle: string;
+    artworkUrl?: string;
+}
+
 export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;
     paused?: boolean;
     resizeMode?: 'contain' | 'cover' | 'stretch';
+    metadata?: CrispyMediaMetadata;
 
     // Events
     onLoad?: (event: { nativeEvent: { duration: number, width: number, height: number } }) => void;
@@ -70,6 +77,17 @@ export default {
             await CrispyNativeCore.handleSeek(infoHash, fileIdx, position);
         } catch (e) {
             console.error('[CrispyNativeCore] handleSeek failed:', e);
+        }
+    },
+
+    /**
+     * Enters Picture-in-Picture mode.
+     */
+    async enterPiP(): Promise<void> {
+        try {
+            await CrispyNativeCore.enterPiP();
+        } catch (e) {
+            console.error('[CrispyNativeCore] enterPiP failed:', e);
         }
     }
 };

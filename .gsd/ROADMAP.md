@@ -94,3 +94,11 @@
 
 **Verification**:
 - [x] Verified code integration and wiring.
+
+## Phase 14: Media3 Player & Advanced Architecture
+**Status**: ✅ COMPLETED
+**Objective**: Refactor MPV integration into a Media3 BasePlayer wrapper with system integration and reliable startup.
+- [x] Implement Command Queuing (Delay `sub-add` until file loaded).
+- [x] Wrap MPV in Media3 `BasePlayer` for standardized system interaction.
+- [x] Enable Android Picture-in-Picture (PiP) support.
+- [x] Implement Media Notifications with custom metadata (Episode title, backdrop, show subtext).

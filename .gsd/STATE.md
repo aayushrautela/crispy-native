@@ -1,25 +1,16 @@
 ## Project Status: Debugging & UI Refinement (GSD MISSION CONTROL)
 
-> **Current Phase**: Phase 4: UI/UX Native Polish
-> **Current Status**: COMPLETED
+> **Current Phase**: Phase 14: Media3 Player & Advanced Architecture
+> **Current Status**: VERIFIED
 > **Last Updated**: 2026-01-21
 
 ## Recent Accomplishments
-- [x] Repaired broken Addon System (Settings Refactor Fallout)
-- [x] Implemented robust URL normalization (`stremio://` -> `https://`)
-- [x] Added robust Base URL extraction in `AddonService`
-- [x] Ensured consistent path encoding for all addon resource requests
-- [x] Updated `addonStore` to persist normalized URLs
-- [x] Fixed MPV 0/0 time display issue (nativeEvent handling fix)
-- [x] Standardized all timing units to Seconds (Double) across JS and Native
-- [x] Resolved Player Instability (Seeking, End-of-file, Stream switching)
-- [x] Refactored Bottom Sheets for "Liquid" native feel (BottomSheetFlatList integration)
-- [x] Standardized all filter sheets (Genre, Rating, Sort) to use BottomSheetFlatList
-- [x] Fixed TypeError crash by removing incompatible dynamic hooks
-- [x] Implemented global 70% maxHeight limit for all Bottom Sheets
-- [x] Enabled Dynamic Sizing for all sheets for better content fit
+- [x] Implemented Command Queuing for MPV (reliable subtitle loading)
+- [x] Refactored MPV to implement Media3 `Player` interface
+- [x] Enabled Android Picture-in-Picture (PiP) with dedicated UI button
+- [x] Implemented Media Notifications with custom metadata and Coil artwork loading
+- [x] Bound episode/movie metadata from JS layer to native player system
 
 ## Next Steps
 - [ ] Monitor production logs for any remaining native crashes
-- [ ] Implement Picture-in-Picture (PiP) for Android
-- [ ] Optimize player startup time with pre-caching
+- [ ] Finalize Phase 15 planning (TV/D-Pad prep)

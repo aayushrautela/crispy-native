@@ -11,10 +11,22 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import `is`.xyz.mpv.MPVLib
 import kotlin.math.abs
+import androidx.media3.common.*
+import androidx.media3.common.util.ListenerSet
+import androidx.media3.common.util.Clock
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerNotificationManager
+import android.os.Looper
+import io.coil.imageLoader
+import io.coil.request.ImageRequest
+import android.graphics.drawable.BitmapDrawable
 
-class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver {
+@UnstableApi
+class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, Player {
     companion object {
         private const val TAG = "CrispyVideoView"
+        private const val NOTIFICATION_CHANNEL_ID = "crispy_playback_channel"
+        private const val NOTIFICATION_ID = 1147
     }
 
     private val surfaceView = TextureView(context)
@@ -24,10 +36,22 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var pendingHeaders: Map<String, String>? = null
     private var isPaused = true // Default to paused until told otherwise
 
-    // Subtitle tracking to prevent duplicate adds
     private val addedExternalSubUrls = mutableSetOf<String>()
-    private var hasLoadEventFired = false
+    private var isFileLoaded = false
+    private var pendingCommands = mutableListOf<Array<String>>()
     private var resumeOnForeground = false
+
+    private val listeners: ListenerSet<Player.Listener> =
+        ListenerSet(Looper.getMainLooper(), Clock.DEFAULT) { listener: Player.Listener, flags: FlagSet ->
+            listener.onEvents(this, Player.Events(flags))
+        }
+
+    private var currentMediaItem: MediaItem? = null
+    private var isPlayerReady = false
+    private var playbackState: Int = Player.STATE_IDLE
+    
+    private var notificationManager: PlayerNotificationManager? = null
+    private var currentMetadata: CrispyMediaMetadata? = null
 
     private val lifeCycleListener = object : LifecycleEventListener {
         override fun onHostPause() {
@@ -47,11 +71,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         override fun onHostDestroy() {}
     }
 
-    // Track info
     private var durationSec: Double = 0.0
     private var positionSec: Double = 0.0
     private var isSeeking = false
-    private var hasLoadEventFired = false
 
     // Event dispatchers
     val onLoad by EventDispatcher<Map<String, Any>>()
@@ -66,6 +88,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
         ))
+        setupNotification()
     }
 
     // --- TextureView.SurfaceTextureListener ---
@@ -177,6 +200,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private fun destroyMpv() {
         if (isMpvInitialized) {
+            notificationManager?.setPlayer(null)
             MPVLib.removeObserver(this)
             MPVLib.detachSurface()
             MPVLib.destroy()
@@ -187,6 +211,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     // --- MPVLib.EventObserver ---
 
     override fun eventProperty(property: String) {
+        if (property == "track-list") {
+            parseAndSendTracks()
+        }
+    }
     override fun eventProperty(property: String, value: String) { }
 
     private fun parseAndSendTracks() {
@@ -259,10 +287,29 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     override fun event(eventId: Int) {
         when (eventId) {
-           MPVLib.MpvEvent.MPV_EVENT_END_FILE -> onEnd(Unit)
-           MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {
+           MPVLib.MpvEvent.MPV_EVENT_END_FILE -> {
+               isFileLoaded = false
+               playbackState = Player.STATE_ENDED
+               onEnd(Unit)
+               listeners.sendEvent(Player.EVENT_PLAYBACK_STATE_CHANGED) { it.onPlaybackStateChanged(playbackState) }
+           }
+           MPVLib.MPV_EVENT_START_FILE -> {
+               // Flush pending commands when playback starts
+               if (pendingCommands.isNotEmpty()) {
+                   Log.d(TAG, "Flushing ${pendingCommands.size} pending commands")
+                   for (command in pendingCommands) {
+                       MPVLib.command(command)
+                   }
+                   pendingCommands.clear()
+               }
+           }
+           MPVLib.MPV_EVENT_FILE_LOADED -> {
+               isFileLoaded = true
+               isPlayerReady = true
+               playbackState = Player.STATE_READY
                // Re-sync tracks when file is fully loaded
                parseAndSendTracks()
+               listeners.sendEvent(Player.EVENT_PLAYBACK_STATE_CHANGED) { it.onPlaybackStateChanged(playbackState) }
            }
         }
     }
@@ -271,7 +318,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private fun loadFile(url: String) {
         Log.d(TAG, "Loading file: $url")
-        hasLoadEventFired = false
+        isFileLoaded = false
+        pendingCommands.clear() // Clear commands from previous file
         MPVLib.command(arrayOf("loadfile", url))
         MPVLib.setPropertyString("pause", if (isPaused) "yes" else "no")
     }
@@ -302,6 +350,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         isPaused = paused
         if (isMpvInitialized) {
             MPVLib.setPropertyString("pause", if (paused) "yes" else "no")
+            listeners.sendEvent(Player.EVENT_PLAY_WHEN_READY_CHANGED) { it.onPlayWhenReadyChanged(!paused, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) }
+            listeners.sendEvent(Player.EVENT_IS_PLAYING_CHANGED) { it.onIsPlayingChanged(!paused) }
         }
     }
 
@@ -347,26 +397,30 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun addExternalSubtitle(url: String, title: String? = null, language: String? = null) {
-        if (isMpvInitialized) {
-            // Prevent duplicate additions which can cause unresponsiveness/freezing
-            if (addedExternalSubUrls.contains(url)) {
-                Log.d(TAG, "Subtitle already added, skipping: $url")
-                return
-            }
-            addedExternalSubUrls.add(url)
+        // Prevent duplicate additions
+        if (addedExternalSubUrls.contains(url)) {
+            Log.d(TAG, "Subtitle already added, skipping: $url")
+            return
+        }
+        addedExternalSubUrls.add(url)
 
+        val titleStr = title ?: "External"
+        val langStr = language ?: "eng"
+        val command = arrayOf("sub-add", url, "select", titleStr, langStr)
+
+        if (isFileLoaded) {
+            Log.d(TAG, "Adding external subtitle immediately: $url")
             // Run in background thread to avoid blocking UI thread during network fetch
             Thread {
                 try {
-                    val titleStr = title ?: "External"
-                    val langStr = language ?: "eng"
-                    Log.d(TAG, "Adding external subtitle (background): $url ($titleStr)")
-                    // Use 'select' to make it active immediately
-                    MPVLib.command(arrayOf("sub-add", url, "select", titleStr, langStr))
+                    MPVLib.command(command)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to add external subtitle", e)
                 }
             }.start()
+        } else {
+            Log.d(TAG, "Queueing external subtitle: $url")
+            pendingCommands.add(command)
         }
     }
     
@@ -384,9 +438,6 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
     
     fun setResizeMode(mode: String?) {
-         // "contain" (default), "cover" (crop), "stretch" (stretch)
-         // MPV 'video-aspect-override' or 'video-scale' could be used, or View layout params
-         // Simple pan&scan for cover:
          when(mode) {
              "cover" -> {
                  if(isMpvInitialized) MPVLib.setPropertyDouble("panscan", 1.0)
@@ -396,6 +447,161 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
              }
          }
     }
+
+    fun setMetadata(metadata: CrispyMediaMetadata?) {
+        Log.d(TAG, "Setting metadata: ${metadata?.title}")
+        this.currentMetadata = metadata
+        notificationManager?.invalidate()
+    }
+
+    private fun setupNotification() {
+        if (notificationManager != null) return
+
+        val context = context.applicationContext
+        
+        // Create Notification Channel for Android O+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val name = "Playback"
+            val importance = android.app.NotificationManager.IMPORTANCE_LOW
+            val channel = android.app.NotificationChannel(NOTIFICATION_CHANNEL_ID, name, importance)
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+
+        val adapter = object : PlayerNotificationManager.MediaDescriptionAdapter {
+            override fun getCurrentContentTitle(player: Player): CharSequence {
+                return currentMetadata?.title ?: "Playing"
+            }
+
+            override fun createCurrentContentIntent(player: Player): android.app.PendingIntent? {
+                return null
+            }
+
+            override fun getCurrentContentText(player: Player): CharSequence? {
+                return currentMetadata?.subtitle
+            }
+
+            override fun getCurrentLargeIcon(player: Player, callback: PlayerNotificationManager.BitmapCallback): android.graphics.Bitmap? {
+                val url = currentMetadata?.artworkUrl ?: return null
+                
+                // Use Coil to load the bitmap asynchronously
+                val loader = io.coil.Coil.imageLoader(context)
+                val request = io.coil.request.ImageRequest.Builder(context)
+                    .data(url)
+                    .target { result ->
+                        val bitmap = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                        if (bitmap != null) {
+                            callback.onBitmap(bitmap)
+                        }
+                    }
+                    .build()
+                loader.enqueue(request)
+                return null
+            }
+        }
+
+        notificationManager = PlayerNotificationManager.Builder(context, NOTIFICATION_ID, NOTIFICATION_CHANNEL_ID)
+            .setMediaDescriptionAdapter(adapter)
+            .setNotificationListener(object : PlayerNotificationManager.NotificationListener {
+                override fun onNotificationCancelled(notificationId: Int, dismissedByUser: Boolean) {
+                    // Handle cancellation if needed
+                }
+                override fun onNotificationPosted(notificationId: Int, notification: android.app.Notification, ongoing: Boolean) {
+                    // Handle post if needed
+                }
+            })
+            .build().apply {
+                setPlayer(this@CrispyVideoView)
+                setUseNextAction(false)
+                setUsePreviousAction(false)
+                setUseStopAction(true)
+                setPriority(android.app.Notification.PRIORITY_LOW)
+                setVisibility(android.app.Notification.VISIBILITY_PUBLIC)
+            }
+    }
+
+    // --- Player Implementation ---
+
+    override fun getApplicationLooper(): Looper = Looper.getMainLooper()
+    override fun addListener(listener: Player.Listener) = listeners.add(listener)
+    override fun removeListener(listener: Player.Listener) = listeners.remove(listener)
     
+    override fun setPlayWhenReady(playWhenReady: Boolean) = setPaused(!playWhenReady)
+    override fun getPlayWhenReady(): Boolean = !isPaused
+    
+    override fun getPlaybackState(): Int = playbackState
+    
+    override fun isPlaying(): Boolean = isPlayerReady && !isPaused && playbackState == Player.STATE_READY
+    
+    override fun getDuration(): Long = (durationSec * 1000).toLong()
+    override fun getCurrentPosition(): Long = (positionSec * 1000).toLong()
+    override fun getBufferedPosition(): Long = getCurrentPosition() // MPV manages its own buffer
+    override fun getTotalBufferedDuration(): Long = 0L
+    
+    override fun seekTo(positionMs: Long) = seek(positionMs / 1000.0)
+    override fun seekTo(windowIndex: Int, positionMs: Long) = seekTo(positionMs)
+    
+    override fun getCurrentMediaItem(): MediaItem? = currentMediaItem
+    override fun getMediaItemCount(): Int = if (currentMediaItem != null) 1 else 0
+    override fun getMediaItemAt(index: Int): MediaItem = currentMediaItem ?: MediaItem.Builder().build()
+    
+    override fun getCurrentMediaItemIndex(): Int = 0
+    
+    override fun getPlaybackParameters(): PlaybackParameters = PlaybackParameters.DEFAULT
+    override fun setPlaybackParameters(playbackParameters: PlaybackParameters) {}
+    
+    override fun stop() {
+        setPaused(true)
+        playbackState = Player.STATE_IDLE
+        listeners.sendEvent(Player.EVENT_PLAYBACK_STATE_CHANGED) { it.onPlaybackStateChanged(playbackState) }
+    }
+    
+    override fun release() = destroyMpv()
+    
+    // Stubs for other Player methods to satisfy the interface
+    override fun getCurrentTracks(): Tracks = Tracks.EMPTY
+    override fun getTrackSelectionParameters(): TrackSelectionParameters = TrackSelectionParameters.DEFAULT
+    override fun setTrackSelectionParameters(parameters: TrackSelectionParameters) {}
+    override fun getMediaMetadata(): MediaMetadata = MediaMetadata.EMPTY
+    override fun getPlaylistMetadata(): MediaMetadata = MediaMetadata.EMPTY
+    override fun setPlaylistMetadata(mediaMetadata: MediaMetadata) {}
+    override fun getCurrentLiveConfiguration(): LiveConfiguration? = null
+    override fun getContentDuration(): Long = getDuration()
+    override fun getContentPosition(): Long = getCurrentPosition()
+    override fun getContentBufferedPosition(): Long = getBufferedPosition()
+    override fun isPlayingAd(): Boolean = false
+    override fun getCurrentAdGroupIndex(): Int = -1
+    override fun getCurrentAdIndexInAdGroup(): Int = -1
+    override fun hasNextMediaItem(): Boolean = false
+    override fun hasPreviousMediaItem(): Boolean = false
+    override fun seekToNextMediaItem() {}
+    override fun seekToPreviousMediaItem() {}
+    override fun setRepeatMode(repeatMode: Int) {}
+    override fun getRepeatMode(): Int = Player.REPEAT_MODE_OFF
+    override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {}
+    override fun getShuffleModeEnabled(): Boolean = false
+    override fun getPlayerError(): PlaybackException? = null
+    override fun getVideoSize(): VideoSize = VideoSize.UNKNOWN
+    override fun getSurfaceSize(): Size = Size(surfaceView.width, surfaceView.height)
+    override fun getCurrentCues(): CueGroup = CueGroup.EMPTY_TIME_ZERO
+    override fun getDeviceInfo(): DeviceInfo = DeviceInfo.UNKNOWN
+    override fun getDeviceVolume(): Int = 0
+    override fun isDeviceMuted(): Boolean = false
+    override fun setDeviceVolume(volume: Int) {}
+    override fun setDeviceVolume(volume: Int, flags: Int) {}
+    override fun increaseDeviceVolume() {}
+    override fun increaseDeviceVolume(flags: Int) {}
+    override fun decreaseDeviceVolume() {}
+    override fun decreaseDeviceVolume(flags: Int) {}
+    override fun setDeviceMuted(muted: Boolean) {}
+    override fun setDeviceMuted(muted: Boolean, flags: Int) {}
+    override fun getAudioAttributes(): AudioAttributes = AudioAttributes.DEFAULT
+    override fun setVolume(volume: Float) {}
+    override fun getVolume(): Float = 1.0f
+    override fun getCurrentTimeline(): Timeline = Timeline.EMPTY
+    override fun getCurrentPeriodIndex(): Int = 0
+    override fun isCommandAvailable(command: Int): Boolean = true
+    override fun getAvailableCommands(): Player.Commands = Player.Commands.EMPTY
+
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 }

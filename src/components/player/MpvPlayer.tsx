@@ -8,6 +8,7 @@ export interface MpvPlayerRef {
     setSubtitleTrack: (trackId: number) => void;
     addExternalSubtitle: (url: string, title?: string, lang?: string) => void;
     setSubtitleDelay: (delay: number) => void;
+    enterPiP: () => void;
 }
 
 export interface MpvPlayerProps {
@@ -23,6 +24,7 @@ export interface MpvPlayerProps {
     onEnd?: () => void;
     onError?: (error: { error: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
 }
 
 /**
@@ -35,6 +37,7 @@ interface ExpoNativeRef {
     setSubtitleTrack?: (trackId: number) => Promise<void>;
     addExternalSubtitle?: (url: string, title: string | null, lang: string | null) => Promise<void>;
     setSubtitleDelay?: (delay: number) => Promise<void>;
+    enterPiP?: () => Promise<void>;
 }
 
 const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
@@ -60,6 +63,10 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
         setSubtitleDelay: (delay: number) => {
             console.log('[MpvPlayer] setSubtitleDelay called:', delay);
             nativeRef.current?.setSubtitleDelay?.(delay);
+        },
+        enterPiP: () => {
+            console.log('[MpvPlayer] enterPiP called');
+            nativeRef.current?.enterPiP?.();
         },
     }), []);
 
@@ -111,6 +118,7 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
             onEnd={handleEnd}
             onError={handleError}
             onTracksChanged={handleTracksChanged}
+            metadata={props.metadata}
         />
     );
 });

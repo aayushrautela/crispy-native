@@ -43,7 +43,7 @@ type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info
 
 export default function PlayerScreen() {
     const params = useLocalSearchParams();
-    const { id, type, url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam } = params;
+    const { id, type, url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam, poster, episodeTitle } = params;
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
@@ -137,6 +137,13 @@ export default function PlayerScreen() {
     // Play/Pause Animation State
     const playPauseScale = useSharedValue(1);
     const [isIconAnimating, setIsIconAnimating] = useState(false);
+
+    // Media Metadata for Notification
+    const mediaMetadata = useMemo(() => ({
+        title: (type === 'movie' ? title : (episodeTitle || title)) as string,
+        subtitle: (type === 'movie' ? 'Movie' : title) as string,
+        artworkUrl: poster as string,
+    }), [title, episodeTitle, type, poster]);
 
 
     // Dual-engine state
@@ -385,6 +392,7 @@ export default function PlayerScreen() {
                     selectedAudioTrack={selectedAudioTrackProp}
                     selectedTextTrack={selectedTextTrackProp}
                     subtitleDelay={subtitleDelay}
+                    metadata={mediaMetadata}
                     externalSubtitles={externalSubtitles.map(s => ({
                         url: s.url,
                         title: s.title,
@@ -458,6 +466,15 @@ export default function PlayerScreen() {
                                     </Text>
                                 )}
                             </View>
+                            {/* PiP Button */}
+                            {Platform.OS === 'android' && (
+                                <Pressable
+                                    onPress={() => CrispyNativeCore.enterPiP()}
+                                    style={[styles.backBtn, { marginLeft: 'auto' }]}
+                                >
+                                    <Layers color="#fff" size={20} />
+                                </Pressable>
+                            )}
                         </View>
 
                         {/* 2. Center Area: Feedback & Play/Pause */}

@@ -61,6 +61,7 @@ interface VideoSurfaceProps {
     onEnd?: () => void;
     onError?: (error: { message: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
 }
 
 export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((props, ref) => {
@@ -263,6 +264,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     onEnd={onEnd}
                     onError={handleMpvError}
                     onTracksChanged={handleMpvTracksChanged}
+                    metadata={props.metadata}
                 />
             )}
         </View>

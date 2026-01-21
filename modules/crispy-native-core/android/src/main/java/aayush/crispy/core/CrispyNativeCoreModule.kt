@@ -73,6 +73,14 @@ class CrispyNativeCoreModule : Module() {
       torrentService?.handleSeek(infoHash, fileIdx, position)
     }
 
+    AsyncFunction("enterPiP") {
+      val activity = appContext.currentActivity ?: return@AsyncFunction
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+          val params = android.app.PictureInPictureParams.Builder().build()
+          activity.enterPictureInPictureMode(params)
+      }
+    }
+
     // --- VIDEO PLAYER VIEW ---
     View(CrispyVideoView::class) {
       Prop("source") { view: CrispyVideoView, url: String? ->
@@ -89,6 +97,10 @@ class CrispyNativeCoreModule : Module() {
 
       Prop("resizeMode") { view: CrispyVideoView, mode: String? ->
         view.setResizeMode(mode)
+      }
+
+      Prop("metadata") { view: CrispyVideoView, metadata: CrispyMediaMetadata? ->
+        view.setMetadata(metadata)
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
