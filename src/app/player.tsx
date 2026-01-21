@@ -2,9 +2,14 @@ import CrispyNativeCore from '@/modules/crispy-native-core';
 import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { SideSheet } from '@/src/cdk/components/SideSheet';
 import { Typography } from '@/src/cdk/components/Typography';
+import { AudioTab } from '@/src/components/player/tabs/AudioTab';
+import { EpisodesTab } from '@/src/components/player/tabs/EpisodesTab';
+import { SettingsTab } from '@/src/components/player/tabs/SettingsTab';
+import { StreamsTab } from '@/src/components/player/tabs/StreamsTab';
+import { SubtitlesTab } from '@/src/components/player/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
-import { useTheme } from '@/src/core/ThemeContext';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
@@ -36,13 +41,19 @@ type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info
 
 export default function PlayerScreen() {
     const params = useLocalSearchParams();
-    const { url, title, infoHash, fileIdx, headers: headersParam } = params;
+    const { url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam } = params;
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
 
     const [finalUrl, setFinalUrl] = useState<string | null>(null);
     const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
+
+    // Internal state for seamless switching (overrides params)
+    const [activeStream, setActiveStream] = useState<{ url: string; infoHash?: string; fileIdx?: string } | null>(null);
+    const [resumePosition, setResumePosition] = useState<number | null>(null);
+
+    const [availableStreams, setAvailableStreams] = useState<any[]>([]); // For StreamsTab
     const [paused, setPaused] = useState(false);
     const [loading, setLoading] = useState(true);
     const [showControls, setShowControls] = useState(true);
@@ -50,6 +61,12 @@ export default function PlayerScreen() {
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
+
+    // Tracks State
+    const [audioTracks, setAudioTracks] = useState<any[]>([]);
+    const [subtitleTracks, setSubtitleTracks] = useState<any[]>([]);
+    const [selectedAudioId, setSelectedAudioId] = useState<number | string>(0); // Default to first?
+    const [selectedSubtitleId, setSelectedSubtitleId] = useState<number | string | null>(null); // Default to Off
 
     // Gesture & Feedback State
     const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
@@ -82,19 +99,33 @@ export default function PlayerScreen() {
                 console.error("Failed to parse headers", e);
             }
         }
+        if (streamsParam && typeof streamsParam === 'string') {
+            try {
+                setAvailableStreams(JSON.parse(streamsParam));
+            } catch (e) {
+                console.error("Failed to parse streams", e);
+            }
+        }
     }, [headersParam]);
 
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
+
+        // Use activeStream if set, otherwise fall back to params
+        const currentUrl = activeStream?.url || url as string;
+        const currentInfoHash = activeStream?.infoHash || infoHash;
+        const currentFileIdx = activeStream?.fileIdx || fileIdx;
+
         const resolve = async () => {
             setLoading(true);
-            const rawUrl = url as string;
+            setFinalUrl(null); // Clear previous URL to ensure reload/feedback
+            setStableDuration(0); // Reset duration for new stream
 
             // 1. Magnet link or infoHash -> Torrent
-            if (rawUrl?.startsWith('magnet:') || infoHash) {
-                const hash = (infoHash as string) || extractInfoHash(rawUrl);
-                const idx = fileIdx ? parseInt(fileIdx as string) : -1;
+            if (currentUrl?.startsWith('magnet:') || currentInfoHash) {
+                const hash = (currentInfoHash as string) || extractInfoHash(currentUrl);
+                const idx = currentFileIdx ? parseInt(currentFileIdx as string) : -1;
 
                 if (hash) {
                     console.log("Resolving torrent module...", hash, idx);
@@ -107,14 +138,14 @@ export default function PlayerScreen() {
             }
             // 2. HTTP/HTTPS -> Debrid or Direct
             else {
-                if (isMounted) setFinalUrl(rawUrl);
+                if (isMounted) setFinalUrl(currentUrl);
             }
             setLoading(false);
         };
 
         resolve();
         return () => { isMounted = false; };
-    }, [url, infoHash, fileIdx]);
+    }, [url, infoHash, fileIdx, activeStream]); // Re-run when activeStream changes
 
     useEffect(() => {
         // Lock to landscape
@@ -251,21 +282,33 @@ export default function PlayerScreen() {
                     paused={paused}
                     useExoPlayer={useExoPlayer}
                     onCodecError={handleCodecError}
+                    onTracksChanged={(data) => {
+                        console.log("Tracks changed", data);
+                        setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id}` })) || []);
+                        setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
+                    }}
                     onProgress={(data) => {
                         // Don't overwrite progress while user is seeking
                         if (!isSeeking) {
-                            // Values come in milliseconds with 'position' property (not currentTime)
-                            const positionSec = (data.position ?? data.currentTime ?? 0) / 1000;
-                            const durationSec = (data.duration ?? 0) / 1000;
+                            // Values are in SECONDS from react-native-video / MPV
+                            const positionSec = data.position ?? data.currentTime ?? 0;
+                            const durationSec = data.duration ?? 0;
                             setProgress({ position: positionSec, duration: durationSec });
                         }
                     }}
                     onLoad={(data) => {
                         setLoading(false);
-                        // Duration comes in milliseconds
-                        const durationSec = (data.duration ?? 0) / 1000;
+                        // Duration is in SECONDS from react-native-video / MPV
+                        const durationSec = data.duration ?? 0;
                         if (durationSec > 0) {
                             setStableDuration(durationSec);
+                        }
+
+                        // Handle Resume - seek expects seconds
+                        if (resumePosition !== null && resumePosition > 0) {
+                            console.log("Resuming at:", resumePosition);
+                            videoRef.current?.seek(resumePosition);
+                            setResumePosition(null); // Consumed
                         }
                     }}
                     onEnd={() => router.back()}
@@ -459,10 +502,72 @@ export default function PlayerScreen() {
                 onClose={() => setActiveTab('none')}
                 title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
             >
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Typography variant="body" style={{ color: '#fff' }}>
-                        {activeTab.toUpperCase()} CONTENT
-                    </Typography>
+                <View style={{ flex: 1 }}>
+                    {activeTab === 'audio' && (
+                        <AudioTab
+                            tracks={audioTracks}
+                            selectedTrackId={selectedAudioId}
+                            onSelectTrack={(track) => {
+                                videoRef.current?.setAudioTrack?.(Number(track.id));
+                                setSelectedAudioId(track.id);
+                                setActiveTab('none');
+                            }}
+                        />
+                    )}
+                    {activeTab === 'subtitles' && (
+                        <SubtitlesTab
+                            tracks={subtitleTracks}
+                            selectedTrackId={selectedSubtitleId}
+                            onSelectTrack={(track) => {
+                                videoRef.current?.setSubtitleTrack?.(Number(track?.id ?? -1));
+                                setSelectedSubtitleId(track?.id ?? null);
+                                setActiveTab('none');
+                            }}
+                        />
+                    )}
+                    {activeTab === 'settings' && (
+                        <SettingsTab
+                            playbackSpeed={1.0}
+                            onSelectSpeed={(speed) => {
+                                console.log("Speed selected", speed);
+                                // Wiring speed needs VideoSurface update or ref method, leaving for now
+                                setActiveTab('none');
+                            }}
+                        />
+                    )}
+                    {activeTab === 'streams' && (
+                        <StreamsTab
+                            streams={availableStreams}
+                            currentStreamUrl={(activeStream?.url || url) as string}
+                            onSelectStream={(stream) => {
+                                console.log("Switching to stream:", stream);
+                                // Save current position
+                                setResumePosition(progress.position);
+
+                                // Update headers
+                                if (stream.behaviorHints?.headers) {
+                                    setHeaders(stream.behaviorHints.headers);
+                                } else {
+                                    setHeaders(undefined);
+                                }
+
+                                // Update Active Stream (triggers resolve effect)
+                                setActiveStream({
+                                    url: stream.url,
+                                    infoHash: stream.infoHash,
+                                    fileIdx: stream.fileIdx
+                                });
+
+                                setActiveTab('none');
+                            }}
+                        />
+                    )}
+                    {activeTab === 'info' && (
+                        <EpisodesTab
+                            episodes={[]}
+                            onSelectEpisode={() => setActiveTab('none')}
+                        />
+                    )}
                 </View>
             </SideSheet>
         </View>

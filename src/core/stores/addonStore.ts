@@ -1,28 +1,13 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { AddonService } from '../api/AddonService';
 import { StorageService } from '../storage';
-
-export interface AddonManifest {
-    id: string;
-    name: string;
-    version?: string;
-    description?: string;
-    icon?: string;
-    background?: string;
-    types?: string[];
-    resources?: (string | { name: string; types?: string[]; idPrefixes?: string[] })[];
-    catalogs?: {
-        type: string;
-        id: string;
-        name?: string;
-        extra?: (string | { name: string; isRequired?: boolean; options?: string[] })[];
-    }[];
-}
+import { AddonManifest } from '../types/addon-types';
 
 interface AddonState {
     addonUrls: string[];
     manifests: Record<string, AddonManifest>;
-    addAddon: (url: string) => void;
+    addAddon: (url: string) => Promise<void>;
     removeAddon: (url: string) => void;
     updateManifest: (url: string, manifest: AddonManifest) => void;
 }
@@ -32,9 +17,13 @@ export const useAddonStore = create<AddonState>()(
         (set) => ({
             addonUrls: [],
             manifests: {},
-            addAddon: (url) => set((state) => ({
-                addonUrls: state.addonUrls.includes(url) ? state.addonUrls : [...state.addonUrls, url]
-            })),
+            addAddon: async (url) => {
+                const manifest = await AddonService.fetchManifest(url);
+                set((state) => ({
+                    addonUrls: state.addonUrls.includes(url) ? state.addonUrls : [...state.addonUrls, url],
+                    manifests: { ...state.manifests, [url]: manifest }
+                }));
+            },
             removeAddon: (url) => set((state) => {
                 const newUrls = state.addonUrls.filter((u) => u !== url);
                 const newManifests = { ...state.manifests };

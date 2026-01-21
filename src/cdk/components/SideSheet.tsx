@@ -37,8 +37,8 @@ export function SideSheet({
             return true;
         };
 
-        BackHandler.addEventListener('hardwareBackPress', onBackPress);
-        return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => subscription.remove();
     }, [isVisible, onClose]);
 
     if (!isVisible) return null;

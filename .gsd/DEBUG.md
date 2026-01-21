@@ -1,25 +1,16 @@
-# Debug Session: Persistent Reanimated Warnings on Appearance Screen
+# Debug Session: Playback Duration Display
 
 ## Symptom
-Reanimated warnings "It looks like you might be using shared value's .value inside reanimated inline style" persist on the Appearance screen, specifically when the accent color selector is visible.
+Playback time shows "0:00/0:01" or similar tiny values.
 
-**When:** Navigating to Settings > Appearance, or toggling "Material You" off.
-**Expected:** No console warnings.
-**Actual:** Multiple warnings appear. Hiding the color selector (enabling Material You) stops the warnings.
+## Resolution
 
-## Evidence
-- `ExpressiveSwitch` was refactored and should be clean.
-- `SettingsItem` uses `Touchable`.
-- Color picker uses `TouchableOpacity` (standard RN), `Typography` (custom), `ScrollView` (RN), `View` (RN).
-- `SettingsGroup` wraps the content.
-- `SettingsSubpage` wraps the whole screen.
+**Root Cause:**
+Incorrect assumption that `react-native-video` and MPV report time in **milliseconds**. They actually report in **seconds**. Dividing by 1000 converted a 3600-second movie into 3.6, hence "0:01".
 
-## Hypotheses
+**Fix:**
+-   Removed `/1000` divisions in `onProgress` and `onLoad` in `player.tsx`.
+-   Removed `*1000` multiplier in the `videoRef.seek()` call (since seek also expects seconds).
 
-| # | Hypothesis | Likelihood | Status |
-|---|------------|------------|--------|
-| 1 | `Touchable` uses `theme.colors` inside worklet | 70% | UNTESTED |
-| 2 | `Typography` uses Reanimated incorrectly | 10% | UNTESTED |
-| 3 | `SettingsGroup` animation issue | 20% | UNTESTED |
-
-## Attempts
+**Verified:**
+-   Code review confirms correct unit handling.

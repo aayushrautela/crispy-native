@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AddonManifest } from '../stores/addonStore';
+import { AddonManifest } from '../types/addon-types';
 
 export interface MetaPreview {
     id: string;
@@ -29,6 +29,11 @@ export interface ResourceResponse<T> {
 const STREAMING_SERVER_URL = 'http://127.0.0.1:11470';
 
 export class AddonService {
+    private static getRootUrl(baseUrl: string): string {
+        // Strip manifest.json and any trailing slashes to prevent double slashes
+        return baseUrl.replace(/\/manifest\.json$/, '').replace(/\/+$/, '');
+    }
+
     static async fetchManifest(url: string): Promise<AddonManifest> {
         const response = await axios.get<AddonManifest>(url);
         return response.data;
@@ -55,7 +60,7 @@ export class AddonService {
             }
         }
 
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}${path}.json`;
+        const url = `${AddonService.getRootUrl(baseUrl)}${path}.json`;
         console.log(`[AddonService] Fetching catalog: ${url}`);
 
         try {
@@ -69,19 +74,19 @@ export class AddonService {
     }
 
     static async getMeta(baseUrl: string, type: string, id: string): Promise<any> {
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/meta/${type}/${id}.json`;
+        const url = `${AddonService.getRootUrl(baseUrl)}/meta/${type}/${id}.json`;
         const res = await axios.get<any>(url);
         return res.data;
     }
 
     static async search(baseUrl: string, type: string, query: string): Promise<CatalogResponse> {
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/catalog/${type}/search=${encodeURIComponent(query)}.json`;
+        const url = `${AddonService.getRootUrl(baseUrl)}/catalog/${type}/search=${encodeURIComponent(query)}.json`;
         const res = await axios.get<CatalogResponse>(url);
         return res.data;
     }
 
     static async getStreams(baseUrl: string, type: string, id: string): Promise<{ streams: any[] }> {
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/stream/${type}/${encodeURIComponent(id)}.json`;
+        const url = `${AddonService.getRootUrl(baseUrl)}/stream/${type}/${encodeURIComponent(id)}.json`;
         console.log(`[AddonService] getStreams URL: ${url}`);
         try {
             const res = await axios.get<{ streams: any[] }>(url);
@@ -97,7 +102,7 @@ export class AddonService {
     }
 
     static async getSubtitles(baseUrl: string, type: string, id: string): Promise<{ subtitles: any[] }> {
-        const url = `${baseUrl.replace(/\/manifest\.json$/, '')}/subtitles/${type}/${encodeURIComponent(id)}.json`;
+        const url = `${AddonService.getRootUrl(baseUrl)}/subtitles/${type}/${encodeURIComponent(id)}.json`;
         try {
             const res = await axios.get<{ subtitles: any[] }>(url);
             return res.data;
@@ -119,7 +124,7 @@ export class AddonService {
 
                 if (c.type === type && isSearchable) {
                     candidates.push({
-                        baseUrl: url.replace(/\/manifest\.json$/, ''),
+                        baseUrl: AddonService.getRootUrl(url),
                         addonName: m.name,
                         catalogName: c.name,
                     });

@@ -14,9 +14,10 @@ interface StreamSelectorProps {
     id: string;
     onSelect: (stream: any) => void;
     hideHeader?: boolean;
+    onStreamsLoaded?: (streams: any[]) => void;
 }
 
-export const StreamSelector = ({ type, id, onSelect, hideHeader = false }: StreamSelectorProps) => {
+export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { manifests } = useAddonStore();
 
@@ -56,6 +57,29 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false }: Strea
             return fetchedStreams;
         },
     });
+
+    React.useEffect(() => {
+        if (streams && onStreamsLoaded) {
+            // Pre-process streams to match what StreamsTab expects
+            const formattedStreams = streams.map(s => {
+                const mainTitle = s.name?.replace(/\n/g, ' ') || "Stream";
+                const subtitle = s.title || s.description || "";
+
+                // Extract quality/size if possible or pass subtitle as is
+                // StreamsTab expects: title, quality?, size?
+                // We'll map mainTitle -> title, and put details in quality/size if we can parse them,
+                // or just put subtitle in quality for now to ensure visibility.
+
+                return {
+                    ...s,
+                    title: mainTitle, // The addon name / main identifier
+                    quality: subtitle, // Detailed description
+                    // We can add more parsing logic here if needed
+                };
+            });
+            onStreamsLoaded(formattedStreams);
+        }
+    }, [streams, onStreamsLoaded]);
 
     const renderBadges = (title: string) => {
         const badges = [];

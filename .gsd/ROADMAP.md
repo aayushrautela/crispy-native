@@ -83,12 +83,14 @@
 - [ ] Update `SettingsItem` to use circular icons and dividers.
 
 ## Phase 13: Player Side Tabs
-**Status**: ⬜ Not Started
+**Status**: ✅ COMPLETED (Updated 2026-01-20)
 **Objective**: Implement side tabs in the video player, similar to `crispy-webui` mobile player in look and functionality.
 **Depends on**: Phase 12
 
 **Tasks**:
-- [ ] TBD (run /plan 13 to create)
+- [x] Create SideSheet component
+- [x] Integrate into PlayerScreen
+- [x] Implement Tab contents (Audio, Subs, Streams, etc.)
 
 **Verification**:
-- [ ] TBD
+- [x] Verified code integration and wiring.

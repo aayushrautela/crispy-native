@@ -139,6 +139,7 @@ export default function MetaDetailsScreen() {
     const [seasonEpisodes, setSeasonEpisodes] = useState<any[]>([]);
     const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
     const [selectedReview, setSelectedReview] = useState<any>(null);
+    const [availableStreams, setAvailableStreams] = useState<any[]>([]); // New state
     const bottomSheetRef = React.useRef<BottomSheetRef>(null);
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
 
@@ -226,6 +227,11 @@ export default function MetaDetailsScreen() {
 
         if (stream.behaviorHints && stream.behaviorHints.headers) {
             params.headers = JSON.stringify(stream.behaviorHints.headers);
+        }
+
+        // Pass available streams if we have them
+        if (availableStreams && availableStreams.length > 0) {
+            params.streams = JSON.stringify(availableStreams);
         }
 
         router.push({
@@ -479,6 +485,7 @@ export default function MetaDetailsScreen() {
                     id={getStreamId()}
                     onSelect={handleStreamSelect}
                     hideHeader={true}
+                    onStreamsLoaded={setAvailableStreams}
                 />
             </CustomBottomSheet>
 
