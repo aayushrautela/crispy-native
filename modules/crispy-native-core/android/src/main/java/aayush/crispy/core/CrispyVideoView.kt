@@ -17,8 +17,8 @@ import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerNotificationManager
 import android.os.Looper
-import io.coil.imageLoader
-import io.coil.request.ImageRequest
+import coil.ImageLoader
+import coil.request.ImageRequest
 import android.graphics.drawable.BitmapDrawable
 
 @UnstableApi
@@ -38,6 +38,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private val addedExternalSubUrls = mutableSetOf<String>()
     private var isFileLoaded = false
+    private var hasLoadEventFired = false
     private var pendingCommands = mutableListOf<Array<String>>()
     private var resumeOnForeground = false
 
@@ -53,22 +54,21 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var notificationManager: PlayerNotificationManager? = null
     private var currentMetadata: CrispyMediaMetadata? = null
 
-    private val lifeCycleListener = object : LifecycleEventListener {
-        override fun onHostPause() {
-            resumeOnForeground = !isPaused
-            if (resumeOnForeground) {
-                Log.d(TAG, "App backgrounded - pausing MPV")
-                setPaused(true)
-            }
+    // Lifecycle handling via Android lifecycle callbacks
+    private fun handleHostPause() {
+        resumeOnForeground = !isPaused
+        if (resumeOnForeground) {
+            Log.d(TAG, "App backgrounded - pausing MPV")
+            setPaused(true)
         }
-        override fun onHostResume() {
-            if (resumeOnForeground) {
-                Log.d(TAG, "App foregrounded - resuming MPV")
-                setPaused(false)
-                resumeOnForeground = false
-            }
+    }
+
+    private fun handleHostResume() {
+        if (resumeOnForeground) {
+            Log.d(TAG, "App foregrounded - resuming MPV")
+            setPaused(false)
+            resumeOnForeground = false
         }
-        override fun onHostDestroy() {}
     }
 
     private var durationSec: Double = 0.0
@@ -293,7 +293,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                onEnd(Unit)
                listeners.sendEvent(Player.EVENT_PLAYBACK_STATE_CHANGED) { it.onPlaybackStateChanged(playbackState) }
            }
-           MPVLib.MPV_EVENT_START_FILE -> {
+           MPVLib.MpvEvent.MPV_EVENT_START_FILE -> {
                // Flush pending commands when playback starts
                if (pendingCommands.isNotEmpty()) {
                    Log.d(TAG, "Flushing ${pendingCommands.size} pending commands")
@@ -303,7 +303,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                    pendingCommands.clear()
                }
            }
-           MPVLib.MPV_EVENT_FILE_LOADED -> {
+           MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {
                isFileLoaded = true
                isPlayerReady = true
                playbackState = Player.STATE_READY
@@ -485,17 +485,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                 val url = currentMetadata?.artworkUrl ?: return null
                 
                 // Use Coil to load the bitmap asynchronously
-                val loader = io.coil.Coil.imageLoader(context)
-                val request = io.coil.request.ImageRequest.Builder(context)
+                val request = ImageRequest.Builder(context)
                     .data(url)
-                    .target { result ->
-                        val bitmap = (result as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                    .target { drawable ->
+                        val bitmap = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                         if (bitmap != null) {
                             callback.onBitmap(bitmap)
                         }
                     }
                     .build()
-                loader.enqueue(request)
+                ImageLoader(context).enqueue(request)
                 return null
             }
         }
@@ -565,7 +564,6 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun getMediaMetadata(): MediaMetadata = MediaMetadata.EMPTY
     override fun getPlaylistMetadata(): MediaMetadata = MediaMetadata.EMPTY
     override fun setPlaylistMetadata(mediaMetadata: MediaMetadata) {}
-    override fun getCurrentLiveConfiguration(): LiveConfiguration? = null
     override fun getContentDuration(): Long = getDuration()
     override fun getContentPosition(): Long = getCurrentPosition()
     override fun getContentBufferedPosition(): Long = getBufferedPosition()
@@ -582,7 +580,6 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun getShuffleModeEnabled(): Boolean = false
     override fun getPlayerError(): PlaybackException? = null
     override fun getVideoSize(): VideoSize = VideoSize.UNKNOWN
-    override fun getSurfaceSize(): Size = Size(surfaceView.width, surfaceView.height)
     override fun getCurrentCues(): CueGroup = CueGroup.EMPTY_TIME_ZERO
     override fun getDeviceInfo(): DeviceInfo = DeviceInfo.UNKNOWN
     override fun getDeviceVolume(): Int = 0
