@@ -229,12 +229,15 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     resizeMode={getExoResizeMode()}
                     selectedAudioTrack={selectedAudioTrack as any}
                     selectedTextTrack={selectedTextTrack as any}
-                    textTracks={externalSubtitles.map(s => ({
-                        uri: s.url,
-                        title: s.title,
-                        type: s.url.endsWith('.vtt') ? 'text/vtt' : 'application/x-subrip',
-                        language: s.language || 'en'
-                    }))}
+                    textTracks={externalSubtitles.map(s => {
+                        const isVtt = s.url.toLowerCase().includes('.vtt');
+                        return {
+                            uri: s.url,
+                            title: s.title,
+                            type: isVtt ? 'text/vtt' : 'application/x-subrip',
+                            language: s.language || 'en'
+                        };
+                    })}
                     style={styles.player}
                     onLoad={handleExoLoad}
                     onProgress={handleExoProgress}

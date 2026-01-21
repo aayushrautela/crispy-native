@@ -24,6 +24,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var pendingHeaders: Map<String, String>? = null
     private var isPaused = true // Default to paused until told otherwise
 
+    // Subtitle tracking to prevent duplicate adds
+    private val addedExternalSubUrls = mutableSetOf<String>()
+
     // Track info
     private var durationSec: Double = 0.0
     private var positionSec: Double = 0.0
@@ -266,6 +269,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun setSource(url: String?) {
         if (url == null) return
+        
+        // Clear added subtitles for new source
+        addedExternalSubUrls.clear()
+        
         if (isMpvInitialized) {
             loadFile(url)
         } else {
@@ -332,12 +339,25 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun addExternalSubtitle(url: String, title: String? = null, language: String? = null) {
         if (isMpvInitialized) {
-            // sub-add: [url], [flags], [title], [lang]
-            // flags: "select" to make it active, "auto" to use sub-auto logic
-            val titleStr = title ?: "External"
-            val langStr = language ?: "eng"
-            Log.d(TAG, "Adding external subtitle: $url ($titleStr)")
-            MPVLib.command(arrayOf("sub-add", url, "select", titleStr, langStr))
+            // Prevent duplicate additions which can cause unresponsiveness/freezing
+            if (addedExternalSubUrls.contains(url)) {
+                Log.d(TAG, "Subtitle already added, skipping: $url")
+                return
+            }
+            addedExternalSubUrls.add(url)
+
+            // Run in background thread to avoid blocking UI thread during network fetch
+            Thread {
+                try {
+                    val titleStr = title ?: "External"
+                    val langStr = language ?: "eng"
+                    Log.d(TAG, "Adding external subtitle (background): $url ($titleStr)")
+                    // Use 'select' to make it active immediately
+                    MPVLib.command(arrayOf("sub-add", url, "select", titleStr, langStr))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to add external subtitle", e)
+                }
+            }.start()
         }
     }
     
