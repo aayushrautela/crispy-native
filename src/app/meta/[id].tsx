@@ -11,9 +11,10 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, List, Play, Star } from 'lucide-react-native';
+import { ArrowLeft, ArrowUpRight, Bookmark, ChevronDown, Circle, MoreVertical, Play, Share2, Star, ThumbsDown, ThumbsUp } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import ImageColors from 'react-native-image-colors';
 import Animated, {
     Extrapolation,
     interpolate,
@@ -25,7 +26,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CatalogRow } from '../../components/CatalogRow';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const HERO_HEIGHT = 550;
+const HERO_HEIGHT = 750;
+const BACKDROP_HEIGHT = 480;
 
 const CastItem = ({ person, theme, onPress }: { person: any; theme: any; onPress: () => void }) => {
     return (
@@ -127,6 +129,21 @@ const ReviewCard = ({ review, theme, onPress }: { review: any; theme: any; onPre
     );
 };
 
+const RatingCard = ({ source, score, label, icon, theme }: { source: string; score: string; label: string; icon: React.ReactNode; theme: any }) => (
+    <View style={[styles.ratingCard, { backgroundColor: '#2C2C2E' }]}>
+        <View style={styles.ratingIconContainer}>
+            {icon}
+        </View>
+        <View style={styles.ratingInfo}>
+            <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 13 }}>{score}</Typography>
+            <Typography variant="label" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{label}</Typography>
+        </View>
+        <View style={styles.ratingArrowContainer}>
+            <ArrowUpRight size={14} color="rgba(255,255,255,0.7)" />
+        </View>
+    </View>
+);
+
 export default function MetaDetailsScreen() {
     const { id, type } = useLocalSearchParams();
     const { theme } = useTheme();
@@ -139,7 +156,14 @@ export default function MetaDetailsScreen() {
     const [seasonEpisodes, setSeasonEpisodes] = useState<any[]>([]);
     const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
     const [selectedReview, setSelectedReview] = useState<any>(null);
-    const [availableStreams, setAvailableStreams] = useState<any[]>([]); // New state
+    const [availableStreams, setAvailableStreams] = useState<any[]>([]);
+    const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+    const [colors, setColors] = useState<{ primary: string; secondary: string; vibrant: string; dominant: string }>({
+        primary: theme.colors.background,
+        secondary: theme.colors.surface,
+        vibrant: '#90CAF9', // Default blue from screenshot
+        dominant: theme.colors.background
+    });
     const bottomSheetRef = React.useRef<BottomSheetRef>(null);
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
 
@@ -193,6 +217,33 @@ export default function MetaDetailsScreen() {
             });
         }
     }, [activeSeason, enriched.tmdbId, type, enriched.type]);
+
+    // Extract Colors from Backdrop
+    useEffect(() => {
+        if (backdropUrl) {
+            ImageColors.getColors(backdropUrl, {
+                fallback: theme.colors.background,
+                cache: true,
+                key: backdropUrl,
+            }).then((result) => {
+                if (result.platform === 'android') {
+                    setColors({
+                        primary: result.average || theme.colors.background,
+                        secondary: result.darkMuted || theme.colors.surface,
+                        vibrant: result.vibrant || '#90CAF9',
+                        dominant: result.dominant || theme.colors.background,
+                    });
+                } else if (result.platform === 'ios') {
+                    setColors({
+                        primary: result.primary || theme.colors.background,
+                        secondary: result.secondary || theme.colors.surface,
+                        vibrant: result.detail || '#90CAF9',
+                        dominant: result.background || theme.colors.background,
+                    });
+                }
+            });
+        }
+    }, [backdropUrl]);
 
     // Auto-trigger stream selector if autoplay is requested
     useEffect(() => {
@@ -275,20 +326,35 @@ export default function MetaDetailsScreen() {
             <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
                 <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.4)', theme.colors.background]}
+                    colors={['transparent', 'rgba(0,0,0,0.4)', colors.primary]}
                     locations={[0, 0.6, 1]}
                     style={styles.heroGradient}
                 />
             </Animated.View>
 
-            {/* Standardized Android Back Button (Floating on top) */}
-            <View style={[styles.backButtonOverlay, { top: insets.top + 8 }]}>
+            {/* Top Bar Actions */}
+            <View style={[styles.topBar, { top: insets.top + 8 }]}>
                 <Pressable
                     onPress={() => router.back()}
                     style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
                 >
                     <ArrowLeft color="white" size={24} />
                 </Pressable>
+
+                <View style={styles.topRightActions}>
+                    <Pressable
+                        onPress={() => { }}
+                        style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                    >
+                        <Share2 color="white" size={20} />
+                    </Pressable>
+                    <Pressable
+                        onPress={() => { }}
+                        style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+                    >
+                        <MoreVertical color="white" size={20} />
+                    </Pressable>
+                </View>
             </View>
 
             {/* Layer 2: Scrolling Content */}
@@ -299,80 +365,144 @@ export default function MetaDetailsScreen() {
                 contentContainerStyle={{ paddingBottom: 100 }}
                 style={{ zIndex: 1 }}
             >
-                {/* Transparent Spacer for Hero Height */}
-                <View style={{ height: HERO_HEIGHT, justifyContent: 'flex-end', paddingBottom: 40, paddingHorizontal: 20 }}>
-                    <View style={styles.heroContent}>
+                {/* Transparent Spacer for Hero Height - using minHeight for dynamic expansion */}
+                <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
+                    {/* Gradient Fade for Body Start (Starts from description area) */}
+                    <LinearGradient
+                        colors={['transparent', colors.primary, colors.primary]}
+                        locations={[0, 0.4, 1]}
+                        style={{ position: 'absolute', top: BACKDROP_HEIGHT - 150, left: 0, right: 0, bottom: 0 }}
+                        pointerEvents="none"
+                    />
+
+                    <View style={[styles.heroContent, { paddingBottom: 40, paddingHorizontal: 20 }]}>
+                        {/* Trailer Button */}
+                        <Pressable style={styles.trailerBtn}>
+                            <Play size={14} color="white" fill="white" />
+                            <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>Trailer</Typography>
+                        </Pressable>
+
+                        {/* Title / Logo */}
                         {enriched.logo ? (
-                            <ExpoImage source={{ uri: enriched.logo }} style={styles.logo} contentFit="contain" />
+                            <ExpoImage
+                                source={{ uri: enriched.logo }}
+                                style={styles.heroLogo}
+                                contentFit="contain"
+                            />
                         ) : (
-                            <Typography variant="h1" weight="black" style={{ color: 'white', marginBottom: 8, fontSize: 32 }}>
-                                {enriched.title || meta?.name}
+                            <Typography variant="h1" weight="black" style={styles.heroTitle}>
+                                {(enriched.title || meta?.name)?.toUpperCase()}
                             </Typography>
                         )}
 
-                        <View style={styles.metaRow}>
-                            <Typography variant="label" weight="bold" style={{ color: 'white' }}>{enriched.year || meta?.releaseInfo || 'TBA'}</Typography>
+                        {/* Metadata Row */}
+                        <View style={styles.metadataRow}>
+                            <View style={styles.metaItem}>
+                                <Star size={14} color="#00C853" fill="#00C853" />
+                                <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
+                                    {enriched.rating ? `${Math.round(Number(enriched.rating) * 10)}%` : '51%'}
+                                </Typography>
+                            </View>
                             {enriched.maturityRating && (
-                                <View style={[styles.ratingBadge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                                    <Typography variant="label" weight="black" style={{ color: 'white' }}>{enriched.maturityRating}</Typography>
+                                <View style={styles.metaBadge}>
+                                    <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 10 }}>
+                                        {enriched.maturityRating}
+                                    </Typography>
                                 </View>
                             )}
-                            <Typography variant="label" style={{ color: 'white' }}>{meta?.runtime || '45 min'}</Typography>
-                            <Typography variant="label" style={{ color: 'white', opacity: 0.8 }} numberOfLines={1}>
-                                • {enriched.genres?.slice(0, 3).join(' • ') || 'Drama'}
+                            <Typography variant="label" style={styles.metaText}>{enriched.year || '2025'}</Typography>
+                            <Typography variant="label" style={styles.metaText}>{meta?.runtime || '1 hr 43 min'}</Typography>
+                        </View>
+
+                        {/* Description (Expandable) */}
+                        <Pressable
+                            onPress={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                            style={styles.descriptionContainer}
+                        >
+                            <Typography
+                                variant="body"
+                                numberOfLines={isDescriptionExpanded ? undefined : 3}
+                                style={styles.descriptionText}
+                            >
+                                {enriched.description || meta?.description}
                             </Typography>
-                        </View>
-
-                        <View style={styles.imdbRow}>
-                            <View style={styles.imdbBadge}>
-                                <Typography variant="label" weight="black" style={{ color: 'black', fontSize: 10 }}>IMDb</Typography>
-                            </View>
-                            <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 6 }}>{enriched.rating || '8.5'}</Typography>
-                        </View>
-
-                        <View style={styles.actionRow}>
-                            <ExpressiveButton
-                                title="Watch Now"
-                                variant="primary"
-                                onPress={() => {
-                                    if (isSeries && !selectedEpisode && seasonEpisodes.length > 0) {
-                                        setSelectedEpisode(seasonEpisodes[0]);
-                                    }
-                                    streamBottomSheetRef.current?.present();
-                                }}
-                                icon={<Play size={20} color="black" fill="black" />}
-                                style={styles.primaryWatchBtn}
-                                textStyle={{ color: 'black', fontWeight: '900' }}
+                            <ChevronDown
+                                size={20}
+                                color="white"
+                                style={[
+                                    styles.descriptionChevron,
+                                    { transform: [{ rotate: isDescriptionExpanded ? '180deg' : '0deg' }] }
+                                ]}
                             />
-                            <ExpressiveSurface variant="filled" rounding="lg" style={styles.listBtn}>
-                                <List size={24} color="white" />
-                            </ExpressiveSurface>
+                        </Pressable>
+
+                        {/* Primary Action Button */}
+                        <View style={styles.actionStack}>
+                            <ExpressiveButton
+                                title="Watch now"
+                                variant="primary"
+                                icon={<Play size={20} color="black" fill="black" />}
+                                onPress={() => streamBottomSheetRef.current?.present()}
+                                style={[styles.watchNowBtn, { backgroundColor: colors.vibrant }]}
+                                textStyle={{ color: 'black', fontWeight: 'bold' }}
+                            />
+                        </View>
+
+                        {/* Icon Action Row */}
+                        <View style={styles.iconActionRow}>
+                            <Pressable style={styles.iconActionItem}>
+                                <Bookmark size={24} color="white" />
+                                <Typography variant="label" style={styles.iconActionLabel}>Watchlist</Typography>
+                            </Pressable>
+                            <Pressable style={styles.iconActionItem}>
+                                <Circle size={24} color="white" />
+                                <Typography variant="label" style={styles.iconActionLabel}>Watched it?</Typography>
+                            </Pressable>
+                            <Pressable style={styles.iconActionItem}>
+                                <ThumbsUp size={24} color="white" />
+                                <Typography variant="label" style={styles.iconActionLabel}>Like</Typography>
+                            </Pressable>
+                            <Pressable style={styles.iconActionItem}>
+                                <ThumbsDown size={24} color="white" />
+                                <Typography variant="label" style={styles.iconActionLabel}>Dislike</Typography>
+                            </Pressable>
+                        </View>
+
+                        {/* Ratings Section */}
+                        <View style={styles.ratingsSection}>
+                            <Typography variant="h3" weight="black" style={styles.ratingsTitle}>Ratings</Typography>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.ratingsScrollContent}
+                            >
+                                <RatingCard
+                                    source="imdb"
+                                    score={enriched.rating ? `${enriched.rating}/10` : '5.7/10'}
+                                    label="IMDb"
+                                    theme={theme}
+                                    icon={
+                                        <View style={[styles.sourceIconCircle, { backgroundColor: '#F5C518' }]}>
+                                            <Typography variant="label" weight="black" style={{ color: 'black', fontSize: 8 }}>IMDb</Typography>
+                                        </View>
+                                    }
+                                />
+                                <RatingCard
+                                    source="rt"
+                                    score="51%"
+                                    label="Rotten Tomatoes"
+                                    theme={theme}
+                                    icon={<Star size={24} color="#00C853" fill="#00C853" />}
+                                />
+                            </ScrollView>
                         </View>
                     </View>
                 </View>
 
-                {/* Gradient Fade for Body Start */}
-                <LinearGradient
-                    colors={['transparent', theme.colors.background]}
-                    style={{ height: 100, marginTop: -100 }}
-                    pointerEvents="none"
-                />
+                {/* Body Content (Actions like Cast, Episodes, etc.) */}
+                <View style={[styles.body, { backgroundColor: colors.primary }]}>
+                    {/* Removed original description and AI insights placeholder as they are now in hero */}
 
-                {/* Body Content (Opaque) */}
-                <View style={[styles.body, { backgroundColor: theme.colors.background }]}>
-
-                    <Typography variant="body" weight="medium" style={{ color: 'white', opacity: 0.8, lineHeight: 22, fontSize: 15 }}>
-                        {enriched.description || meta?.description}
-                    </Typography>
-
-                    {/* AI Insights Section */}
-                    <View style={{ marginTop: 24, marginBottom: 8 }}>
-                        <AIInsightsCarousel
-                            insights={insights}
-                            isLoading={isAiLoading}
-                            onGenerate={() => generateInsights(enriched, enriched.reviews)}
-                        />
-                    </View>
 
                     {enriched.director && (
                         <View style={{ marginTop: 16 }}>
@@ -481,6 +611,16 @@ export default function MetaDetailsScreen() {
                 <View style={{ height: 100 }} />
             </Animated.ScrollView>
 
+            <CustomBottomSheet ref={bottomSheetRef} title="Summaries & AI Insights">
+                <View style={{ paddingBottom: 40 }}>
+                    <AIInsightsCarousel
+                        insights={insights}
+                        isLoading={isAiLoading}
+                        onGenerate={() => generateInsights(enriched, enriched.reviews)}
+                    />
+                </View>
+            </CustomBottomSheet>
+
             <CustomBottomSheet
                 ref={streamBottomSheetRef}
                 title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`}
@@ -541,10 +681,19 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    backButtonOverlay: {
+    topBar: {
         position: 'absolute',
-        left: 16,
+        left: 0,
+        right: 0,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         zIndex: 1000,
+    },
+    topRightActions: {
+        flexDirection: 'row',
+        gap: 12,
     },
     backBtn: {
         width: 44,
@@ -558,7 +707,7 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        height: HERO_HEIGHT,
+        height: BACKDROP_HEIGHT,
         width: SCREEN_WIDTH,
         zIndex: 0,
     },
@@ -572,54 +721,142 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     heroContent: {
-        gap: 12,
+        alignItems: 'center',
+        gap: 16,
     },
-    logo: {
-        width: 280,
+    trailerBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    heroLogo: {
+        width: '100%',
         height: 100,
-        marginBottom: 8,
+        marginBottom: 12,
+        alignSelf: 'center',
     },
-    metaRow: {
+    heroTitle: {
+        color: 'white',
+        fontSize: 48,
+        textAlign: 'center',
+        lineHeight: 56,
+        letterSpacing: -1,
+    },
+    metadataRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
-    ratingBadge: {
+    metaItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    metaBadge: {
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.5)',
         paddingHorizontal: 6,
-        paddingVertical: 2,
+        paddingVertical: 1,
         borderRadius: 4,
     },
-    imdbRow: {
+    metaText: {
+        color: 'white',
+        opacity: 0.9,
+        fontSize: 14,
+    },
+    descriptionContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        width: '100%',
+        marginTop: 8,
+    },
+    descriptionText: {
+        color: 'white',
+        opacity: 0.9,
+        lineHeight: 20,
+        fontSize: 14,
+        flex: 1,
+    },
+    descriptionChevron: {
+        marginLeft: 8,
+    },
+    actionStack: {
+        width: '100%',
+        marginTop: 16,
+    },
+    watchNowBtn: {
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#90CAF9', // Tonal blue matching the screenshot
+    },
+    iconActionRow: {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'space-around',
+        marginTop: 24,
+        paddingHorizontal: 10,
+    },
+    iconActionItem: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    iconActionLabel: {
+        color: 'white',
+        fontSize: 12,
+        opacity: 0.8,
+    },
+    ratingsSection: {
+        width: '100%',
+        marginTop: 32,
+    },
+    ratingsTitle: {
+        color: 'white',
+        fontSize: 20,
+        marginBottom: 16,
+    },
+    ratingsScrollContent: {
+        gap: 12,
+    },
+    ratingCard: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    imdbBadge: {
-        backgroundColor: '#F5C518',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 2,
-    },
-    actionRow: {
-        flexDirection: 'row',
-        gap: 12,
-        marginTop: 12,
-    },
-    primaryWatchBtn: {
-        flex: 1,
-        height: 54,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         borderRadius: 32,
-        backgroundColor: 'white',
+        minWidth: 170,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
     },
-    listBtn: {
-        width: 54,
-        height: 54,
+    ratingIconContainer: {
+        width: 32,
+        height: 32,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    sourceIconCircle: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    ratingInfo: {
+        marginLeft: 10,
+        flex: 1,
+    },
+    ratingArrowContainer: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 8,
     },
     body: {
         paddingHorizontal: 20,
-        paddingTop: 12, // Tighter top body
     },
     section: {
         marginTop: 32,
