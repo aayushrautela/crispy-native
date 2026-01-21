@@ -71,13 +71,39 @@ export default function PlayerScreen() {
     const [subtitleDelay, setSubtitleDelay] = useState(0);
 
     // Combine embedded and external subtitles for the UI
+    // Combine embedded and external subtitles for the UI, merging MPV IDs where possible
     const allSubtitleTracks = useMemo(() => {
-        const combined = [
-            ...subtitleTracks.map(t => ({ ...t, isExternal: false })),
-            ...externalSubtitles.map(t => ({ ...t, isExternal: true }))
-        ];
-        console.log(`[Player] Combined ${combined.length} subtitle tracks (${subtitleTracks.length} embedded, ${externalSubtitles.length} external)`);
-        return combined;
+        const merged = [...subtitleTracks.map(t => ({ ...t, isExternal: false, source: 'embedded' }))];
+
+        externalSubtitles.forEach(ext => {
+            // Try to find this external sub in the MPV reported tracks
+            // MPV usually reports external subs with the title we gave it
+            const existingIdx = merged.findIndex(t =>
+                (t.title === ext.title || t.name === ext.title) &&
+                (!t.language || t.language === ext.language)
+            );
+
+            if (existingIdx !== -1) {
+                // Found match! Update the existing MPV track with external metadata
+                merged[existingIdx] = {
+                    ...merged[existingIdx],
+                    isExternal: true, // It is external, just reported by MPV
+                    addonName: ext.addonName || 'Addon',
+                    source: 'merged'
+                };
+            } else {
+                // Not found in MPV list yet (maybe loading), add as separate entry
+                merged.push({
+                    ...ext,
+                    id: `ext-${ext.url}`, // Temporary ID until MPV reports it
+                    isExternal: true,
+                    source: 'external_pending'
+                });
+            }
+        });
+
+        console.log(`[Player] Combined tracks: ${merged.length} (Embedded/Merged: ${subtitleTracks.length}, Pending External: ${merged.filter((t: any) => t.source === 'external_pending').length})`);
+        return merged;
     }, [subtitleTracks, externalSubtitles]);
     const [selectedSubtitleTrack, setSelectedSubtitleTrack] = useState<{ type: 'index' | 'language' | 'title' | 'disabled', value?: number | string }>({ type: 'disabled' });
     const [selectedAudioTrack, setSelectedAudioTrack] = useState<{ type: 'index', value: number } | undefined>();
@@ -593,13 +619,23 @@ export default function PlayerScreen() {
                             delay={subtitleDelay}
                             onUpdateDelay={setSubtitleDelay}
                             onSelectTrack={(track) => {
+                                console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal } : null);
                                 if (!track) {
+                                    console.log('[Player] Setting subtitle to DISABLED');
                                     setSelectedSubtitleTrack({ type: 'disabled' });
-                                } else if (track.isExternal) {
-                                    // For external, we select by title/id which we'll handle in VideoSurface
-                                    setSelectedSubtitleTrack({ type: 'title', value: track.title });
+                                    if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
                                 } else {
-                                    setSelectedSubtitleTrack({ type: 'index', value: track.id as number });
+                                    // With smart merging, most tracks (even external) should have a numeric ID from MPV
+                                    const trackId = Number(track.id);
+                                    if (!isNaN(trackId)) {
+                                        console.log('[Player] Setting subtitle by index (embedded/merged):', trackId);
+                                        setSelectedSubtitleTrack({ type: 'index', value: trackId });
+                                        if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(trackId);
+                                    } else {
+                                        // Fallback for pending external tracks (no MPV ID yet)
+                                        console.log('[Player] Setting pending external subtitle by title:', track.title);
+                                        setSelectedSubtitleTrack({ type: 'title', value: track.title });
+                                    }
                                 }
                                 setActiveTab('none');
                             }}

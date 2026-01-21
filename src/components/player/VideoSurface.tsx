@@ -140,22 +140,25 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     }, [useExoPlayer, selectedAudioTrack]);
 
     useEffect(() => {
+        // Sync track selections for MPV that were set via props (initial or title-based)
         if (!useExoPlayer && mpvPlayerRef.current) {
             if (selectedTextTrack?.type === 'index' && typeof selectedTextTrack.value === 'number') {
+                // Already handled by direct ref call for manual selection, 
+                // but we keep this for initial props or state restoration.
+                // Log only to avoid spam since direct call also logs.
+                console.log('[VideoSurface] Prop sync - MPV sid:', selectedTextTrack.value);
                 mpvPlayerRef.current.setSubtitleTrack(selectedTextTrack.value);
             } else if (selectedTextTrack?.type === 'title' && typeof selectedTextTrack.value === 'string') {
-                // Determine ID from title
                 const titleToFind = selectedTextTrack.value;
                 const track = currentMpvTracks.sub.find((t: any) =>
                     (t.name === titleToFind) || (t.title === titleToFind)
                 );
                 if (track && typeof track.id === 'number') {
-                    console.log(`[VideoSurface] Selecting MPV sub track by title "${titleToFind}" -> ID ${track.id}`);
+                    console.log(`[VideoSurface] Prop sync - Selecting MPV sub by title "${titleToFind}" -> ID ${track.id}`);
                     mpvPlayerRef.current.setSubtitleTrack(track.id);
-                } else {
-                    console.warn(`[VideoSurface] Could not find MPV sub track with title "${titleToFind}"`);
                 }
             } else if (selectedTextTrack?.type === 'disabled') {
+                console.log('[VideoSurface] Prop sync - Disabling MPV subtitles');
                 mpvPlayerRef.current.setSubtitleTrack(-1);
             }
         }

@@ -137,6 +137,11 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         MPVLib.setOptionString("sub-auto", "fuzzy")
         MPVLib.setOptionString("sub-visibility", "yes")
         MPVLib.setOptionString("embeddedfonts", "yes")
+        MPVLib.setOptionString("sub-ass-override", "force")
+        
+        // Initial track selection
+        MPVLib.setOptionString("sid", "auto")
+        MPVLib.setOptionString("aid", "auto")
         
         // Android-specific
         MPVLib.setOptionString("android-surface-size", "${surfaceView.width}x${surfaceView.height}")
@@ -144,6 +149,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         // UI
         MPVLib.setOptionString("osc", "no")
         MPVLib.setOptionString("osd-level", "1") // Show basic OSD
+        MPVLib.setOptionString("terminal", "no")
         MPVLib.setOptionString("input-default-bindings", "no")
     }
 
@@ -296,22 +302,30 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     
     fun setAudioTrack(trackId: Int) {
         if (isMpvInitialized) {
-            if (trackId == -1) {
-                MPVLib.setPropertyString("aid", "no")
-            } else {
-                MPVLib.setPropertyInt("aid", trackId)
-            }
+            val value = if (trackId == -1) "no" else trackId.toString()
+            Log.d(TAG, "Setting audio track (aid) to: $value")
+            MPVLib.command(arrayOf("set", "aid", value))
         }
     }
     
     fun setSubtitleTrack(trackId: Int) {
+        Log.d(TAG, "setSubtitleTrack called: trackId=$trackId, isMpvInitialized=$isMpvInitialized")
         if (isMpvInitialized) {
             if (trackId == -1) {
-                MPVLib.setPropertyString("sid", "no")
-                MPVLib.setPropertyString("sub-visibility", "no")
+                Log.d(TAG, "Disabling subtitles (sid=no)")
+                MPVLib.command(arrayOf("set", "sid", "no"))
+                MPVLib.command(arrayOf("set", "sub-visibility", "no"))
             } else {
-                MPVLib.setPropertyInt("sid", trackId)
-                MPVLib.setPropertyString("sub-visibility", "yes")
+                Log.d(TAG, "Setting subtitle track (sid) to: $trackId")
+                MPVLib.command(arrayOf("set", "sid", trackId.toString()))
+                MPVLib.command(arrayOf("set", "sub-visibility", "yes"))
+                
+                // Debug: Verify
+                mainHandler.postDelayed({
+                    val currentSid = MPVLib.getPropertyString("sid")
+                    val subVisibility = MPVLib.getPropertyString("sub-visibility")
+                    Log.d(TAG, "Verification after set - sid=$currentSid, sub-visibility=$subVisibility")
+                }, 100)
             }
         }
     }

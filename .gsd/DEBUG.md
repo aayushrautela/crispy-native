@@ -1,11 +1,35 @@
-# Debug Session: Player Instability
+# Debug Session: Subtitle Selection
 
-## Symptoms
-1. **Seeking closes player**: Seeking sometimes triggers `router.back()` (likely via `onEnd`).
-2. **Delayed Start**: Players sometimes don't start playing.
-3. **Crashes during track selection**: Crashes when switching audio/subtitles.
+## Symptom
+Subtitle selection always uses the first embedded subtitle, regardless of user selection.
+
+**When:** User selects any subtitle track from the SubtitlesTab
+**Expected:** Selected subtitle track should be displayed
+**Actual:** First embedded subtitle is always displayed
+
+## Evidence Gathering
+
+### Data Flow to Trace
+1. `SubtitlesTab.tsx` - User clicks on track → calls `onSelectTrack(track)`
+2. `player.tsx` - `setSelectedSubtitleTrack({ type: 'index', value: track.id })`
+3. `VideoSurface.tsx` - `selectedTextTrack` prop → `mpvPlayerRef.current.setSubtitleTrack(value)`
+4. `CrispyVideoView.kt` - `setSubtitleTrack(trackId)` → `MPVLib.setPropertyInt("sid", trackId)`
+
+### Key Questions
+- Is `track.id` correct in SubtitlesTab? (embedded vs external ID mismatch?)
+- Is `selectedSubtitleTrack` state updating correctly in player.tsx?
+- Is the effect in VideoSurface.tsx firing when selection changes?
+- Is MPV receiving the correct `sid` value?
 
 ## Hypotheses
-1. `onEnd` is triggered prematurely during seeks if buffer is empty or `eof-reached` is observed too early.
-2. `seek` and `track selection` methods in `CrispyNativeCoreModule.kt` lack proper null/type safety or are called on uninitialized native state.
-3. Race conditions between `setSource`, `setHeaders`, and MPV initialization.
+
+| # | Hypothesis | Likelihood | Status |
+|---|------------|------------|--------|
+| 1 | Track ID mismatch: embedded tracks have different IDs than expected | 40% | UNTESTED |
+| 2 | useEffect in VideoSurface not triggering on selection change | 30% | UNTESTED |
+| 3 | MPV `sid` property not accepting the correct value type | 20% | UNTESTED |
+| 4 | State not propagating from player.tsx to VideoSurface | 10% | UNTESTED |
+
+## Attempts
+
+(None yet)
