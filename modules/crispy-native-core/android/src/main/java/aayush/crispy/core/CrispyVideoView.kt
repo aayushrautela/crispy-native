@@ -337,7 +337,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             val titleStr = title ?: "External"
             val langStr = language ?: "eng"
             Log.d(TAG, "Adding external subtitle: $url ($titleStr)")
-            MPVLib.command(arrayOf("sub-add", url, "auto", titleStr, langStr))
+            MPVLib.command(arrayOf("sub-add", url, "select", titleStr, langStr))
         }
     }
     

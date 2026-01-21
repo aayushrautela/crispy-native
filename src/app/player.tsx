@@ -640,16 +640,27 @@ export default function PlayerScreen() {
                                 } else {
                                     const trackId = Number(track.id);
                                     if (!isNaN(trackId)) {
-                                        // Embedded or merged track - use numeric ID directly
-                                        console.log('[Player] Setting subtitle by ID:', trackId);
+                                        // Embedded or already merged external track
+                                        console.log('[Player] Setting subtitle by numeric ID:', trackId);
                                         setSelectedSubtitleId(trackId);
                                         if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(trackId);
-                                    } else if (track.url && typeof track.id === 'string' && track.id.startsWith('ext-')) {
-                                        // Pending external subtitle - add it on-demand
-                                        console.log('[Player] Adding pending external subtitle:', track.title, track.url);
-                                        videoRef.current?.addExternalSubtitle?.(track.url, track.title, track.language);
-                                        // Note: Can't set by ID yet since we don't know what ID MPV will assign
-                                        // The track list will update and user can select again
+                                    } else if (track.url) {
+                                        // External track with string ID (e.g. ext-URL)
+                                        if (useExoPlayer) {
+                                            // For ExoPlayer, we calculate the index it will have in the combined list
+                                            // Embedded tracks are indices 0...N-1. External tracks are N...N+M-1.
+                                            const extIdx = externalSubtitles.findIndex(s => s.url === track.url);
+                                            if (extIdx !== -1) {
+                                                const intendedIdx = subtitleTracks.length + extIdx;
+                                                console.log(`[Player] Selecting ExoPlayer external track: index ${intendedIdx} (Embedded: ${subtitleTracks.length}, External: ${extIdx})`);
+                                                setSelectedSubtitleId(intendedIdx);
+                                            }
+                                        } else {
+                                            // For MPV, we add it via command. 
+                                            // We'll update the native side to use 'select' flag so it switches immediately.
+                                            console.log('[Player] Adding MPV external subtitle:', track.title, track.url);
+                                            videoRef.current?.addExternalSubtitle?.(track.url, track.title, track.language);
+                                        }
                                     }
                                 }
                                 setActiveTab('none');
