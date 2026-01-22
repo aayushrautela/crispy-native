@@ -18,7 +18,6 @@ import androidx.media3.common.util.Clock
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerNotificationManager
-import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.os.Looper
