@@ -31,7 +31,6 @@ export interface VideoSurfaceRef {
     seek: (seconds: number) => void;
     setAudioTrack?: (id: number) => void;
     setSubtitleTrack?: (id: number) => void;
-    addExternalSubtitle?: (url: string, title?: string, lang?: string) => void;
     setSubtitleDelay?: (delay: number) => void;
 }
 
@@ -47,9 +46,6 @@ interface VideoSurfaceProps {
     selectedAudioTrack?: { type: 'index' | 'disabled', value?: number };
     selectedTextTrack?: { type: 'index' | 'disabled', value?: number };
     subtitleDelay?: number;
-
-    // External subtitles for ExoPlayer (as textTracks)
-    externalSubtitles?: Array<{ url: string; title: string; language?: string }>;
 
     // Engine selection
     useExoPlayer: boolean;
@@ -75,7 +71,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         selectedAudioTrack,
         selectedTextTrack,
         subtitleDelay = 0,
-        externalSubtitles = [],
         useExoPlayer,
         onCodecError,
         onLoad,
@@ -105,11 +100,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         setSubtitleTrack: (id: number) => {
             if (!useExoPlayer) {
                 mpvPlayerRef.current?.setSubtitleTrack(id);
-            }
-        },
-        addExternalSubtitle: (url: string, title?: string, lang?: string) => {
-            if (!useExoPlayer) {
-                mpvPlayerRef.current?.addExternalSubtitle(url, title, lang);
             }
         },
         setSubtitleDelay: (delay: number) => {
@@ -230,15 +220,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     resizeMode={getExoResizeMode()}
                     selectedAudioTrack={selectedAudioTrack as any}
                     selectedTextTrack={selectedTextTrack as any}
-                    textTracks={externalSubtitles.map(s => {
-                        const isVtt = s.url.toLowerCase().includes('.vtt');
-                        return {
-                            uri: s.url,
-                            title: s.title,
-                            type: isVtt ? 'text/vtt' : 'application/x-subrip',
-                            language: s.language || 'en'
-                        };
-                    })}
                     style={styles.player}
                     onLoad={handleExoLoad}
                     onProgress={handleExoProgress}

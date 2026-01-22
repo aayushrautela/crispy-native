@@ -2,11 +2,13 @@ import CrispyNativeCore from '@/modules/crispy-native-core';
 import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { SideSheet } from '@/src/cdk/components/SideSheet';
 import { Typography } from '@/src/cdk/components/Typography';
+import { CustomSubtitles } from '@/src/components/player/subtitles/CustomSubtitles';
 import { AudioTab } from '@/src/components/player/tabs/AudioTab';
 import { EpisodesTab } from '@/src/components/player/tabs/EpisodesTab';
 import { SettingsTab } from '@/src/components/player/tabs/SettingsTab';
 import { StreamsTab } from '@/src/components/player/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/components/player/tabs/SubtitlesTab';
+import { parseSubtitle } from '@/src/components/player/utils/subtitleParser';
 import { VideoSurface, VideoSurfaceRef } from '@/src/components/player/VideoSurface';
 import { AddonService } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
@@ -71,45 +73,30 @@ export default function PlayerScreen() {
     const [subtitleDelay, setSubtitleDelay] = useState(0);
 
     // Combine embedded and external subtitles for the UI
-    // Combine embedded and external subtitles for the UI, merging MPV IDs where possible
     const allSubtitleTracks = useMemo(() => {
-        const merged = [...subtitleTracks.map(t => ({ ...t, isExternal: false, source: 'embedded' }))];
+        const embedded = subtitleTracks.map(t => ({
+            ...t,
+            isExternal: false,
+            source: 'embedded'
+        }));
 
-        externalSubtitles.forEach(ext => {
-            // Try to find this external sub in the MPV reported tracks
-            // MPV usually reports external subs with the title we gave it
-            const existingIdx = merged.findIndex(t =>
-                (t.title === ext.title || t.name === ext.title) &&
-                (!t.language || t.language === ext.language)
-            );
+        const external = externalSubtitles.map(s => ({
+            ...s,
+            isExternal: true,
+            source: 'external'
+        }));
 
-            if (existingIdx !== -1) {
-                // Found match! Update the existing MPV track with external metadata
-                merged[existingIdx] = {
-                    ...merged[existingIdx],
-                    isExternal: true, // It is external, just reported by MPV
-                    addonName: ext.addonName || 'Addon',
-                    source: 'merged'
-                };
-            } else {
-                // Not found in MPV list yet (maybe loading), add as separate entry
-                merged.push({
-                    ...ext,
-                    id: `ext-${ext.url}`, // Temporary ID until MPV reports it
-                    isExternal: true,
-                    source: 'external_pending'
-                });
-            }
-        });
-
-        console.log(`[Player] Combined tracks: ${merged.length} (Embedded/Merged: ${subtitleTracks.length}, Pending External: ${merged.filter((t: any) => t.source === 'external_pending').length})`);
-        return merged;
+        return [...embedded, ...external];
     }, [subtitleTracks, externalSubtitles]);
 
     // Track selection state - matching Nuvio's dual-state pattern
     const [selectedSubtitleId, setSelectedSubtitleId] = useState<number>(-1); // -1 = off, >=0 = internal index
     const [selectedExternalSubId, setSelectedExternalSubId] = useState<string | null>(null);
     const [selectedAudioId, setSelectedAudioId] = useState<number | undefined>(undefined);
+
+    // External Subtitle Logic
+    const [parsedCues, setParsedCues] = useState<any[]>([]);
+    const [currentSubtitleText, setCurrentSubtitleText] = useState('');
 
     // Convert to react-native-video format (Nuvio pattern)
     const selectedTextTrackProp = useMemo(() => {
@@ -405,12 +392,20 @@ export default function PlayerScreen() {
                         setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
                     }}
                     onProgress={(data) => {
+                        // Values are in SECONDS from react-native-video / MPV
+                        const positionSec = data.position ?? data.currentTime ?? 0;
+                        const durationSec = data.duration ?? 0;
+
                         // Don't overwrite progress while user is seeking
                         if (!isSeeking) {
-                            // Values are in SECONDS from react-native-video / MPV
-                            const positionSec = data.position ?? data.currentTime ?? 0;
-                            const durationSec = data.duration ?? 0;
                             setProgress({ position: positionSec, duration: durationSec });
+                        }
+
+                        // JS Overlay Sync Logic
+                        if (selectedExternalSubId !== null && parsedCues.length > 0) {
+                            const adjustedTime = positionSec + (subtitleDelay / 1000); // delay is usually in ms
+                            const cue = parsedCues.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
+                            setCurrentSubtitleText(cue?.text || '');
                         }
                     }}
                     onLoad={(data) => {
@@ -442,6 +437,14 @@ export default function PlayerScreen() {
                     <Typography variant="body" className="text-white mt-4">Resolving Stream...</Typography>
                 </View>
             )}
+
+            {/* Subtitle Overlay (Nuvio Way) */}
+            <CustomSubtitles
+                visible={selectedExternalSubId !== null}
+                text={currentSubtitleText}
+                fontSize={24}
+                bottomOffset={showControls ? 110 : 40} // Push up when controls are visible
+            />
 
             {/* Gesture Layer & Main UI Wrapper */}
             <Pressable style={StyleSheet.absoluteFill} onPress={handleTouchEnd}>
@@ -651,31 +654,34 @@ export default function PlayerScreen() {
                             selectedTrackId={selectedExternalSubId || (selectedSubtitleId === -1 ? 'off' : selectedSubtitleId)}
                             delay={subtitleDelay}
                             onUpdateDelay={setSubtitleDelay}
-                            onSelectTrack={(track) => {
+                            onSelectTrack={async (track) => {
                                 console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal, url: track.url } : null);
                                 if (!track) {
                                     // Disable everything
                                     setSelectedSubtitleId(-1);
                                     setSelectedExternalSubId(null);
+                                    setParsedCues([]);
+                                    setCurrentSubtitleText('');
                                     if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
                                 } else if (track.url && (track.isExternal || typeof track.id === 'string')) {
-                                    // EXTERNAL SELECTION (By ID/URL)
-                                    console.log('[Player] Selecting EXTERNAL subtitle:', track.url);
-                                    setSelectedSubtitleId(-1); // Disable internal
-                                    setSelectedExternalSubId(String(track.id));
+                                    // EXTERNAL SELECTION (By ID/URL) - JS Overlay Way
+                                    console.log('[Player] Selecting EXTERNAL subtitle via JS Overlay:', track.url);
 
-                                    if (!useExoPlayer) {
-                                        // For MPV, we add it. The native side will select it automatically due to our 'select' flag.
-                                        videoRef.current?.addExternalSubtitle?.(track.url, track.title, track.language);
-                                    } else {
-                                        // For ExoPlayer, it will be selected via textTracks prop in VideoSurface.
-                                        // Calculate absolute index: embedded count + our relative index in externalSubtitles
-                                        const extIdx = externalSubtitles.findIndex(s => s.url === track.url);
-                                        if (extIdx !== -1) {
-                                            const intendedIdx = subtitleTracks.length + extIdx;
-                                            setSelectedSubtitleId(intendedIdx);
-                                            setSelectedExternalSubId(null); // Switch back to index-based tracking for Exo
-                                        }
+                                    try {
+                                        setLoading(true);
+                                        const response = await fetch(track.url);
+                                        const content = await response.text();
+                                        const cues = parseSubtitle(content, track.url);
+
+                                        setParsedCues(cues);
+                                        setSelectedSubtitleId(-1); // Disable internal
+                                        setSelectedExternalSubId(String(track.id));
+
+                                        if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
+                                    } catch (e) {
+                                        console.error("Failed to load external subtitle", e);
+                                    } finally {
+                                        setLoading(false);
                                     }
                                 } else {
                                     // INTERNAL SELECTION (By Index)
@@ -683,6 +689,8 @@ export default function PlayerScreen() {
                                     console.log('[Player] Selecting INTERNAL subtitle index:', trackId);
                                     setSelectedSubtitleId(trackId);
                                     setSelectedExternalSubId(null);
+                                    setParsedCues([]);
+                                    setCurrentSubtitleText('');
                                     if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(trackId);
                                 }
                                 setActiveTab('none');

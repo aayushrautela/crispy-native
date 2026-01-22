@@ -6,7 +6,6 @@ export interface MpvPlayerRef {
     seek: (positionSeconds: number) => void;
     setAudioTrack: (trackId: number) => void;
     setSubtitleTrack: (trackId: number) => void;
-    addExternalSubtitle: (url: string, title?: string, lang?: string) => void;
     setSubtitleDelay: (delay: number) => void;
     enterPiP: () => void;
 }
@@ -35,7 +34,6 @@ interface ExpoNativeRef {
     seek?: (positionSec: number) => Promise<void>;
     setAudioTrack?: (trackId: number) => Promise<void>;
     setSubtitleTrack?: (trackId: number) => Promise<void>;
-    addExternalSubtitle?: (url: string, title: string | null, lang: string | null) => Promise<void>;
     setSubtitleDelay?: (delay: number) => Promise<void>;
     enterPiP?: () => Promise<void>;
 }
@@ -55,10 +53,6 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
         setSubtitleTrack: (trackId: number) => {
             console.log('[MpvPlayer] setSubtitleTrack called:', trackId);
             nativeRef.current?.setSubtitleTrack?.(trackId);
-        },
-        addExternalSubtitle: (url: string, title?: string, lang?: string) => {
-            console.log('[MpvPlayer] addExternalSubtitle called:', url, title, lang);
-            nativeRef.current?.addExternalSubtitle?.(url, title ?? null, lang ?? null);
         },
         setSubtitleDelay: (delay: number) => {
             console.log('[MpvPlayer] setSubtitleDelay called:', delay);
