@@ -61,6 +61,11 @@ jobs:
         working-directory: ./android
         env:
           GRADLE_OPTS: "-Xmx3584m -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=\"-Xmx3584m -XX:MaxMetaspaceSize=512m\""
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_TMDB_API_KEY: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
+          EXPO_PUBLIC_TRAKT_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_ID }}
+          EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease \
