@@ -1,52 +1,27 @@
-# Debug Session: Android Compilation Errors
+# Debug Session: Meta Dynamic Colors
 
 ## Symptom
-Kotlin compilation fails for `:crispy-native-core:compileDebugKotlin` task.
+Dynamic color extraction from the backdrop image is not triggering or applying to the UI in `MetaDetailsScreen`.
 
-**When:** Android release workflow build
-**Expected:** Code compiles successfully
-**Actual:** Three compilation errors
+**When:** Navigating to the Media Details page.
+**Expected:** `[MetaColors]` logs should appear in the terminal, and the UI (background, buttons) should update to match the backdrop palette.
+**Actual:** No `[MetaColors]` logs appear. Standard meta logs from `TMDBService` are visible, but the dynamic colors are absent.
 
-## Evidence Gathered
-
-### Error 1: CrispyNativeCoreModule.kt:77
-```
-Return type mismatch: expected 'Any?', actual 'Unit'.
-```
-- `enterPiP` AsyncFunction was returning Unit (void)
-- Expo AsyncFunction wrapper expects Any? return type
-
-### Error 2: CrispyVideoView.kt:25
-```
-Class 'CrispyVideoView' is not abstract and does not implement abstract members
-```
-- Missing ~70 Player interface methods from Media3 1.2.x
-- Including: setMediaItems, addMediaItem, play, pause, surface methods, etc.
-
-### Error 3: CrispyVideoView.kt:583
-```
-Unresolved reference 'CueGroup'
-```
-- `CueGroup` is in `androidx.media3.common.text` package, not imported
-- `CueGroup.EMPTY_TIME_ZERO` constant doesn't exist in Media3 1.2.1
-
-## Hypotheses
-
-| # | Hypothesis | Likelihood | Status |
-|---|------------|------------|--------|
-| 1 | AsyncFunction requires explicit return value | 90% | **CONFIRMED** |
-| 2 | Player interface in Media3 1.2.x has more methods than implemented | 95% | **CONFIRMED** |
-| 3 | CueGroup needs explicit import from text subpackage | 100% | **CONFIRMED** |
+## Evidence
+- Logs provided by user:
+  - `LOG [useCatalog] manifests: {}`
+  - `LOG [TMDBService] Resolved meta for tt3402138...`
+- Observation: `backdropUrl` is used in `useEffect` BEFORE it is defined in the file.
 
 ## Attempts
 
 ### Attempt 1
-**Testing:** All hypotheses
-**Actions:**
-1. Changed `enterPiP` to return `Boolean` instead of Unit
-2. Added missing imports: `CueGroup`, `Size`, `Surface`, `SurfaceHolder`, `SurfaceView`
-3. Added `eventProperty(String, Long)` and `eventProperty(String, Boolean)` overloads
-4. Added ~70 missing Player interface method stubs
-5. Changed `CueGroup.EMPTY_TIME_ZERO` to `CueGroup(emptyList(), 0L)` constructor call
+**Testing:** H1 — `backdropUrl` used before definition.
+**Action:** Move `backdropUrl` definition above the `useEffect` that uses it. Add extra logs to trace execution.
+**Result:** Code refactored and logging improved.
+**Conclusion:** POTENTIALLY FIXED (Waiting for user log confirmation).
 
-**Status:** Pending verification
+## Resolution (Pending)
+**Root Cause:** Variable used before definition in a `useEffect` closure/body.
+**Fix:** Corrected declaration order and improved robust logging.
+**Verified:** Ready for user to check logs for `[MetaColors]`.

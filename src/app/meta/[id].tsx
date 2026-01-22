@@ -28,14 +28,29 @@ import { CatalogRow } from '../../components/CatalogRow';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 750;
 const BACKDROP_HEIGHT = 480;
+const DARK_BASE = '#121212';
 
-const CastItem = ({ person, theme, onPress }: { person: any; theme: any; onPress: () => void }) => {
+const hexToRgba = (hex: string, opacity: number) => {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+    }
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+};
+
+const CastItem = ({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) => {
     return (
         <Pressable onPress={onPress}>
             <View style={styles.castItem}>
                 <ExpoImage
                     source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
-                    style={styles.castImage}
+                    style={[styles.castImage, { borderColor: palette.primary, borderWidth: 1 }]}
                 />
                 <Typography
                     variant="label"
@@ -58,10 +73,10 @@ const CastItem = ({ person, theme, onPress }: { person: any; theme: any; onPress
     );
 };
 
-const EpisodeItem = ({ episode, theme, onPress }: { episode: any; theme: any; onPress: () => void }) => {
+const EpisodeItem = ({ episode, theme, onPress, palette }: { episode: any; theme: any; onPress: () => void; palette: any }) => {
     return (
         <Pressable onPress={onPress}>
-            <View style={[styles.episodeCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <View style={[styles.episodeCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
                 <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
                 <View style={styles.episodeInfo}>
                     <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
@@ -92,12 +107,12 @@ const EpisodeItem = ({ episode, theme, onPress }: { episode: any; theme: any; on
     );
 };
 
-const ReviewCard = ({ review, theme, onPress }: { review: any; theme: any; onPress: () => void }) => {
+const ReviewCard = ({ review, theme, onPress, palette }: { review: any; theme: any; onPress: () => void; palette: any }) => {
     if (!review) return null;
 
     return (
         <Pressable onPress={onPress}>
-            <View style={[styles.reviewCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <View style={[styles.reviewCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
                 <View style={styles.reviewHeader}>
                     <ExpoImage
                         source={review.avatar ? { uri: review.avatar } : require('@/assets/images/icon.png')}
@@ -129,8 +144,8 @@ const ReviewCard = ({ review, theme, onPress }: { review: any; theme: any; onPre
     );
 };
 
-const RatingCard = ({ source, score, label, icon, theme }: { source: string; score: string; label: string; icon: React.ReactNode; theme: any }) => (
-    <View style={[styles.ratingCard, { backgroundColor: '#2C2C2E' }]}>
+const RatingCard = ({ source, score, label, icon, theme, palette }: { source: string; score: string; label: string; icon: React.ReactNode; theme: any; palette: any }) => (
+    <View style={[styles.ratingCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
         <View style={styles.ratingIconContainer}>
             {icon}
         </View>
@@ -158,11 +173,13 @@ export default function MetaDetailsScreen() {
     const [selectedReview, setSelectedReview] = useState<any>(null);
     const [availableStreams, setAvailableStreams] = useState<any[]>([]);
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-    const [colors, setColors] = useState<{ primary: string; secondary: string; vibrant: string; dominant: string }>({
+    const [colors, setColors] = useState<{ primary: string; secondary: string; vibrant: string; dominant: string; lightVibrant: string; darkMuted: string }>({
         primary: theme.colors.background,
         secondary: theme.colors.surface,
         vibrant: '#90CAF9', // Default blue from screenshot
-        dominant: theme.colors.background
+        dominant: theme.colors.background,
+        lightVibrant: '#90CAF9',
+        darkMuted: '#1E1E1E'
     });
     const bottomSheetRef = React.useRef<BottomSheetRef>(null);
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
@@ -218,30 +235,46 @@ export default function MetaDetailsScreen() {
         }
     }, [activeSeason, enriched.tmdbId, type, enriched.type]);
 
+    const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
+
     // Extract Colors from Backdrop
     useEffect(() => {
+        console.log('[MetaColors] Effect triggered. ImageColors available:', !!ImageColors);
+        console.log('[MetaColors] backdropUrl:', backdropUrl);
         if (backdropUrl) {
+            console.log('[MetaColors] Attempting extraction from:', backdropUrl);
             ImageColors.getColors(backdropUrl, {
                 fallback: theme.colors.background,
                 cache: true,
                 key: backdropUrl,
-            }).then((result) => {
-                if (result.platform === 'android') {
-                    setColors({
-                        primary: result.average || theme.colors.background,
-                        secondary: result.darkMuted || theme.colors.surface,
-                        vibrant: result.vibrant || '#90CAF9',
-                        dominant: result.dominant || theme.colors.background,
-                    });
-                } else if (result.platform === 'ios') {
-                    setColors({
-                        primary: result.primary || theme.colors.background,
-                        secondary: result.secondary || theme.colors.surface,
-                        vibrant: result.detail || '#90CAF9',
-                        dominant: result.background || theme.colors.background,
-                    });
-                }
-            });
+            })
+                .then((result) => {
+                    console.log('[MetaColors] Extraction success:', result);
+                    if (result.platform === 'android') {
+                        setColors({
+                            primary: result.darkMuted || result.darkVibrant || theme.colors.background,
+                            secondary: result.average || theme.colors.surface,
+                            vibrant: result.vibrant || '#90CAF9',
+                            dominant: result.dominant || theme.colors.background,
+                            lightVibrant: result.lightVibrant || result.vibrant || '#90CAF9',
+                            darkMuted: result.darkMuted || result.darkVibrant || '#1E1E1E',
+                        });
+                    } else if (result.platform === 'ios') {
+                        setColors({
+                            primary: result.background || theme.colors.background,
+                            secondary: result.secondary || theme.colors.surface,
+                            vibrant: result.primary || theme.colors.background,
+                            dominant: result.detail || theme.colors.background,
+                            lightVibrant: result.primary || result.detail || '#90CAF9',
+                            darkMuted: result.secondary || result.detail || '#1E1E1E',
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error('[MetaColors] Extraction error:', err);
+                });
+        } else {
+            console.log('[MetaColors] No backdropUrl yet, skipping extraction.');
         }
     }, [backdropUrl]);
 
@@ -318,15 +351,13 @@ export default function MetaDetailsScreen() {
         );
     }
 
-    const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
-
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.container, { backgroundColor: DARK_BASE }]}>
             {/* Layer 1: Parallax Backdrop (Fixed at back) */}
             <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
                 <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.4)', colors.primary]}
+                    colors={['transparent', 'rgba(0,0,0,0.4)', DARK_BASE]}
                     locations={[0, 0.6, 1]}
                     style={styles.heroGradient}
                 />
@@ -369,7 +400,7 @@ export default function MetaDetailsScreen() {
                 <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
                     {/* Gradient Fade for Body Start (Starts from description area) */}
                     <LinearGradient
-                        colors={['transparent', colors.primary, colors.primary]}
+                        colors={['transparent', DARK_BASE, DARK_BASE]}
                         locations={[0, 0.4, 1]}
                         style={{ position: 'absolute', top: BACKDROP_HEIGHT - 150, left: 0, right: 0, bottom: 0 }}
                         pointerEvents="none"
@@ -443,7 +474,7 @@ export default function MetaDetailsScreen() {
                                 variant="primary"
                                 icon={<Play size={20} color="black" fill="black" />}
                                 onPress={() => streamBottomSheetRef.current?.present()}
-                                style={[styles.watchNowBtn, { backgroundColor: colors.vibrant }]}
+                                style={[styles.watchNowBtn, { backgroundColor: colors.lightVibrant }]}
                                 textStyle={{ color: 'black', fontWeight: 'bold' }}
                             />
                         </View>
@@ -470,7 +501,7 @@ export default function MetaDetailsScreen() {
 
                         {/* Ratings Section */}
                         <View style={styles.ratingsSection}>
-                            <Typography variant="h3" weight="black" style={styles.ratingsTitle}>Ratings</Typography>
+                            <Typography variant="h3" weight="black" style={styles.sectionTitle}>Ratings</Typography>
                             <ScrollView
                                 horizontal
                                 showsHorizontalScrollIndicator={false}
@@ -481,6 +512,7 @@ export default function MetaDetailsScreen() {
                                     score={enriched.rating ? `${enriched.rating}/10` : '5.7/10'}
                                     label="IMDb"
                                     theme={theme}
+                                    palette={colors}
                                     icon={
                                         <View style={[styles.sourceIconCircle, { backgroundColor: '#F5C518' }]}>
                                             <Typography variant="label" weight="black" style={{ color: 'black', fontSize: 8 }}>IMDb</Typography>
@@ -492,6 +524,7 @@ export default function MetaDetailsScreen() {
                                     score="51%"
                                     label="Rotten Tomatoes"
                                     theme={theme}
+                                    palette={colors}
                                     icon={<Star size={24} color="#00C853" fill="#00C853" />}
                                 />
                             </ScrollView>
@@ -500,7 +533,7 @@ export default function MetaDetailsScreen() {
                 </View>
 
                 {/* Body Content (Actions like Cast, Episodes, etc.) */}
-                <View style={[styles.body, { backgroundColor: colors.primary }]}>
+                <View style={[styles.body, { backgroundColor: DARK_BASE }]}>
                     {/* Removed original description and AI insights placeholder as they are now in hero */}
 
 
@@ -514,13 +547,14 @@ export default function MetaDetailsScreen() {
                     {/* Cast Section */}
                     {enriched.cast && enriched.cast.length > 0 && (
                         <View style={styles.section}>
-                            <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginBottom: 16 }}>Cast</Typography>
+                            <Typography variant="h3" weight="black" style={styles.sectionTitle}>Cast</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
                                 {(enriched.cast || []).map((person) => (
                                     <CastItem
                                         key={person.id}
                                         person={person}
                                         theme={theme}
+                                        palette={colors}
                                         onPress={() => router.push(`/person/${person.id}`)}
                                     />
                                 ))}
@@ -543,12 +577,12 @@ export default function MetaDetailsScreen() {
                                         activeIndex={seasons.indexOf(activeSeason)}
                                         rounding="3xl"
                                         variant="filled"
-                                        style={styles.seasonChip}
+                                        style={[styles.seasonChip, activeSeason === s ? { backgroundColor: colors.lightVibrant } : { backgroundColor: hexToRgba(colors.vibrant, 0.16) }]}
                                     >
                                         <Typography
                                             variant="label"
                                             weight="bold"
-                                            style={{ color: activeSeason === s ? theme.colors.onPrimary : theme.colors.onSurface }}
+                                            style={{ color: activeSeason === s ? 'black' : theme.colors.onSurface }}
                                         >
                                             {enriched?.seasons?.find(fs => fs.seasonNumber === s)?.name || `Season ${s}`}
                                         </Typography>
@@ -556,13 +590,14 @@ export default function MetaDetailsScreen() {
                                 ))}
                             </ScrollView>
 
-                            <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginVertical: 16 }}>Episodes</Typography>
+                            <Typography variant="h3" weight="black" style={styles.sectionTitle}>Episodes</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
                                 {(seasonEpisodes.length > 0 ? seasonEpisodes : []).map((ep, idx) => (
                                     <EpisodeItem
                                         key={ep.id || idx}
                                         episode={ep}
                                         theme={theme}
+                                        palette={colors}
                                         onPress={() => {
                                             setSelectedEpisode(ep);
                                             streamBottomSheetRef.current?.present();
@@ -576,13 +611,14 @@ export default function MetaDetailsScreen() {
                     {/* Reviews Section */}
                     {enriched.reviews && enriched.reviews.length > 0 && (
                         <View style={styles.section}>
-                            <Typography variant="h3" weight="black" style={{ color: theme.colors.onSurface, marginBottom: 16 }}>Reviews</Typography>
+                            <Typography variant="h3" weight="black" style={styles.sectionTitle}>Reviews</Typography>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 16 }}>
                                 {(enriched.reviews || []).map((r) => (
                                     <ReviewCard
                                         key={r.id}
                                         review={r}
                                         theme={theme}
+                                        palette={colors}
                                         onPress={() => {
                                             setSelectedReview(r);
                                             bottomSheetRef.current?.present();
@@ -811,7 +847,7 @@ const styles = StyleSheet.create({
         width: '100%',
         marginTop: 32,
     },
-    ratingsTitle: {
+    sectionTitle: {
         color: 'white',
         fontSize: 20,
         marginBottom: 16,

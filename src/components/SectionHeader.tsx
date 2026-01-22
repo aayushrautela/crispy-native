@@ -24,13 +24,13 @@ export const SectionHeader = ({
     return (
         <View style={[styles.header, style]}>
             <Typography
-                variant="headline-medium"
+                variant="h3"
                 weight="black"
                 style={{
                     color: theme.colors.onSurface,
                     letterSpacing: -0.5,
-                    fontSize: 24,
-                    lineHeight: 32,
+                    fontSize: 20,
+                    lineHeight: 28,
                 }}
             >
                 {title}
