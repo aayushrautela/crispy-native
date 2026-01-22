@@ -14,11 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Bookmark, Circle, MoreVertical, Share2, Star } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
-import ImageColors from 'react-native-image-colors';
-import Animated, {
-    useAnimatedScrollHandler,
-    useSharedValue
-} from 'react-native-reanimated';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CatalogRow } from '../../components/CatalogRow';
 
@@ -36,18 +32,7 @@ export default function MetaDetailsScreen() {
     const [availableStreams, setAvailableStreams] = useState<any[]>([]);
 
     // Core Data Aggregator
-    const { meta, enriched, seasonEpisodes, isLoading } = useMetaAggregator(id as string, type as string, activeSeason);
-
-    // Local UI State
-    const [colors, setColors] = useState<{ primary: string; secondary: string; vibrant: string; dominant: string; lightVibrant: string; darkMuted: string; lightMuted: string }>({
-        primary: theme.colors.background,
-        secondary: theme.colors.surface,
-        vibrant: '#90CAF9',
-        dominant: theme.colors.background,
-        lightVibrant: '#90CAF9',
-        darkMuted: '#1E1E1E',
-        lightMuted: '#90CAF9'
-    });
+    const { meta, enriched, seasonEpisodes, colors, isLoading } = useMetaAggregator(id as string, type as string, activeSeason);
 
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
     const scrollY = useSharedValue(0);
@@ -57,35 +42,6 @@ export default function MetaDetailsScreen() {
             scrollY.value = event.contentOffset.y;
         },
     });
-
-    // Debounced Color Extraction
-    useEffect(() => {
-        const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
-        if (!backdropUrl) return;
-
-        const timer = setTimeout(() => {
-            ImageColors.getColors(backdropUrl, {
-                fallback: theme.colors.background,
-                cache: true,
-                key: backdropUrl,
-            }).then((result) => {
-                console.log('[MetaColors] Extracted:', result);
-                if (result.platform === 'android') {
-                    setColors({
-                        primary: result.darkMuted || result.darkVibrant || theme.colors.background,
-                        secondary: result.average || theme.colors.surface,
-                        vibrant: result.vibrant || '#90CAF9',
-                        dominant: result.dominant || theme.colors.background,
-                        lightVibrant: result.lightVibrant || result.vibrant || '#90CAF9',
-                        darkMuted: result.darkMuted || result.darkVibrant || '#1E1E1E',
-                        lightMuted: result.lightMuted || result.lightVibrant || '#90CAF9',
-                    });
-                }
-            }).catch(err => console.error('[MetaColors] Error:', err));
-        }, 300);
-
-        return () => clearTimeout(timer);
-    }, [enriched.backdrop, meta?.background, meta?.poster]);
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
 
@@ -185,7 +141,9 @@ export default function MetaDetailsScreen() {
                         </Pressable>
                     </View>
 
-                    <RatingsSection enriched={enriched} colors={colors} />
+                    <View style={{ marginHorizontal: -20 }}>
+                        <RatingsSection enriched={enriched} colors={colors} />
+                    </View>
 
                     {enriched.director && (
                         <View style={{ marginTop: 16 }}>
@@ -194,38 +152,44 @@ export default function MetaDetailsScreen() {
                         </View>
                     )}
 
-                    <CastSection cast={enriched.cast} theme={theme} colors={colors} onPersonPress={(id) => router.push(`/person/${id}`)} />
+                    <View style={{ marginHorizontal: -20 }}>
+                        <CastSection cast={enriched.cast} theme={theme} colors={colors} onPersonPress={(id) => router.push(`/person/${id}`)} />
+                    </View>
 
-                    <CommentsSection
-                        id={(enriched.imdbId || id) as string}
-                        type={isSeries ? 'show' : 'movie'}
-                        colors={colors}
-                    />
+                    <View style={{ marginHorizontal: -20 }}>
+                        <CommentsSection
+                            id={(enriched.imdbId || id) as string}
+                            type={isSeries ? 'show' : 'movie'}
+                            colors={colors}
+                        />
+                    </View>
 
                     {isSeries && seasons.length > 0 && (
-                        <EpisodesSection
-                            seasons={seasons}
-                            activeSeason={activeSeason}
-                            setActiveSeason={setActiveSeason}
-                            seasonEpisodes={seasonEpisodes}
-                            colors={colors}
-                            theme={theme}
-                            enrichedSeasons={enriched.seasons}
-                            onEpisodePress={(ep) => {
-                                setSelectedEpisode(ep);
-                                streamBottomSheetRef.current?.present();
-                            }}
-                        />
+                        <View style={{ marginHorizontal: -20 }}>
+                            <EpisodesSection
+                                seasons={seasons}
+                                activeSeason={activeSeason}
+                                setActiveSeason={setActiveSeason}
+                                seasonEpisodes={seasonEpisodes}
+                                colors={colors}
+                                theme={theme}
+                                enrichedSeasons={enriched.seasons}
+                                onEpisodePress={(ep) => {
+                                    setSelectedEpisode(ep);
+                                    streamBottomSheetRef.current?.present();
+                                }}
+                            />
+                        </View>
                     )}
 
                     {enriched.collection?.parts?.length > 0 && (
                         <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                            <CatalogRow title={enriched.collection.name} items={enriched.collection.parts} />
+                            <CatalogRow title={enriched.collection.name} items={enriched.collection.parts} textColor="white" />
                         </View>
                     )}
                     {enriched.similar?.length > 0 && (
                         <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                            <CatalogRow title="More Like This" items={enriched.similar} />
+                            <CatalogRow title="More Like This" items={enriched.similar} textColor="white" />
                         </View>
                     )}
                 </View>

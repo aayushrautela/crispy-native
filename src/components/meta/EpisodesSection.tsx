@@ -1,5 +1,6 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
+import { SectionHeader } from '@/src/components/SectionHeader';
 import { Image as ExpoImage } from 'expo-image';
 import React, { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -104,7 +105,12 @@ export const EpisodesSection = memo(({
                 ))}
             </ScrollView>
 
-            <Typography variant="h3" weight="black" style={styles.sectionTitle}>Episodes</Typography>
+            <SectionHeader
+                title="Episodes"
+                hideAction
+                textColor="white"
+                style={{ paddingHorizontal: 20 }}
+            />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.episodeScroll}>
                 {(seasonEpisodes || []).map((ep, idx) => (
                     <EpisodeItem
@@ -126,21 +132,20 @@ const styles = StyleSheet.create({
     label: {
         color: 'rgba(255,255,255,0.5)',
         marginBottom: 12,
+        paddingHorizontal: 20,
     },
     seasonScroll: {
         gap: 10,
         paddingBottom: 16,
+        paddingHorizontal: 20,
     },
     seasonChip: {
         paddingHorizontal: 16,
         height: 40,
     },
-    sectionTitle: {
-        color: 'white',
-        marginBottom: 16,
-    },
     episodeScroll: {
         gap: 16,
+        paddingHorizontal: 20,
     },
     episodeCard: {
         width: 280,

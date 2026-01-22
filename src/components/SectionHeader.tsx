@@ -10,6 +10,7 @@ interface SectionHeaderProps {
     actionLabel?: string;
     hideAction?: boolean;
     style?: ViewStyle;
+    textColor?: string;
 }
 
 export const SectionHeader = ({
@@ -17,7 +18,8 @@ export const SectionHeader = ({
     onAction,
     actionLabel = 'See All',
     hideAction = false,
-    style
+    style,
+    textColor
 }: SectionHeaderProps) => {
     const { theme } = useTheme();
 
@@ -27,7 +29,7 @@ export const SectionHeader = ({
                 variant="h3"
                 weight="black"
                 style={{
-                    color: theme.colors.onSurface,
+                    color: textColor || theme.colors.onSurface,
                     letterSpacing: -0.5,
                     fontSize: 20,
                     lineHeight: 28,

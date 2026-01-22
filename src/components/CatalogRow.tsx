@@ -22,6 +22,7 @@ interface CatalogRowProps {
     catalogId?: string;
     extra?: Record<string, any>;
     addonUrl?: string;
+    textColor?: string;
 }
 
 export const CatalogRow = ({
@@ -32,7 +33,8 @@ export const CatalogRow = ({
     catalogType,
     catalogId,
     extra,
-    addonUrl
+    addonUrl,
+    textColor
 }: CatalogRowProps) => {
     const { theme } = useTheme();
     const router = useRouter();
@@ -76,6 +78,7 @@ export const CatalogRow = ({
         <View style={styles.container}>
             <SectionHeader
                 title={title}
+                textColor={textColor}
                 onAction={onSeeAll || (() => {
                     if (catalogId && catalogType) {
                         router.push({

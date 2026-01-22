@@ -11,31 +11,41 @@ export interface LoadingIndicatorProps {
 }
 
 const LARGE_SIZE = 36;
-const SMALL_SIZE = 24;
+const SMALL_SIZE = 20;
 const CONTAINER_SIZE_RATIO = 1.25;
+const DEFAULT_GRAY = '#999999';
 
 export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
-    color,
+    color = DEFAULT_GRAY,
     containerColor,
     size = 'small',
     containerSize,
     animating = true,
 }) => {
-    if (!animating) return null;
-
     const resolvedSize = typeof size === 'number'
         ? size
         : size === 'large' ? LARGE_SIZE : SMALL_SIZE;
 
     const resolvedContainerSize = containerSize ?? Math.round(resolvedSize * CONTAINER_SIZE_RATIO);
 
+    const sizeStyle = {
+        width: resolvedContainerSize,
+        height: resolvedContainerSize,
+        justifyContent: 'center' as const,
+        alignItems: 'center' as const,
+    };
+
+    if (!animating) {
+        return <View style={sizeStyle} />;
+    }
+
     return (
-        <View style={[styles.container, { width: resolvedContainerSize, height: resolvedContainerSize }]}>
+        <View style={sizeStyle}>
             <LoadingIndicatorView
                 color={color ? (processColor(color) as number) : undefined}
                 containerColor={containerColor ? (processColor(containerColor) as number) : undefined}
-                size={resolvedSize}
-                containerSize={resolvedContainerSize}
+                size={Math.round(resolvedSize * 2)}
+                containerSize={Math.round(resolvedContainerSize * 2)}
                 style={StyleSheet.absoluteFill}
             />
         </View>

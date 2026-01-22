@@ -1,5 +1,7 @@
 import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
+import { Shimmer } from '@/src/cdk/components/Shimmer';
 import { Typography } from '@/src/cdk/components/Typography';
+import { SectionHeader } from '@/src/components/SectionHeader';
 import { TraktContentComment } from '@/src/core/api/trakt-types';
 import { useTraktComments } from '@/src/core/hooks/useTraktComments';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -31,23 +33,30 @@ export const CommentsSection = memo(({ id, type, season, episode, colors }: Comm
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Typography variant="label" weight="black" style={styles.title}>TRAKT REVIEWS</Typography>
-                <Typography variant="label" style={styles.countText}>
-                    {isLoading ? 'Loading...' : `${comments.length}+ reviews`}
-                </Typography>
-            </View>
-
-            <FlatList
-                data={comments}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                    <CommentCard comment={item} onPress={() => handleCommentPress(item)} palette={colors} />
-                )}
-                contentContainerStyle={styles.listContent}
+            <SectionHeader
+                title="Reviews"
+                hideAction
+                textColor="white"
+                style={{ paddingHorizontal: 20 }}
             />
+
+            {isLoading && comments.length === 0 ? (
+                <View style={[styles.listContent, { flexDirection: 'row', gap: 16 }]}>
+                    <Shimmer width={280} height={160} borderRadius={24} />
+                    <Shimmer width={280} height={160} borderRadius={24} />
+                </View>
+            ) : (
+                <FlatList
+                    data={comments}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={({ item }) => (
+                        <CommentCard comment={item} onPress={() => handleCommentPress(item)} palette={colors} />
+                    )}
+                    contentContainerStyle={styles.listContent}
+                />
+            )}
 
             <CustomBottomSheet
                 ref={bottomSheetRef}
@@ -81,25 +90,9 @@ const styles = StyleSheet.create({
     container: {
         marginTop: 32,
     },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        marginBottom: 16,
-    },
-    title: {
-        color: 'white',
-        letterSpacing: 2,
-        fontSize: 10,
-        opacity: 0.6,
-    },
-    countText: {
-        color: 'white',
-        opacity: 0.4,
-        fontSize: 10,
-    },
+
     listContent: {
-        paddingRight: 20,
+        paddingHorizontal: 20,
     },
     modalContent: {
         paddingHorizontal: 4,

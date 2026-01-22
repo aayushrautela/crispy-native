@@ -84,7 +84,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- VIDEO PLAYER VIEW ---
-    View(CrispyVideoView::class) {
+    View("CrispyVideoView") {
       Prop("source") { view: CrispyVideoView, url: String? ->
         view.setSource(url)
       }
@@ -129,7 +129,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- LOADING INDICATOR VIEW ---
-    View(LoadingIndicatorView::class) {
+    View("LoadingIndicatorView") {
       Prop("color") { view: LoadingIndicatorView, color: Int ->
         view.setIndicatorColor(color)
       }

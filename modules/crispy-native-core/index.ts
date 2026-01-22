@@ -33,7 +33,7 @@ export interface CrispyVideoViewRef {
     setSubtitleDelay: (delay: number) => void;
 }
 
-export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
+export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyVideoView');
 
 export interface LoadingIndicatorViewProps extends ViewProps {
     color?: number;
@@ -42,7 +42,7 @@ export interface LoadingIndicatorViewProps extends ViewProps {
     containerSize?: number;
 }
 
-export const LoadingIndicatorView: React.ComponentType<LoadingIndicatorViewProps> = requireNativeViewManager('CrispyNativeCore');
+export const LoadingIndicatorView: React.ComponentType<LoadingIndicatorViewProps> = requireNativeViewManager('LoadingIndicatorView');
 
 export default {
     /**

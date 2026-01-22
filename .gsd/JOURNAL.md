@@ -63,4 +63,11 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
 - **2026-01-22**: Implemented smart color logic in `HeroSection` to dynamically switch the "Watch Now" button color. It defaults to `lightVibrant` but falls back to `lightMuted` if the `lightVibrant` color is determined to be too dark (luma < 60), ensuring optimal contrast with the black button text.
 - **2026-01-22**: Redesigned "Watch Now" button in `HeroSection` to be thicker (68px) and feature a left-aligned icon inside a darker accent pill (60x40px), mimicking modern streaming platform aesthetics.
 - **2026-01-22**: Added "Ends at [time]" subtext to the "Watch Now" button, calculated dynamically from `runtimeMinutes` (added to `TMDBService`) and current watch progress.
+- **2026-01-22**: Integrated OMDB support to `RatingsSection`. It now fetches and displays ratings from IMDb, Rotten Tomatoes, and Metacritic if an OMDB API key is provided in Settings > Metadata.
 - **2026-01-22**: Increased thickness of `RatingsSection` pills by increasing padding to 16px.
+- **2026-01-22**: Removed the generic "arrow up right" icon from rating pills for a cleaner look.
+- **2026-01-22**: Imported official SVG logos for Rotten Tomatoes and Metacritic from `Crispy-webui`, replacing the generic star icons and colored circles.
+- **2026-01-22**: Increased size of imported rating logos to 28px to match existing badges.
+- **2026-01-22**: Fixed `RatingsSection`, `CastSection`, `CommentsSection`, and `EpisodesSection` layout to allow horizontal scrolling to the screen edge while maintaining proper content alignment.
+- **2026-01-22**: Implemented performance optimizations: integrated color extraction into the data-fetching hook, added shimmer skeletons for secondary data, and fixed the native `LoadingIndicator` scaling and exposure. Rendering is now "instant" and flash-free.
+- **2026-01-23**: Resolved `TypeError: requireNativeView is not a function` by reverting to `requireNativeViewManager` and explicitly naming native views in `CrispyNativeCoreModule.kt`. This also fixed the secondary `ReferenceError: LoadingIndicator doesn't exist` in `HeroSection.tsx`.

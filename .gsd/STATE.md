@@ -1,22 +1,17 @@
-# STATE: Trakt Integration & Comments
+# STATE: Performance & UX Optimization (Fixes)
 
 ## Current Position
-- **Phase**: Phase 4: Verification & Polish
-- **Task**: Dynamic Runtime Implementation
-- **Status**: DONE
+- **Phase**: Optimization Phase
+- **Task**: Load Time & Visual Stability
+- **Status**: DONE (Fixes Verified)
 
 ## Accomplishments
-- Phase 1, 2, and 3 completed successfully.
-- Trakt API extended with comment fetching.
-- `useTraktWatchState` and `useTraktComments` hooks implemented.
-- `HeroSection` updated with dynamic labels.
-- `CommentsSection` integrated into `MetaDetailsScreen`.
-- **Refinement**: Removed progress bar from "Watch Now" button.
-- **Refinement**: Split logic for watch state labels (Movies vs Shows).
-- **Refinement**: `RatingsSection` badges updated to full pill shape (borderRadius 99).
-- **Refinement**: `CommentCard` redesigned to match `EpisodeCard` aesthetics.
-- **Refinement**: Standardized all cards (Episodes, Trakt Reviews) to 16px border radius.
-- **Refinement**: Replaced hardcoded runtime with dynamic TMDB data (Movies: `runtime`, Shows: `episode_run_time[0]`), formatted correctly.
+- Integrated color extraction into `useMetaAggregator`.
+- Implemented `LoadingIndicator` based on Material Expressive standards.
+- Fixed native view resolution by naming views explicitly in Kotlin.
+- Reverted to `requireNativeViewManager` to resolve `TypeError`.
+- Fixed `ReferenceError` for `LoadingIndicator` caused by module load failures.
+- Added progressive loading (skeletons) to `RatingsSection` and `CommentsSection`.
 
 ## Next Steps
-- Task complete. Awaiting further instructions.
+- Awaiting user feedback on page responsiveness and visual transitions.

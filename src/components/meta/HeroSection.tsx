@@ -1,3 +1,4 @@
+import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { TMDBMeta } from '@/src/core/api/TMDBService';
 import { useTraktWatchState } from '@/src/core/hooks/useTraktWatchState';
@@ -5,7 +6,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Play, RotateCcw, Star } from 'lucide-react-native';
 import React, { memo, useMemo, useState } from 'react';
-import { ActivityIndicator, Dimensions, Pressable, StyleSheet, View } from 'react-native';
+import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -215,7 +216,9 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                             disabled={isLoading}
                         >
                             {isLoading ? (
-                                <ActivityIndicator color="black" />
+                                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                    <LoadingIndicator color="black" size={28} />
+                                </View>
                             ) : (
                                 <>
                                     <View style={[styles.watchIconPill, { backgroundColor: adjustBrightness(watchButtonColor, 0.85) }]}>
