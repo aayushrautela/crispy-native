@@ -50,3 +50,4 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
 - **2026-01-22**: Refactored Meta Details actions. Replaced Like/Dislike with Rate button to simplify the UI as requested.
 - **2026-01-22**: Implemented immediate performance fixes. Replaced  with  in  and memoized sub-components in  to reduce re-renders and improve scroll smoothness.
 - **2026-01-22**: Implemented immediate performance fixes. Replaced `FlatList` with `@shopify/flash-list` in `CatalogRow` and memoized sub-components in `MetaDetailsScreen` to reduce re-renders and improve scroll smoothness.
+- **2026-01-22**: Extended FlashList optimization to Discover and Library pages. Replaced  with  and optimized grid rendering for 60FPS performance.

@@ -7,6 +7,7 @@ import { EmptyState } from '@/src/components/EmptyState';
 import { AddonService, MetaPreview } from '@/src/core/api/AddonService';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -19,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const HEADER_HEIGHT = 220;
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 
 const TYPE_OPTIONS = [
     { label: 'All', value: 'all' },
@@ -187,18 +189,18 @@ export default function DiscoverScreen() {
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : filteredItems.length > 0 ? (
-                <Animated.FlatList
+                <AnimatedFlashList
                     data={filteredItems}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item) => (item as MetaPreview).id}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
+                    estimatedItemSize={itemWidth * 1.5}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
                         paddingHorizontal: padding,
                         paddingBottom: 100,
                     }}
-                    columnWrapperStyle={{ gap }}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}

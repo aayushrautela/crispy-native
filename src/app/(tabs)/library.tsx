@@ -9,6 +9,7 @@ import { MetaPreview } from '@/src/core/api/AddonService';
 import { TraktService } from '@/src/core/api/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { FlashList } from '@shopify/flash-list';
 import {
     Bookmark,
     ChevronDown,
@@ -30,6 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const HEADER_HEIGHT = 200;
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 
 const FILTER_OPTIONS = [
     { label: 'Watchlist', value: 'watchlist', icon: Bookmark },
@@ -192,18 +194,18 @@ export default function LibraryScreen() {
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
             ) : filteredAndSortedItems.length > 0 ? (
-                <Animated.FlatList
+                <AnimatedFlashList
                     data={filteredAndSortedItems}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
+                    keyExtractor={(item, index) => `${(item as any).id}-${index}`}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
+                    estimatedItemSize={itemWidth * 1.5}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
                         paddingHorizontal: padding,
                         paddingBottom: 100,
                     }}
-                    columnWrapperStyle={{ gap }}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
