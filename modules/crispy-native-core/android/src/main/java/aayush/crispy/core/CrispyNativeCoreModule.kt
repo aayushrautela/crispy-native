@@ -84,7 +84,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- VIDEO PLAYER VIEW ---
-    View("CrispyVideoView") {
+    View(CrispyVideoView::class) {
       Prop("source") { view: CrispyVideoView, url: String? ->
         view.setSource(url)
       }
@@ -125,25 +125,6 @@ class CrispyNativeCoreModule : Module() {
 
       AsyncFunction("setSubtitleDelay") { view: CrispyVideoView, delay: Double ->
         view.setSubtitleDelay(delay)
-      }
-    }
-
-    // --- LOADING INDICATOR VIEW ---
-    View("LoadingIndicatorView") {
-      Prop("color") { view: LoadingIndicatorView, color: Int ->
-        view.setIndicatorColor(color)
-      }
-
-      Prop("containerColor") { view: LoadingIndicatorView, color: Int? ->
-        view.setContainerColor(color)
-      }
-
-      Prop("size") { view: LoadingIndicatorView, size: Int ->
-        view.setIndicatorSize(size)
-      }
-
-      Prop("containerSize") { view: LoadingIndicatorView, size: Int ->
-        view.setContainerSize(size)
       }
     }
   }

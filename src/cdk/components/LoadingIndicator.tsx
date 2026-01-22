@@ -1,6 +1,6 @@
 import React from 'react';
 import { processColor, StyleSheet, View } from 'react-native';
-import { LoadingIndicatorView } from '../../../modules/crispy-native-core';
+import { LoadingIndicatorView } from '../../../modules/loading-indicator';
 
 export interface LoadingIndicatorProps {
     color?: string;
