@@ -1,16 +1,22 @@
-## Project Status: Debugging & UI Refinement (GSD MISSION CONTROL)
+# STATE: Trakt Integration & Comments
 
-> **Current Phase**: Phase 4: Discover Page - Catalog Rows & Meta Details
-> **Current Status**: Meta Details Actions Updated
-> **Last Updated**: 2026-01-22
+## Current Position
+- **Phase**: Phase 4: Verification & Polish
+- **Task**: Dynamic Runtime Implementation
+- **Status**: DONE
 
-## Recent Accomplishments
-- [x] Replaced Like/Dislike buttons with a single Rate button in `src/app/meta/[id].tsx`
-- [x] Implemented Command Queuing for MPV (reliable subtitle loading)
-- [x] Refactored MPV to implement Media3 `Player` interface
-- [x] Enabled Android Picture-in-Picture (PiP)
-- [x] Implemented Media Notifications with custom metadata
+## Accomplishments
+- Phase 1, 2, and 3 completed successfully.
+- Trakt API extended with comment fetching.
+- `useTraktWatchState` and `useTraktComments` hooks implemented.
+- `HeroSection` updated with dynamic labels.
+- `CommentsSection` integrated into `MetaDetailsScreen`.
+- **Refinement**: Removed progress bar from "Watch Now" button.
+- **Refinement**: Split logic for watch state labels (Movies vs Shows).
+- **Refinement**: `RatingsSection` badges updated to full pill shape (borderRadius 99).
+- **Refinement**: `CommentCard` redesigned to match `EpisodeCard` aesthetics.
+- **Refinement**: Standardized all cards (Episodes, Trakt Reviews) to 16px border radius.
+- **Refinement**: Replaced hardcoded runtime with dynamic TMDB data (Movies: `runtime`, Shows: `episode_run_time[0]`), formatted correctly.
 
 ## Next Steps
-- [ ] Monitor production logs for any remaining native crashes
-- [ ] Finalize Phase 15 planning (TV/D-Pad prep)
+- Task complete. Awaiting further instructions.

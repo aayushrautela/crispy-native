@@ -18,6 +18,7 @@ export interface MetaPreview {
     genres?: string[];
     rating?: string;
     imdbRating?: string;
+    numericRating?: number; // Pre-parsed 0-10 rating for performant filtering
 }
 
 export interface CatalogResponse {
@@ -43,6 +44,27 @@ export class AddonService {
         }
 
         return `https://${normalized}`;
+    }
+
+    static parseRating(input: string | undefined): number | undefined {
+        if (!input) return undefined;
+        // Handles formats: "7.5", "75%", "7.5/10", "15/20"
+        const clean = input.replace(/%/g, '');
+        const parts = clean.split('/');
+
+        if (parts.length === 2) {
+            const val = parseFloat(parts[0]);
+            const max = parseFloat(parts[1]);
+            if (isNaN(val) || isNaN(max) || max === 0) return undefined;
+            return (val / max) * 10;
+        }
+
+        const val = parseFloat(clean);
+        if (isNaN(val)) return undefined;
+
+        // If it looks like a percentage (e.g. 75), convert to 0-10 scale
+        if (val > 10 && !input.includes('/')) return val / 10;
+        return val;
     }
 
     static manifestToBaseUrl(manifestUrl: string): string {
@@ -97,6 +119,15 @@ export class AddonService {
 
         try {
             const res = await axios.get<CatalogResponse>(url);
+
+            // Pre-parse ratings for performance
+            if (res.data?.metas) {
+                res.data.metas = res.data.metas.map(m => ({
+                    ...m,
+                    numericRating: this.parseRating(m.imdbRating || m.rating)
+                }));
+            }
+
             console.log(`[AddonService] Success ${url}, items: ${res.data?.metas?.length}`);
             return res.data;
         } catch (e) {
@@ -114,6 +145,14 @@ export class AddonService {
     static async search(baseUrl: string, type: string, query: string): Promise<CatalogResponse> {
         const url = `${this.getRootUrl(baseUrl)}/catalog/${encodeURIComponent(type)}/search=${encodeURIComponent(query)}.json`;
         const res = await axios.get<CatalogResponse>(url);
+
+        if (res.data?.metas) {
+            res.data.metas = res.data.metas.map(m => ({
+                ...m,
+                numericRating: this.parseRating(m.imdbRating || m.rating)
+            }));
+        }
+
         return res.data;
     }
 

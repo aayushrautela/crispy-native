@@ -162,3 +162,36 @@ export interface TraktRatingItem {
         ids: any;
     };
 }
+
+export interface TraktUserStats {
+    rating?: number;
+    play_count?: number;
+    completed_count?: number;
+}
+
+export interface TraktContentComment {
+    id: number;
+    comment: string;
+    spoiler: boolean;
+    review: boolean;
+    parent_id: number;
+    created_at: string;
+    updated_at: string;
+    replies: number;
+    likes: number;
+    language: string;
+    user_rating?: number;
+    user_stats?: TraktUserStats;
+    user: {
+        username: string;
+        private: boolean;
+        deleted?: boolean;
+        name?: string;
+        vip: boolean;
+        vip_ep: boolean;
+        director?: boolean;
+        ids: {
+            slug: string;
+        };
+    };
+}

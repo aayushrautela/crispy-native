@@ -480,6 +480,41 @@ export class TraktService {
         }
     }
 
+    static async getComments(
+        type: 'movie' | 'show' | 'season' | 'episode',
+        id: string,
+        params?: { season?: number; episode?: number; page?: number; limit?: number }
+    ): Promise<TraktContentComment[]> {
+        const { season, episode, page = 1, limit = 10 } = params || {};
+        let endpoint = '';
+
+        const cleanId = id.startsWith('tmdb:') ? id.split(':')[1] : id;
+
+        switch (type) {
+            case 'movie':
+                endpoint = `${TRAKT_API_BASE}/movies/${cleanId}/comments?page=${page}&limit=${limit}&extended=full`;
+                break;
+            case 'show':
+                endpoint = `${TRAKT_API_BASE}/shows/${cleanId}/comments?page=${page}&limit=${limit}&extended=full`;
+                break;
+            case 'season':
+                endpoint = `${TRAKT_API_BASE}/shows/${cleanId}/seasons/${season}/comments?page=${page}&limit=${limit}&extended=full`;
+                break;
+            case 'episode':
+                endpoint = `${TRAKT_API_BASE}/shows/${cleanId}/seasons/${season}/episodes/${episode}/comments?page=${page}&limit=${limit}&extended=full`;
+                break;
+        }
+
+        try {
+            const res = await fetch(endpoint, { headers: this.headers });
+            if (!res.ok) return [];
+            return await res.json();
+        } catch (e) {
+            console.error('[TraktService] getComments error', e);
+            return [];
+        }
+    }
+
     private static hydrateLibraryItem(item: any, timestamp: string): TraktPlaybackItem {
         const type = item.type === 'show' ? 'episode' : item.type;
         const media = item.movie || item.show;

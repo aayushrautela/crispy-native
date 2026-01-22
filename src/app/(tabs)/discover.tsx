@@ -38,14 +38,6 @@ const RATING_OPTIONS = [
     { label: 'Above 9', value: 9 },
 ];
 
-function parseRating(rating?: string | number): number {
-    if (!rating) return 0;
-    if (typeof rating === 'number') return rating;
-    const clean = String(rating).replace(/[^0-9.]/g, '');
-    const val = parseFloat(clean);
-    if (String(rating).includes('%')) return val / 10;
-    return val;
-}
 
 export default function DiscoverScreen() {
     const { manifests } = useAddonStore();
@@ -164,8 +156,7 @@ export default function DiscoverScreen() {
             const itemGenres = (item as any).genres as string[] | undefined;
             const matchesGenre = selectedGenre === 'All' || (itemGenres?.includes(selectedGenre) ?? false);
 
-            const itemRating = (item as any).imdbRating || (item as any).rating;
-            const matchesRating = parseRating(itemRating) >= selectedRating;
+            const matchesRating = (item.numericRating || 0) >= selectedRating;
 
             return matchesGenre && matchesRating;
         });

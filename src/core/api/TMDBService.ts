@@ -40,6 +40,8 @@ export interface TMDBMeta {
     rating?: string;
     maturityRating?: string;
     genres?: string[];
+    runtime?: string;
+    runtimeMinutes?: number;
     description?: string;
     type?: 'movie' | 'series'; // Made optional as it's not always present in Partial<TMDBMeta>
     director?: string;
@@ -244,7 +246,7 @@ export class TMDBService {
                     collection = {
                         id: colRes.data.id,
                         name: colRes.data.name,
-                        backdrop: colRes.data.backdrop_path ? `${IMAGE_BASE}/original${colRes.data.backdrop_path}` : null,
+                        backdrop: colRes.data.backdrop_path ? `${IMAGE_BASE}/w780${colRes.data.backdrop_path}` : null,
                         parts: colRes.data.parts.filter((p: any) => p.poster_path).map((p: any) => ({
                             id: p.id, // Note: This is TMDB ID, might need resolution if clicking
                             name: p.title,
@@ -277,10 +279,19 @@ export class TMDBService {
 
             Object.assign(enriched, {
                 title: data.title || data.name,
-                logo: logo ? `${IMAGE_BASE}/original${logo}` : undefined,
-                backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/original${data.backdrop_path || backdropFallback}` : undefined,
+                logo: logo ? `${IMAGE_BASE}/w500${logo}` : undefined,
+                backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/w780${data.backdrop_path || backdropFallback}` : undefined,
                 poster: data.poster_path ? `${IMAGE_BASE}/w500${data.poster_path}` : undefined,
                 year: (data.release_date || data.first_air_date || '').split('-')[0],
+                runtimeMinutes: data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0,
+                runtime: (() => {
+                    const minutes = data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0;
+                    if (!minutes) return undefined;
+                    const hrs = Math.floor(minutes / 60);
+                    const mins = minutes % 60;
+                    if (hrs > 0) return `${hrs} hr ${mins} min`;
+                    return `${mins} min`;
+                })(),
                 rating: data.vote_average?.toFixed(1) || '0.0',
                 maturityRating,
                 genres: data.genres?.map((g: any) => g.name) || [],

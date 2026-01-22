@@ -51,3 +51,16 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
 - **2026-01-22**: Implemented immediate performance fixes. Replaced  with  in  and memoized sub-components in  to reduce re-renders and improve scroll smoothness.
 - **2026-01-22**: Implemented immediate performance fixes. Replaced `FlatList` with `@shopify/flash-list` in `CatalogRow` and memoized sub-components in `MetaDetailsScreen` to reduce re-renders and improve scroll smoothness.
 - **2026-01-22**: Extended FlashList optimization to Discover and Library pages. Replaced  with  and optimized grid rendering for 60FPS performance.
+- **2026-01-22**: Implemented production-grade UI performance optimizations. Modularized `MetaDetailsScreen` into memoized sub-components, consolidated data fetching with `useMetaAggregator`, implemented Skeleton UI for progressive reveal, and optimized catalog filtering with pre-parsed ratings.
+- **2026-01-22**: Completed Trakt integration phase. Extended `TraktService` for comments, implemented `useTraktWatchState` and `useTraktComments` hooks, enhanced `HeroSection` with dynamic watch status and progress indicators, and added a production-grade `CommentsSection` with spoiler handling and detailed bottom sheet view.
+- **2026-01-22**: Refined `HeroSection` UI by removing the progress bar from the "Watch Now" button per user feedback.
+- **2026-01-22**: Adjusted watch state labels for shows to use episode info (e.g., `Continue (SX EX)`) instead of percentage resume, matching `Crispy-webui` logic.
+- **2026-01-22**: Further refined labels to maintain `Resume from %` specifically for movies while keeping `Continue (SX EX)` for shows, ensuring distinct UX for each content type.
+- **2026-01-22**: Refined `RatingsSection` badges to use a full pill shape (borderRadius 99) as requested.
+- **2026-01-22**: Redesigned `CommentCard` to match `EpisodeCard` aesthetics (removed borders, matched background alpha, synchronized corner radius) and replaced emojis with Lucide icons for a more consistent MD3 look.
+- **2026-01-22**: Standardized card border radius to 16px across `EpisodeCard` and `CommentCard` to match the project's catalog card standard.
+- **2026-01-22**: Implemented dynamic runtime fetching in `TMDBService`. Movies use `runtime` and shows use `episode_run_time[0]`, formatted as `X hr Y min`. `HeroSection` now displays this dynamic data instead of a hardcoded placeholder.
+- **2026-01-22**: Implemented smart color logic in `HeroSection` to dynamically switch the "Watch Now" button color. It defaults to `lightVibrant` but falls back to `lightMuted` if the `lightVibrant` color is determined to be too dark (luma < 60), ensuring optimal contrast with the black button text.
+- **2026-01-22**: Redesigned "Watch Now" button in `HeroSection` to be thicker (68px) and feature a left-aligned icon inside a darker accent pill (60x40px), mimicking modern streaming platform aesthetics.
+- **2026-01-22**: Added "Ends at [time]" subtext to the "Watch Now" button, calculated dynamically from `runtimeMinutes` (added to `TMDBService`) and current watch progress.
+- **2026-01-22**: Increased thickness of `RatingsSection` pills by increasing padding to 16px.

@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Cpu, Globe, Play } from 'lucide-react-native';
 import React from 'react';
 import { ListRenderItem, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface StreamSelectorProps {
     type: string;
@@ -21,6 +22,7 @@ interface StreamSelectorProps {
 export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { manifests } = useAddonStore();
+    const { bottom } = useSafeAreaInsets();
 
     const { data: streams, isLoading } = useQuery({
         queryKey: ['streams', type, id],
@@ -186,7 +188,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                         </Typography>
                     </View>
                 }
-                contentContainerStyle={{ paddingBottom: 40 }}
+                contentContainerStyle={{ paddingBottom: bottom + 40 }}
             />
         </View>
     );
