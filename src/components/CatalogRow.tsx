@@ -2,9 +2,10 @@ import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
 import { useTheme } from '@/src/core/ThemeContext';
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { CatalogCard } from './CatalogCard';
 import { SectionHeader } from './SectionHeader';
 
@@ -91,51 +92,47 @@ export const CatalogRow = ({
             />
 
             {isLoading ? (
-                <FlatList
-                    data={[...Array(6)]}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.scrollContent}
-                    renderItem={() => (
-                        <View
-                            style={[
-                                styles.skeleton,
-                                {
-                                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
-                                    width: CARD_WIDTH,
-                                    height: CARD_WIDTH * 1.5,
-                                    borderRadius: 16
-                                }
-                            ]}
-                        />
-                    )}
-                />
+                <View style={{ height: CARD_WIDTH * 1.8 }}>
+                    <FlashList
+                        data={[...Array(6)]}
+                        horizontal
+                        estimatedItemSize={CARD_WIDTH}
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ paddingHorizontal: 24 }}
+                        ItemSeparatorComponent={() => <View style={{ width: ITEM_GAP }} />}
+                        renderItem={() => (
+                            <View
+                                style={[
+                                    styles.skeleton,
+                                    {
+                                        backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                                        width: CARD_WIDTH,
+                                        height: CARD_WIDTH * 1.5,
+                                        borderRadius: 16
+                                    }
+                                ]}
+                            />
+                        )}
+                    />
+                </View>
             ) : (
-                <FlatList
+                <FlashList
                     data={items}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     keyExtractor={(item, index) => `${item.id}-${index}`}
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={{ paddingHorizontal: 24 }}
+                    ItemSeparatorComponent={() => <View style={{ width: ITEM_GAP }} />}
                     renderItem={({ item }) => (
                         <CatalogCard item={item} width={CARD_WIDTH} />
                     )}
+                    estimatedItemSize={CARD_WIDTH}
                     snapToInterval={SNAP_INTERVAL}
                     decelerationRate="fast"
                     snapToAlignment="start"
                     onEndReached={handleEndReached}
                     onEndReachedThreshold={0.5}
                     ListFooterComponent={renderFooter}
-                    // Performance optimizations
-                    removeClippedSubviews={true}
-                    maxToRenderPerBatch={4}
-                    windowSize={3}
-                    initialNumToRender={4}
-                    getItemLayout={(_, index) => ({
-                        length: SNAP_INTERVAL,
-                        offset: SNAP_INTERVAL * index,
-                        index,
-                    })}
                 />
             )}
         </View>
@@ -155,10 +152,6 @@ const styles = StyleSheet.create({
     },
     seeAllBtn: {
         marginRight: -12,
-    },
-    scrollContent: {
-        paddingHorizontal: 24,
-        gap: ITEM_GAP,
     },
     skeleton: {
         opacity: 0.5,

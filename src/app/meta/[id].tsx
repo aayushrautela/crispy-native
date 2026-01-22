@@ -11,8 +11,8 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, ArrowUpRight, Bookmark, ChevronDown, Circle, MoreVertical, Play, Share2, Star, ThumbsDown, ThumbsUp } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Bookmark, ChevronDown, Circle, MoreVertical, Play, Share2, Star } from 'lucide-react-native';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import ImageColors from 'react-native-image-colors';
 import Animated, {
@@ -44,7 +44,7 @@ const hexToRgba = (hex: string, opacity: number) => {
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 };
 
-const CastItem = ({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) => {
+const CastItem = memo(({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) => {
     return (
         <Pressable onPress={onPress}>
             <View style={styles.castItem}>
@@ -71,9 +71,9 @@ const CastItem = ({ person, theme, onPress, palette }: { person: any; theme: any
             </View>
         </Pressable>
     );
-};
+});
 
-const EpisodeItem = ({ episode, theme, onPress, palette }: { episode: any; theme: any; onPress: () => void; palette: any }) => {
+const EpisodeItem = memo(({ episode, theme, onPress, palette }: { episode: any; theme: any; onPress: () => void; palette: any }) => {
     return (
         <Pressable onPress={onPress}>
             <View style={[styles.episodeCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
@@ -105,9 +105,9 @@ const EpisodeItem = ({ episode, theme, onPress, palette }: { episode: any; theme
             </View>
         </Pressable>
     );
-};
+});
 
-const ReviewCard = ({ review, theme, onPress, palette }: { review: any; theme: any; onPress: () => void; palette: any }) => {
+const ReviewCard = memo(({ review, theme, onPress, palette }: { review: any; theme: any; onPress: () => void; palette: any }) => {
     if (!review) return null;
 
     return (
@@ -142,9 +142,9 @@ const ReviewCard = ({ review, theme, onPress, palette }: { review: any; theme: a
             </View>
         </Pressable>
     );
-};
+});
 
-const RatingCard = ({ source, score, label, icon, theme, palette }: { source: string; score: string; label: string; icon: React.ReactNode; theme: any; palette: any }) => (
+const RatingCard = memo(({ source, score, label, icon, theme, palette }: { source: string; score: string; label: string; icon: React.ReactNode; theme: any; palette: any }) => (
     <View style={[styles.ratingCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
         <View style={styles.ratingIconContainer}>
             {icon}
@@ -157,7 +157,7 @@ const RatingCard = ({ source, score, label, icon, theme, palette }: { source: st
             <ArrowUpRight size={14} color="rgba(255,255,255,0.7)" />
         </View>
     </View>
-);
+));
 
 export default function MetaDetailsScreen() {
     const { id, type } = useLocalSearchParams();
@@ -490,12 +490,8 @@ export default function MetaDetailsScreen() {
                                 <Typography variant="label" style={styles.iconActionLabel}>Watched it?</Typography>
                             </Pressable>
                             <Pressable style={styles.iconActionItem}>
-                                <ThumbsUp size={24} color="white" />
-                                <Typography variant="label" style={styles.iconActionLabel}>Like</Typography>
-                            </Pressable>
-                            <Pressable style={styles.iconActionItem}>
-                                <ThumbsDown size={24} color="white" />
-                                <Typography variant="label" style={styles.iconActionLabel}>Dislike</Typography>
+                                <Star size={24} color="white" />
+                                <Typography variant="label" style={styles.iconActionLabel}>Rate</Typography>
                             </Pressable>
                         </View>
 

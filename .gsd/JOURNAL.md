@@ -47,3 +47,6 @@ Focused on resolving widespread player instability and refining the bottom sheet
 - Established a global 70% screen height limit for all bottom sheets to maintain visual balance.
 ### Outcome
 Player is stable, seeking is reliable, and UI interactions (especially stream selection) feel fast and native.
+- **2026-01-22**: Refactored Meta Details actions. Replaced Like/Dislike with Rate button to simplify the UI as requested.
+- **2026-01-22**: Implemented immediate performance fixes. Replaced  with  in  and memoized sub-components in  to reduce re-renders and improve scroll smoothness.
+- **2026-01-22**: Implemented immediate performance fixes. Replaced `FlatList` with `@shopify/flash-list` in `CatalogRow` and memoized sub-components in `MetaDetailsScreen` to reduce re-renders and improve scroll smoothness.
