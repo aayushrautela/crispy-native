@@ -1,35 +1,52 @@
-# Debug Session: Subtitle Selection
+# Debug Session: Android Compilation Errors
 
 ## Symptom
-Subtitle selection always uses the first embedded subtitle, regardless of user selection.
+Kotlin compilation fails for `:crispy-native-core:compileDebugKotlin` task.
 
-**When:** User selects any subtitle track from the SubtitlesTab
-**Expected:** Selected subtitle track should be displayed
-**Actual:** First embedded subtitle is always displayed
+**When:** Android release workflow build
+**Expected:** Code compiles successfully
+**Actual:** Three compilation errors
 
-## Evidence Gathering
+## Evidence Gathered
 
-### Data Flow to Trace
-1. `SubtitlesTab.tsx` - User clicks on track → calls `onSelectTrack(track)`
-2. `player.tsx` - `setSelectedSubtitleTrack({ type: 'index', value: track.id })`
-3. `VideoSurface.tsx` - `selectedTextTrack` prop → `mpvPlayerRef.current.setSubtitleTrack(value)`
-4. `CrispyVideoView.kt` - `setSubtitleTrack(trackId)` → `MPVLib.setPropertyInt("sid", trackId)`
+### Error 1: CrispyNativeCoreModule.kt:77
+```
+Return type mismatch: expected 'Any?', actual 'Unit'.
+```
+- `enterPiP` AsyncFunction was returning Unit (void)
+- Expo AsyncFunction wrapper expects Any? return type
 
-### Key Questions
-- Is `track.id` correct in SubtitlesTab? (embedded vs external ID mismatch?)
-- Is `selectedSubtitleTrack` state updating correctly in player.tsx?
-- Is the effect in VideoSurface.tsx firing when selection changes?
-- Is MPV receiving the correct `sid` value?
+### Error 2: CrispyVideoView.kt:25
+```
+Class 'CrispyVideoView' is not abstract and does not implement abstract members
+```
+- Missing ~70 Player interface methods from Media3 1.2.x
+- Including: setMediaItems, addMediaItem, play, pause, surface methods, etc.
+
+### Error 3: CrispyVideoView.kt:583
+```
+Unresolved reference 'CueGroup'
+```
+- `CueGroup` is in `androidx.media3.common.text` package, not imported
+- `CueGroup.EMPTY_TIME_ZERO` constant doesn't exist in Media3 1.2.1
 
 ## Hypotheses
 
 | # | Hypothesis | Likelihood | Status |
 |---|------------|------------|--------|
-| 1 | Track ID mismatch: embedded tracks have different IDs than expected | 40% | UNTESTED |
-| 2 | useEffect in VideoSurface not triggering on selection change | 30% | UNTESTED |
-| 3 | MPV `sid` property not accepting the correct value type | 20% | UNTESTED |
-| 4 | State not propagating from player.tsx to VideoSurface | 10% | UNTESTED |
+| 1 | AsyncFunction requires explicit return value | 90% | **CONFIRMED** |
+| 2 | Player interface in Media3 1.2.x has more methods than implemented | 95% | **CONFIRMED** |
+| 3 | CueGroup needs explicit import from text subpackage | 100% | **CONFIRMED** |
 
 ## Attempts
 
-(None yet)
+### Attempt 1
+**Testing:** All hypotheses
+**Actions:**
+1. Changed `enterPiP` to return `Boolean` instead of Unit
+2. Added missing imports: `CueGroup`, `Size`, `Surface`, `SurfaceHolder`, `SurfaceView`
+3. Added `eventProperty(String, Long)` and `eventProperty(String, Boolean)` overloads
+4. Added ~70 missing Player interface method stubs
+5. Changed `CueGroup.EMPTY_TIME_ZERO` to `CueGroup(emptyList(), 0L)` constructor call
+
+**Status:** Pending verification

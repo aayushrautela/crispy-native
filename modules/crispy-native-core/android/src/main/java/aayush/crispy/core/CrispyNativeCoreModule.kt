@@ -74,11 +74,13 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("enterPiP") {
-      val activity = appContext.currentActivity ?: return@AsyncFunction
+      val activity = appContext.currentActivity ?: return@AsyncFunction false
       if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
           val params = android.app.PictureInPictureParams.Builder().build()
           activity.enterPictureInPictureMode(params)
+          return@AsyncFunction true
       }
+      return@AsyncFunction false
     }
 
     // --- VIDEO PLAYER VIEW ---

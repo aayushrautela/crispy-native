@@ -12,10 +12,15 @@ import expo.modules.kotlin.views.ExpoView
 import `is`.xyz.mpv.MPVLib
 import kotlin.math.abs
 import androidx.media3.common.*
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.ListenerSet
 import androidx.media3.common.util.Clock
+import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerNotificationManager
+import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.os.Looper
 import coil.ImageLoader
 import coil.request.ImageRequest
@@ -210,6 +215,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     // --- MPVLib.EventObserver ---
 
+    override fun eventProperty(property: String, value: Long) {}
+    override fun eventProperty(property: String, value: Boolean) {}
     override fun eventProperty(property: String) {
         if (property == "track-list") {
             parseAndSendTracks()
@@ -580,7 +587,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun getShuffleModeEnabled(): Boolean = false
     override fun getPlayerError(): PlaybackException? = null
     override fun getVideoSize(): VideoSize = VideoSize.UNKNOWN
-    override fun getCurrentCues(): CueGroup = CueGroup.EMPTY_TIME_ZERO
+    override fun getCurrentCues(): CueGroup = CueGroup(emptyList(), 0L)
     override fun getDeviceInfo(): DeviceInfo = DeviceInfo.UNKNOWN
     override fun getDeviceVolume(): Int = 0
     override fun isDeviceMuted(): Boolean = false
@@ -599,6 +606,74 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun getCurrentPeriodIndex(): Int = 0
     override fun isCommandAvailable(command: Int): Boolean = true
     override fun getAvailableCommands(): Player.Commands = Player.Commands.EMPTY
+    
+    // Additional Player interface methods required by Media3 1.2.x
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>) {}
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>, resetPosition: Boolean) {}
+    override fun setMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long) {}
+    override fun setMediaItem(mediaItem: MediaItem) {}
+    override fun setMediaItem(mediaItem: MediaItem, startPositionMs: Long) {}
+    override fun setMediaItem(mediaItem: MediaItem, resetPosition: Boolean) {}
+    override fun addMediaItem(mediaItem: MediaItem) {}
+    override fun addMediaItem(index: Int, mediaItem: MediaItem) {}
+    override fun addMediaItems(mediaItems: MutableList<MediaItem>) {}
+    override fun addMediaItems(index: Int, mediaItems: MutableList<MediaItem>) {}
+    override fun moveMediaItem(currentIndex: Int, newIndex: Int) {}
+    override fun moveMediaItems(fromIndex: Int, toIndex: Int, newIndex: Int) {}
+    override fun replaceMediaItem(index: Int, mediaItem: MediaItem) {}
+    override fun replaceMediaItems(fromIndex: Int, toIndex: Int, mediaItems: MutableList<MediaItem>) {}
+    override fun removeMediaItem(index: Int) {}
+    override fun removeMediaItems(fromIndex: Int, toIndex: Int) {}
+    override fun clearMediaItems() {}
+    override fun canAdvertiseSession(): Boolean = false
+    override fun prepare() {}
+    override fun getPlaybackSuppressionReason(): Int = Player.PLAYBACK_SUPPRESSION_REASON_NONE
+    override fun play() { setPaused(false) }
+    override fun pause() { setPaused(true) }
+    override fun isLoading(): Boolean = false
+    override fun seekToDefaultPosition() { seekTo(0) }
+    override fun seekToDefaultPosition(windowIndex: Int) { seekTo(0) }
+    override fun getSeekBackIncrement(): Long = 10000L
+    override fun seekBack() { seekTo(getCurrentPosition() - getSeekBackIncrement()) }
+    override fun getSeekForwardIncrement(): Long = 10000L
+    override fun seekForward() { seekTo(getCurrentPosition() + getSeekForwardIncrement()) }
+    @Deprecated("Use hasPreviousMediaItem() instead") override fun hasPrevious(): Boolean = false
+    @Deprecated("Use hasPreviousMediaItem() instead") override fun hasPreviousWindow(): Boolean = false
+    @Deprecated("Use seekToPreviousMediaItem() instead") override fun previous() {}
+    @Deprecated("Use seekToPreviousMediaItem() instead") override fun seekToPreviousWindow() {}
+    override fun getMaxSeekToPreviousPosition(): Long = 0L
+    override fun seekToPrevious() {}
+    @Deprecated("Use hasNextMediaItem() instead") override fun hasNext(): Boolean = false
+    @Deprecated("Use hasNextMediaItem() instead") override fun hasNextWindow(): Boolean = false
+    @Deprecated("Use seekToNextMediaItem() instead") override fun next() {}
+    @Deprecated("Use seekToNextMediaItem() instead") override fun seekToNextWindow() {}
+    override fun seekToNext() {}
+    override fun setPlaybackSpeed(speed: Float) {}
+    override fun getCurrentManifest(): Any? = null
+    @Deprecated("Use getCurrentMediaItemIndex() instead") override fun getCurrentWindowIndex(): Int = 0
+    @Deprecated("Use getNextMediaItemIndex() instead") override fun getNextWindowIndex(): Int = C.INDEX_UNSET
+    override fun getNextMediaItemIndex(): Int = C.INDEX_UNSET
+    @Deprecated("Use getPreviousMediaItemIndex() instead") override fun getPreviousWindowIndex(): Int = C.INDEX_UNSET
+    override fun getPreviousMediaItemIndex(): Int = C.INDEX_UNSET
+    override fun getBufferedPercentage(): Int = 0
+    @Deprecated("Use isCurrentMediaItemDynamic() instead") override fun isCurrentWindowDynamic(): Boolean = false
+    override fun isCurrentMediaItemDynamic(): Boolean = false
+    @Deprecated("Use isCurrentMediaItemLive() instead") override fun isCurrentWindowLive(): Boolean = false
+    override fun isCurrentMediaItemLive(): Boolean = false
+    override fun getCurrentLiveOffset(): Long = C.TIME_UNSET
+    @Deprecated("Use isCurrentMediaItemSeekable() instead") override fun isCurrentWindowSeekable(): Boolean = true
+    override fun isCurrentMediaItemSeekable(): Boolean = true
+    override fun clearVideoSurface() {}
+    override fun clearVideoSurface(surface: Surface?) {}
+    override fun setVideoSurface(surface: Surface?) {}
+    override fun setVideoSurfaceHolder(surfaceHolder: SurfaceHolder?) {}
+    override fun clearVideoSurfaceHolder(surfaceHolder: SurfaceHolder?) {}
+    override fun setVideoSurfaceView(surfaceView: SurfaceView?) {}
+    override fun clearVideoSurfaceView(surfaceView: SurfaceView?) {}
+    override fun setVideoTextureView(textureView: TextureView?) {}
+    override fun clearVideoTextureView(textureView: TextureView?) {}
+    override fun getSurfaceSize(): Size = Size.UNKNOWN
+    override fun setAudioAttributes(audioAttributes: AudioAttributes, handleAudioFocus: Boolean) {}
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 }
