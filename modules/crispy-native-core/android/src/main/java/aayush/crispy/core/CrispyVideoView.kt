@@ -170,12 +170,18 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     private fun observeProperties() {
-        MPVLib.observeProperty("time-pos", MPVLib.mpvFormat.MPV_FORMAT_DOUBLE)
-        MPVLib.observeProperty("duration", MPVLib.mpvFormat.MPV_FORMAT_DOUBLE)
-        MPVLib.observeProperty("eof-reached", MPVLib.mpvFormat.MPV_FORMAT_FLAG)
-        MPVLib.observeProperty("track-list", MPVLib.mpvFormat.MPV_FORMAT_NONE)
-        MPVLib.observeProperty("width", MPVLib.mpvFormat.MPV_FORMAT_INT64)
-        MPVLib.observeProperty("height", MPVLib.mpvFormat.MPV_FORMAT_INT64)
+        // MPV format constants (manually defined to match MPVLib source)
+        val MPV_FORMAT_NONE = 0
+        val MPV_FORMAT_FLAG = 3
+        val MPV_FORMAT_INT64 = 4
+        val MPV_FORMAT_DOUBLE = 5
+
+        MPVLib.observeProperty("time-pos", MPV_FORMAT_DOUBLE)
+        MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
+        MPVLib.observeProperty("eof-reached", MPV_FORMAT_FLAG)
+        MPVLib.observeProperty("track-list", MPV_FORMAT_NONE)
+        MPVLib.observeProperty("width", MPV_FORMAT_INT64)
+        MPVLib.observeProperty("height", MPV_FORMAT_INT64)
     }
 
     private fun loadFile(url: String) {
@@ -203,7 +209,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     private fun applyHttpHeadersAsOptions() {
-        httpHeaders?.let { headers ->
+        httpHeaders?.let { headers: Map<String, String> ->
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
             MPVLib.setOptionString("http-header-fields", headerString)
         }
@@ -306,16 +312,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     // MPVLib.EventObserver
-    override fun eventProperty(property: String) {
+    override fun eventProperty(property: String?) {
         if (property == "track-list") parseAndSendTracks()
     }
 
-    override fun eventProperty(property: String, value: Long) {}
-    override fun eventProperty(property: String, value: Boolean) {
+    override fun eventProperty(property: String?, value: Long) {}
+    override fun eventProperty(property: String?, value: Boolean) {
         if (property == "eof-reached" && value) onEnd(Unit)
     }
-    override fun eventProperty(property: String, value: String) {}
-    override fun eventProperty(property: String, value: Double) {
+    override fun eventProperty(property: String?, value: String?) {}
+    override fun eventProperty(property: String?, value: Double) {
         when (property) {
             "time-pos" -> {
                 val duration = MPVLib.getPropertyDouble("duration") ?: 0.0
@@ -336,6 +342,12 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     override fun event(eventId: Int) {
         // Handle core events like MPV_EVENT_FILE_LOADED if needed
+        val MPV_EVENT_FILE_LOADED = 8
+        val MPV_EVENT_END_FILE = 7
+        
+        if (eventId == MPV_EVENT_FILE_LOADED && !isPaused) {
+             MPVLib.setPropertyBoolean("pause", false)
+        }
     }
 
     private fun parseAndSendTracks() {
