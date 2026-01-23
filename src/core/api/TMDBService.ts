@@ -327,6 +327,7 @@ export class TMDBService {
                     type: r.media_type || (findPath === 'movie' ? 'movie' : 'series'),
                     tmdbId: r.id,
                 })) || [],
+                videos: data.videos?.results || [],
             });
 
             metaCache[cacheKey] = enriched;

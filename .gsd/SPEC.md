@@ -1,20 +1,35 @@
-# SPEC: libmpv UnsatisfiedLinkError Fix
+# SPEC: Trailer Autoplay Feature
 
 Status: FINALIZED
 
 ## Goal
-Resolve the `java.lang.UnsatisfiedLinkError` caused by a missing symbol `__from_chars_floating_point` in `libmpv.so`. This requires aligning the project's NDK version with the library's build environment (NDK r29).
+Implement a YouTube trailer autoplay system on the Hero card of the movie/show details page, similar to the Nuvio app.
 
 ## Requirements
-1. **NDK Version Alignment**: The top-level `android/build.gradle` must use `ndkVersion = "29.0.14206865"`.
-2. **Automated Configuration**: The fix must be implemented via an Expo Config Plugin to ensure persistence across `npx expo prebuild`.
-3. **Packaging Integrity**: Ensure `libc++_shared.so` is correctly picked from the newer NDK libraries.
+1. **Trailer Metadata**: Capture the first YouTube trailer from the TMDB API response.
+2. **Direct Stream Extraction**: Use an external trailer service (configured via `EXPO_PUBLIC_TRAILER_SERVICE_URL`) to extract direct streaming links from YouTube keys.
+3. **Autoplay Behavior**: 
+    - Display the backdrop image initially.
+    - After a short delay (e.g., 2 seconds), transition to the trailer video if available.
+    - Video should be muted by default (as per user preference or common practice).
+4. **Reliability**:
+    - No XPrime fallback as requested.
+    - If extraction fails or video errors, remain on the backdrop image.
+5. **UI/UX**:
+    - Smooth transitions (fade) between image and video.
+    - Parallax support for the video player to match the current backdrop behavior.
 
 ## Technical Details
-- **Plugin**: `plugins/withNdkFix.js` targeting `withProjectBuildGradle`.
-- **Target File**: `android/build.gradle`.
-- **Injection Point**: `buildscript.ext` block.
+- **Services**:
+    - [MODIFY] `src/core/api/TMDBService.ts`: Map `videos` from TMDB response to the meta object.
+    - [NEW] `src/core/api/TrailerService.ts`: Handle HTTP calls to the custom trailer extraction backend.
+- **Components**:
+    - [NEW] `src/components/video/TrailerPlayer.tsx`: A wrapper around `react-native-video` for hero trailers.
+    - [MODIFY] `src/components/meta/HeroSection.tsx`: Orchestrate the autoplay logic and render the `TrailerPlayer`.
 
 ## Verification Criteria
-- `android/build.gradle` shows `ndkVersion = "29.0.14206865"` after prebuild.
-- App launches without native crashing when loading `MPVLib`.
+- `TrailerService` returns a valid direct streaming URL for a given YouTube key.
+- `HeroSection` correctly identifies a trailer from TMDB data.
+- Video starts playing after the specified delay.
+- Video is muted by default.
+- UI transitions smoothly between backdrop and video.

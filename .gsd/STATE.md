@@ -1,18 +1,15 @@
-1: # Mission Control
-2: 
-3: **Current Phase:** Project Maintenance & Optimization
-4: **Status:** Plugins Consolidated and Verified
-5: 
-6: ## Accomplished
-7: - Identified NDK version mismatch as root cause for libmpv crash.
-8: - Created and verified `withNdkFix.js`.
-9: - **Consolidated 4 individual Android plugins** into a single unified `withCrispyNative.js`.
-10: - Verified clean prebuild with the unified plugin.
-11: 
-12: ## Next Steps
-13: - User to build and test on device.
-14: - Resume Trakt Integration tasks.
+# Mission Control
 
+**Current Phase:** Verification & Polish ✅
+**Status:** COMPLETED 🎉
 
+## Accomplished
+- **Metadata Integration**: Updated `TMDBService.ts` to include `videos` in enriched metadata.
+- **Extraction Service**: Implemented `TrailerService.ts` to communicate with the custom backend via `EXPO_PUBLIC_TRAILER_SERVICE_URL`.
+- **Player Component**: Created `TrailerPlayer.tsx` using `react-native-video` with reanimated fade-in support.
+- **UI Orchestration**: Integrated autoplay with a 2-second delay and smooth transition into `HeroSection.tsx`.
+- **Parallax Support**: Verified that the video player inherits the backdrop's parallax transformations.
 
-
+## Next Steps
+- User to configure `EXPO_PUBLIC_TRAILER_SERVICE_URL` in their `.env` file.
+- User to verify playback and transitions on device.

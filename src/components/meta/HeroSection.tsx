@@ -1,13 +1,15 @@
 import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
 import { Typography } from '@/src/cdk/components/Typography';
 import { TMDBMeta } from '@/src/core/api/TMDBService';
+import { TrailerService } from '@/src/core/api/TrailerService';
 import { useTraktWatchState } from '@/src/core/hooks/useTraktWatchState';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Play, RotateCcw, Star } from 'lucide-react-native';
 import React, { memo, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Extrapolation, interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { TrailerPlayer } from '../video/TrailerPlayer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 750;
@@ -24,6 +26,43 @@ interface HeroSectionProps {
 
 export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress }: HeroSectionProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+    const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+    const [showTrailer, setShowTrailer] = useState(false);
+    const trailerOpacity = useSharedValue(0);
+
+    // Trailer Autoplay Logic
+    React.useEffect(() => {
+        let isMounted = true;
+        let autoplayTimer: NodeJS.Timeout;
+
+        const loadTrailer = async () => {
+            const key = TrailerService.getFirstTrailerKey(enriched.videos || []);
+            if (!key) return;
+
+            const directUrl = await TrailerService.getTrailerFromYouTubeKey(key, enriched.title, enriched.year);
+            if (directUrl && isMounted) {
+                setTrailerUrl(directUrl);
+                // Wait 2 seconds before showing
+                autoplayTimer = setTimeout(() => {
+                    if (isMounted) {
+                        setShowTrailer(true);
+                        trailerOpacity.value = withTiming(1, { duration: 800 });
+                    }
+                }, 2000);
+            }
+        };
+
+        loadTrailer();
+
+        return () => {
+            isMounted = false;
+            clearTimeout(autoplayTimer);
+        };
+    }, [enriched.videos, enriched.title, enriched.year]);
+
+    const trailerAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: trailerOpacity.value,
+    }));
 
     const { state, progress, isLoading, episode, lastWatchedAt } = useTraktWatchState(enriched.imdbId || meta?.id, meta?.type);
 
@@ -122,6 +161,17 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
             {/* Parallax Layer */}
             <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
+
+                {showTrailer && trailerUrl && (
+                    <Animated.View style={[StyleSheet.absoluteFill, trailerAnimatedStyle]}>
+                        <TrailerPlayer
+                            url={trailerUrl}
+                            style={styles.heroImage}
+                            muted={true}
+                        />
+                    </Animated.View>
+                )}
+
                 <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.4)', DARK_BASE]}
                     locations={[0, 0.6, 1]}
