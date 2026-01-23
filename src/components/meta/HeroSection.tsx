@@ -217,7 +217,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                         >
                             {isLoading ? (
                                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                                    <LoadingIndicator color="black" size={28} />
+                                    <LoadingIndicator color="black" size={36} />
                                 </View>
                             ) : (
                                 <>

@@ -287,8 +287,9 @@ const styles = StyleSheet.create({
     },
     loadingContainer: {
         flex: 1,
+        width: '100%',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 100,
+        paddingTop: 80, // Slightly reduced to feel more centered while avoiding overlap
     },
 });

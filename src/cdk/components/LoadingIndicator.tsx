@@ -10,8 +10,8 @@ export interface LoadingIndicatorProps {
     animating?: boolean;
 }
 
-const LARGE_SIZE = 36;
-const SMALL_SIZE = 20;
+const LARGE_SIZE = 64;
+const SMALL_SIZE = 24;
 const CONTAINER_SIZE_RATIO = 1.25;
 const DEFAULT_GRAY = '#999999';
 
