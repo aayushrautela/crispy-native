@@ -32,9 +32,9 @@ dependencies {
   // React Native bridge (for LifecycleEventListener, ReactContext)
   implementation "com.facebook.react:react-android"
 
-  // MPV Player library (direct file reference like Nuvio)
-  implementation files("libs/libmpv-release.aar")
-  implementation files("libs/lib-decoder-ffmpeg-release.aar")
+  // MPV Player library (compileOnly - actual AARs provided by main app via withLocalAarDependencies plugin)
+  compileOnly files("libs/libmpv-release.aar")
+  compileOnly files("libs/lib-decoder-ffmpeg-release.aar")
   
   // jlibtorrent JARs
   implementation fileTree(dir: 'libs', include: ['*.jar'])
