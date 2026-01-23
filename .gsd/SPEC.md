@@ -18,6 +18,7 @@ Implement a YouTube trailer autoplay system on the Hero card of the movie/show d
 5. **UI/UX**:
     - Smooth transitions (fade) between image and video.
     - Parallax support for the video player to match the current backdrop behavior.
+6. **Platform Requirements**: `minSdkVersion` must be at least 29 to support `libmpv` and modern Android features (Android 10).
 
 ## Technical Details
 - **Services**:

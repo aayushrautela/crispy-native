@@ -158,6 +158,19 @@ class CrispyNativeCoreModule : Module() {
       AsyncFunction("setSubtitleItalic") { view: CrispyVideoView, italic: Boolean ->
         view.setSubtitleItalic(italic)
       }
+
+      Prop("metadata") { view: CrispyVideoView, metadata: Map<String, Any>? ->
+        metadata?.let {
+          val title = it["title"] as? String ?: ""
+          val artist = it["artist"] as? String ?: ""
+          val artworkUrl = it["artworkUrl"] as? String
+          view.setMetadata(title, artist, artworkUrl)
+        }
+      }
+
+      AsyncFunction("setMetadata") { view: CrispyVideoView, title: String, artist: String, artworkUrl: String? ->
+        view.setMetadata(title, artist, artworkUrl)
+      }
     }
   }
 }

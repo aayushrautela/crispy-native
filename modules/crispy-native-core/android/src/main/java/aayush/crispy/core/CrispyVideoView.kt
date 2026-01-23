@@ -26,6 +26,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var isPaused: Boolean = true
     private var surface: Surface? = null
     private var httpHeaders: Map<String, String>? = null
+
+    // Media Session Handler
+    private var mediaSessionHandler: MediaSessionHandler? = null
     
     // Decoder mode setting: 'auto', 'sw', 'hw', 'hw+' (default: auto)
     var decoderMode: String = "auto"
@@ -46,6 +49,18 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var resumeOnForeground = false
     private val lifeCycleListener = object : LifecycleEventListener {
         override fun onHostPause() {
+            val activity = appContext.currentActivity
+            val isInPip = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                activity?.isInPictureInPictureMode == true
+            } else {
+                false
+            }
+
+            if (isInPip) {
+                Log.d(TAG, "App backgrounded but in PiP — keeping MPV playing")
+                return
+            }
+
             resumeOnForeground = !isPaused
             if(resumeOnForeground) {
                 Log.d(TAG, "App backgrounded — pausing MPV")
@@ -59,7 +74,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                 resumeOnForeground = false
             }
         }
-        override fun onHostDestroy() {}
+        override fun onHostDestroy() {
+            mediaSessionHandler?.release()
+        }
     }
 
     init {
@@ -84,6 +101,20 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             MPVLib.init()
             MPVLib.attachSurface(surface!!)
             MPVLib.addObserver(this)
+            
+            // Initialize Media Session
+            mediaSessionHandler = MediaSessionHandler(context, object : MediaSessionHandler.MediaSessionCallbacks {
+                override fun onPlay() { setPaused(false) }
+                override fun onPause() { setPaused(true) }
+                override fun onStop() { 
+                    setPaused(true)
+                    seek(0.0)
+                }
+                override fun onSeekTo(pos: Long) {
+                    seek(pos / 1000.0)
+                }
+            })
+            
             MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
             observeProperties()
             isMpvInitialized = true
@@ -215,10 +246,15 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
+    fun setMetadata(title: String, artist: String, artworkUrl: String?) {
+        mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
+    }
+
     fun setPaused(paused: Boolean) {
         this.isPaused = paused
         if (isMpvInitialized) {
             MPVLib.setPropertyBoolean("pause", paused)
+            mediaSessionHandler?.updatePlaybackState(!paused)
         }
     }
 
@@ -326,6 +362,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             "time-pos" -> {
                 val duration = MPVLib.getPropertyDouble("duration") ?: 0.0
                 onProgress(mapOf("position" to value, "duration" to duration))
+                
+                mediaSessionHandler?.updatePosition(value)
+                mediaSessionHandler?.updateDuration(duration)
             }
             "duration" -> {
                 if (!hasLoadEventFired && value > 0) {

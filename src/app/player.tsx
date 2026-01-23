@@ -29,7 +29,7 @@ import {
     StepForward
 } from 'lucide-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { DeviceEventEmitter, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -239,7 +239,14 @@ export default function PlayerScreen() {
         lock();
         StatusBar.setHidden(true);
 
+        // Listen for PiP mode changes (Android)
+        const pipSubscription = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
+            console.log('[Player] PiP Mode Changed:', isPip);
+            setShowControls(!isPip);
+        });
+
         return () => {
+            pipSubscription.remove();
             const unlock = async () => {
                 try {
                     await SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.PORTRAIT_UP);
@@ -378,6 +385,7 @@ export default function PlayerScreen() {
                     useExoPlayer={useExoPlayer}
                     decoderMode={settings.decoderMode}
                     gpuMode={settings.gpuMode}
+                    metadata={mediaMetadata}
                     selectedAudioTrack={selectedAudioTrackProp}
                     selectedTextTrack={selectedTextTrackProp}
                     subtitleDelay={subtitleDelay}
