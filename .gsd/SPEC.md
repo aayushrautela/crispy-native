@@ -1,36 +1,46 @@
-# SPEC: Trailer Autoplay Feature
+# SPEC: Trakt Integration & UI Enhancements
 
 Status: FINALIZED
 
 ## Goal
-Implement a YouTube trailer autoplay system on the Hero card of the movie/show details page, similar to the Nuvio app.
+Implement comprehensive Trakt user interactions (Library management, Rating, Watch status) and enhance the UI with actionable buttons on the Details page and a Bottom Sheet menu for Catalog cards, matching the `Crispy-webui` logic and visual style.
 
 ## Requirements
-1. **Trailer Metadata**: Capture the first YouTube trailer from the TMDB API response.
-2. **Direct Stream Extraction**: Use an external trailer service (configured via `EXPO_PUBLIC_TRAILER_SERVICE_URL`) to extract direct streaming links from YouTube keys.
-3. **Autoplay Behavior**: 
-    - Display the backdrop image initially.
-    - After a short delay (e.g., 2 seconds), transition to the trailer video if available.
-    - Video should be muted by default (as per user preference or common practice).
-4. **Reliability**:
-    - No XPrime fallback as requested.
-    - If extraction fails or video errors, remain on the backdrop image.
-5. **UI/UX**:
-    - Smooth transitions (fade) between image and video.
-    - Parallax support for the video player to match the current backdrop behavior.
-6. **Platform Requirements**: `minSdkVersion` must be at least 29 to support `libmpv` and modern Android features (Android 10).
 
-## Technical Details
-- **Services**:
-    - [MODIFY] `src/core/api/TMDBService.ts`: Map `videos` from TMDB response to the meta object.
-    - [NEW] `src/core/api/TrailerService.ts`: Handle HTTP calls to the custom trailer extraction backend.
-- **Components**:
-    - [NEW] `src/components/video/TrailerPlayer.tsx`: A wrapper around `react-native-video` for hero trailers.
-    - [MODIFY] `src/components/meta/HeroSection.tsx`: Orchestrate the autoplay logic and render the `TrailerPlayer`.
+### 1. Trakt Service & Logic
+- **API Extension**: Extend `TraktService` to support write operations:
+    - Add/Remove from Watchlist.
+    - Add/Remove from Collection (Library).
+    - Mark as Watched/Unwatched (History).
+    - Rate/Unrate content (Movies, Shows, Episodes).
+- **State Management**: Implement a `TraktContext` (or extend existing stores) to handle:
+    - user's library state (`watchlist`, `collection`, `watched`, `ratings`).
+    - Optimistic updates for immediate UI feedback.
+    - Syncing logic (background refresh after action).
+
+### 2. Details Page UI
+- **Action Buttons**: Add new interactive buttons to the Hero/Details section:
+    - **My List**: Toggle presence in Watchlist.
+    - **Rate**: Open a rating modal/dialog to rate the content (1-10 stars).
+    - **Watched**: (Optional/Contextual) Toggle watched status or show progress.
+- **Visuals**: Match `Crispy-webui` styling (Google-like buttons, clean icons).
+
+### 3. Catalog UI (Long Press)
+- **Interaction**: Add `onLongPress` handler to `CatalogCard`.
+- **Bottom Sheet**: Show a native-style Bottom Sheet on long press with options:
+    - Add to / Remove from Library (Collection).
+    - Add to / Remove from Watchlist.
+    - Mark as Watched / Unwatched.
+    - Rate resource.
+    - View Details.
+
+### 4. Technical Constraints
+- **Logic Source**: Port logic from `Crispy-webui` (`useTraktIntegration.ts`, `TraktContext.tsx`).
+- **UI Source**: Reference `Crispy-webui` mobile layout and `MetaDetailsDesktop`.
+- **Platform**: React Native (Expo). Ensure styles work on Android/iOS.
 
 ## Verification Criteria
-- `TrailerService` returns a valid direct streaming URL for a given YouTube key.
-- `HeroSection` correctly identifies a trailer from TMDB data.
-- Video starts playing after the specified delay.
-- Video is muted by default.
-- UI transitions smoothly between backdrop and video.
+- **Service**: Can successfully call Trakt API to add/remove/rate.
+- **Details Page**: Buttons correctly reflect current state (e.g., "In List" vs "My List") and toggle state.
+- **Catalog**: Long press opens Bottom Sheet. Menu items work and update state.
+- **Optimism**: UI updates immediately before API response.
