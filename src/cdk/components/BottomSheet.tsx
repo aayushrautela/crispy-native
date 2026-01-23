@@ -12,6 +12,7 @@ interface BottomSheetProps {
     scrollable?: boolean;
     enableDynamicSizing?: boolean;
     maxHeight?: number;
+    onDismiss?: () => void;
 }
 
 export type BottomSheetRef = BottomSheetModal;
@@ -23,7 +24,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     index = 0,
     scrollable = true,
     enableDynamicSizing = true,
-    maxHeight
+    maxHeight,
+    onDismiss
 }, ref) => {
     const { theme } = useTheme();
     const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -67,6 +69,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
             style={styles.modal}
+            onDismiss={onDismiss}
         >
             <View style={styles.container}>
                 {title && (

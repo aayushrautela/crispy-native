@@ -1,12 +1,11 @@
 
-import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
+import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
 import { Typography } from '@/src/cdk/components/Typography';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Check } from 'lucide-react-native';
-import React from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, View } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import React, { useEffect, useRef } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface ActionItem {
     id: string;
@@ -26,102 +25,77 @@ interface ActionSheetProps {
 
 export const ActionSheet = ({ visible, onClose, title, actions }: ActionSheetProps) => {
     const { theme } = useTheme();
+    const sheetRef = useRef<BottomSheetRef>(null);
+    const { bottom } = useSafeAreaInsets();
+    // We strictly use the sheet's state to determine visibility from the UI
+
+    useEffect(() => {
+        if (visible) {
+            sheetRef.current?.present();
+        } else {
+            sheetRef.current?.dismiss();
+        }
+    }, [visible]);
 
     return (
-        <Modal
-            transparent
-            visible={visible}
-            animationType="slide"
-            onRequestClose={onClose}
+        <CustomBottomSheet
+            ref={sheetRef}
+            title={title}
+            onDismiss={onClose}
+            enableDynamicSizing={true}
+            scrollable={true}
         >
-            <View style={styles.overlay}>
-                <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-                <ExpressiveSurface
-                    variant="elevated"
-                    rounding="xl"
-                    style={[styles.container, { backgroundColor: theme.colors.surface }]}
-                >
-                    {title && (
-                        <View style={styles.header}>
-                            <Typography variant="label" weight="black" style={{ color: theme.colors.onSurfaceVariant, fontSize: 13, textTransform: 'uppercase', letterSpacing: 1 }}>
-                                {title}
-                            </Typography>
+            <View style={[styles.content, { paddingBottom: bottom + 12 }]}>
+                {actions.map((action) => (
+                    <Pressable
+                        key={action.id}
+                        onPress={() => {
+                            // Dismiss first to allow animation
+                            // Handling dismiss manually via onClose will re-trigger the effect
+                            // So we just call onPress and let the sheet close via parent logic or internal dismiss
+                            action.onPress();
+                            onClose();
+                        }}
+                        style={({ pressed }) => [
+                            styles.actionItem,
+                            { backgroundColor: pressed ? theme.colors.surfaceContainerHighest : 'transparent' }
+                        ]}
+                    >
+                        <View style={styles.iconContainer}>
+                            {action.icon}
                         </View>
-                    )}
-
-                    <View style={styles.content}>
-                        {actions.map((action) => (
-                            <Pressable
-                                key={action.id}
-                                onPress={() => {
-                                    action.onPress();
-                                    onClose();
-                                }}
-                                style={({ pressed }) => [
-                                    styles.actionItem,
-                                    { backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent' }
-                                ]}
-                            >
-                                <View style={styles.iconContainer}>
-                                    {action.icon}
-                                </View>
-                                <Typography
-                                    variant="body"
-                                    weight="bold"
-                                    style={{
-                                        color: action.destructive ? theme.colors.error : theme.colors.onSurface,
-                                        flex: 1
-                                    }}
-                                >
-                                    {action.label}
-                                </Typography>
-                                {action.active && (
-                                    <Check size={20} color={theme.colors.primary} />
-                                )}
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    {/* Safe Area Spacer for Bottom Sheet */}
-                    <View style={{ height: 20 }} />
-                </ExpressiveSurface>
+                        <Typography
+                            variant="body-large" // updated to pair with new sheet
+                            weight="bold"
+                            style={{
+                                color: action.destructive ? theme.colors.error : theme.colors.onSurface,
+                                flex: 1
+                            }}
+                        >
+                            {action.label}
+                        </Typography>
+                        {action.active && (
+                            <Check size={20} color={theme.colors.primary} />
+                        )}
+                    </Pressable>
+                ))}
             </View>
-        </Modal>
+        </CustomBottomSheet>
     );
 };
 
 const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'flex-end',
-    },
-    container: {
-        width: '100%',
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-    },
-    header: {
-        paddingVertical: 12,
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
-        marginBottom: 8,
-    },
     content: {
-        gap: 4,
+        gap: 0,
     },
     actionItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
-        paddingHorizontal: 16,
-        borderRadius: 12,
+        paddingVertical: 18,
+        paddingHorizontal: 24,
     },
     iconContainer: {
-        width: 32,
+        width: 40,
         alignItems: 'flex-start',
     }
 });
