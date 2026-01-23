@@ -1,37 +1,20 @@
-# SPEC: Trakt Integration & Comments
+# SPEC: libmpv UnsatisfiedLinkError Fix
 
 Status: FINALIZED
 
 ## Goal
-Properly integrate Trakt into `crispy-native` to provide a production-grade experience. This includes dynamic "Watch Now" button logic based on watched state and a comprehensive comments section with spoiler handling.
+Resolve the `java.lang.UnsatisfiedLinkError` caused by a missing symbol `__from_chars_floating_point` in `libmpv.so`. This requires aligning the project's NDK version with the library's build environment (NDK r29).
 
 ## Requirements
+1. **NDK Version Alignment**: The top-level `android/build.gradle` must use `ndkVersion = "29.0.14206865"`.
+2. **Automated Configuration**: The fix must be implemented via an Expo Config Plugin to ensure persistence across `npx expo prebuild`.
+3. **Packaging Integrity**: Ensure `libc++_shared.so` is correctly picked from the newer NDK libraries.
 
-### 1. Watch Now Button Logic
-- The button on the details page must reflect the Trakt watched state.
-- **Watch Now**: Default state if not watched.
-- **Resume from xyz%**: If in progress (between 2% and 85% on Trakt).
-- **Rewatch**: If already marked as watched on Trakt but not currently in progress.
-- This logic should be encapsulated in a reusable hook or utility.
+## Technical Details
+- **Plugin**: `plugins/withNdkFix.js` targeting `withProjectBuildGradle`.
+- **Target File**: `android/build.gradle`.
+- **Injection Point**: `buildscript.ext` block.
 
-### 2. Trakt Comments
-- Display Trakt comments on the Movie/Series details screen.
-- Layout: Use horizontal card-style rows (similar to episode cards).
-- Fetching: Fetch comments for movies, shows, seasons, and episodes.
-- Data points: Username, VIP status, rating (1-10), comment text, likes, timestamp.
-
-### 3. Spoiler Handling & Reviews
-- Comments marked as spoilers must be blurred/masked.
-- Users must explicitly tap to reveal spoiler content.
-- Support for inline `[spoiler]` tags within comment text.
-- Comprehensive review viewing via a dedicated Bottom Sheet for long-form content.
-
-### 4. Technical Constraints
-- Use existing `TraktService.ts` for API interactions.
-- Maintain Material 3 Expressive design aesthetic.
-- Production-grade performance (no main thread blocking, efficient fetching).
-
-## Reference Implementations
-- Logic: `Crispy-webui/src/hooks/useTraktIntegration.ts`
-- Comments & Spoilers: `NuvioStreaming/src/components/metadata/CommentsSection.tsx`
-- Comments API: `NuvioStreaming/src/services/traktService.ts`
+## Verification Criteria
+- `android/build.gradle` shows `ndkVersion = "29.0.14206865"` after prebuild.
+- App launches without native crashing when loading `MPVLib`.

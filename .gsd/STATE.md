@@ -1,13 +1,18 @@
-# Mission Control
+1: # Mission Control
+2: 
+3: **Current Phase:** Project Maintenance & Optimization
+4: **Status:** Plugins Consolidated and Verified
+5: 
+6: ## Accomplished
+7: - Identified NDK version mismatch as root cause for libmpv crash.
+8: - Created and verified `withNdkFix.js`.
+9: - **Consolidated 4 individual Android plugins** into a single unified `withCrispyNative.js`.
+10: - Verified clean prebuild with the unified plugin.
+11: 
+12: ## Next Steps
+13: - User to build and test on device.
+14: - Resume Trakt Integration tasks.
 
-**Current Phase:** Debugging libmpv Crash
-**Status:** Fix Applied (Nuvio Aligned), Pending CI Verification
 
-## Accomplished
-- Analyzed NuvioStreaming: Uses NDK 29.
-- Updated `app.json`: Reverted NDK to `29.0.14206865`.
-- Updated `withAndroidFixes.js`: Ensures `pickFirst` for `libc++_shared.so`.
 
-## Next Steps
-- User to push to GitHub.
-- Verify in CI.
+

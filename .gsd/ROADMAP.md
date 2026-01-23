@@ -1,24 +1,10 @@
-# ROADMAP: Trakt Integration & Comments
+# ROADMAP: libmpv Crash Fix
 
-## Phase 1: Core API & Hooks 🏗️
-- [ ] Extend `TraktService.ts` with comments fetching methods.
-- [ ] Implement `useTraktWatchState` hook for dynamic button logic.
-- [ ] Implement `useTraktComments` hook for fetching and pagination.
+## Phase 1: Configuration Fix 🛠️
+- [ ] Create `plugins/withNdkFix.js` to force NDK version in top-level Gradle.
+- [ ] Update `app.json` to include the new plugin.
+- [ ] Update `withAndroidFixes.js` to refine `libc++_shared.so` packaging if needed.
 
-## Phase 2: Watch Now Enhancement ⌚
-- [ ] Integrate `useTraktWatchState` into `HeroSection`.
-- [ ] Update "Watch Now" button UI to support dynamic labels (Resume, Rewatch).
-- [ ] Add progress indicator to "Resume" button if applicable.
-
-## Phase 3: Trakt Comments Section 💬
-- [ ] Create `CommentCard` component (Compact, horizontal scroll).
-- [ ] Create `CommentsSection` wrapper component.
-- [ ] Implement Markdown renderer for simple formatting and spoilers.
-- [ ] Implement `ReviewBottomSheet` for detailed review viewing.
-- [ ] Integrate `CommentsSection` into `MetaDetailsScreen`.
-
-## Phase 4: Verification & Polish ✨
-- [ ] Verify dynamic button states across different content.
-- [ ] Verify comment loading, pagination, and spoiler revealing.
-- [ ] UI/UX polish (Material 3 Expressive compliance).
-- [ ] Documentation update.
+## Phase 2: Verification ✅
+- [ ] Run `npx expo prebuild` and verify `android/build.gradle`.
+- [ ] Perform a clean build and verify app stability during video playback.

@@ -60,9 +60,7 @@
           }
         }
       ],
-      "./plugins/withAndroidSplits.js",
-      "./plugins/withLocalAarDependencies.js",
-      "./plugins/withAndroidFixes.js",
+      "./plugins/withCrispyNative.js",
       "expo-font"
     ],
     "experiments": {
