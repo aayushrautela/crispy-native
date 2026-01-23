@@ -376,10 +376,11 @@ export default function PlayerScreen() {
                     headers={headers}
                     paused={paused}
                     useExoPlayer={useExoPlayer}
+                    decoderMode={settings.decoderMode}
+                    gpuMode={settings.gpuMode}
                     selectedAudioTrack={selectedAudioTrackProp}
                     selectedTextTrack={selectedTextTrackProp}
                     subtitleDelay={subtitleDelay}
-                    metadata={mediaMetadata}
                     externalSubtitles={externalSubtitles.map(s => ({
                         url: s.url,
                         title: s.title,

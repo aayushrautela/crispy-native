@@ -2,6 +2,7 @@ import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Video, { ResizeMode, VideoRef } from 'react-native-video';
 import MpvPlayer, { MpvPlayerRef } from './MpvPlayer';
+import { usePlayerControls } from './usePlayerControls';
 
 // Codec error patterns that should trigger MPV fallback
 const CODEC_ERROR_PATTERNS = [
@@ -31,7 +32,15 @@ export interface VideoSurfaceRef {
     seek: (seconds: number) => void;
     setAudioTrack?: (id: number) => void;
     setSubtitleTrack?: (id: number) => void;
+    setSubtitleSize?: (size: number) => void;
+    setSubtitleColor?: (color: string) => void;
+    setSubtitleBackgroundColor?: (color: string, opacity: number) => void;
+    setSubtitleBorderSize?: (size: number) => void;
+    setSubtitleBorderColor?: (color: string) => void;
+    setSubtitlePosition?: (pos: number) => void;
     setSubtitleDelay?: (delay: number) => void;
+    setSubtitleBold?: (bold: boolean) => void;
+    setSubtitleItalic?: (italic: boolean) => void;
 }
 
 interface VideoSurfaceProps {
@@ -49,6 +58,8 @@ interface VideoSurfaceProps {
 
     // Engine selection
     useExoPlayer: boolean;
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    gpuMode?: 'gpu' | 'gpu-next';
     onCodecError?: () => void;
 
     // Callbacks
@@ -83,17 +94,30 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     const exoPlayerRef = useRef<VideoRef>(null);
     const mpvPlayerRef = useRef<MpvPlayerRef>(null);
 
+    const isSeeking = useRef(false);
+    const isMounted = useRef(true);
+
+    const { seekToTime } = usePlayerControls(
+        mpvPlayerRef,
+        paused,
+        () => { }, // setPaused placeholder as props handles it
+        0, // currentTime placeholder
+        1000000, // duration placeholder (controls check duration > 0)
+        isSeeking,
+        isMounted,
+        exoPlayerRef,
+        useExoPlayer
+    );
+
     // Imperative handle - expose methods
     useImperativeHandle(ref, () => ({
         seek: (seconds: number) => {
-            if (useExoPlayer) {
-                exoPlayerRef.current?.seek(seconds);
-            } else {
-                mpvPlayerRef.current?.seek(seconds);
-            }
+            seekToTime(seconds);
         },
         setAudioTrack: (id: number) => {
-            if (!useExoPlayer) {
+            if (useExoPlayer) {
+                // ExoPlayer handles track selection differently via props, but we can expose it if needed
+            } else {
                 mpvPlayerRef.current?.setAudioTrack(id);
             }
         },
@@ -102,10 +126,34 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                 mpvPlayerRef.current?.setSubtitleTrack(id);
             }
         },
+        setSubtitleSize: (size: number) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleSize(size);
+        },
+        setSubtitleColor: (color: string) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleColor(color);
+        },
+        setSubtitleBackgroundColor: (color: string, opacity: number) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBackgroundColor(color, opacity);
+        },
+        setSubtitleBorderSize: (size: number) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBorderSize(size);
+        },
+        setSubtitleBorderColor: (color: string) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBorderColor(color);
+        },
+        setSubtitlePosition: (pos: number) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitlePosition(pos);
+        },
         setSubtitleDelay: (delay: number) => {
             if (!useExoPlayer) {
                 mpvPlayerRef.current?.setSubtitleDelay(delay);
             }
+        },
+        setSubtitleBold: (bold: boolean) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBold(bold);
+        },
+        setSubtitleItalic: (italic: boolean) => {
+            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleItalic(italic);
         },
     }));
 
@@ -239,13 +287,14 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     headers={headers}
                     paused={paused}
                     resizeMode={resizeMode}
+                    decoderMode={props.decoderMode}
+                    gpuMode={props.gpuMode}
                     style={styles.player}
                     onLoad={handleMpvLoad}
                     onProgress={handleMpvProgress}
                     onEnd={onEnd}
                     onError={handleMpvError}
                     onTracksChanged={handleMpvTracksChanged}
-                    metadata={props.metadata}
                 />
             )}
         </View>

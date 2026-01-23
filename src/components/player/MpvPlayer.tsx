@@ -6,7 +6,15 @@ export interface MpvPlayerRef {
     seek: (positionSeconds: number) => void;
     setAudioTrack: (trackId: number) => void;
     setSubtitleTrack: (trackId: number) => void;
+    setSubtitleSize: (size: number) => void;
+    setSubtitleColor: (color: string) => void;
+    setSubtitleBackgroundColor: (color: string, opacity: number) => void;
+    setSubtitleBorderSize: (size: number) => void;
+    setSubtitleBorderColor: (color: string) => void;
+    setSubtitlePosition: (pos: number) => void;
     setSubtitleDelay: (delay: number) => void;
+    setSubtitleBold: (bold: boolean) => void;
+    setSubtitleItalic: (italic: boolean) => void;
     enterPiP: () => void;
 }
 
@@ -17,13 +25,14 @@ export interface MpvPlayerProps {
     volume?: number;
     rate?: number;
     resizeMode?: 'contain' | 'cover' | 'stretch';
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    gpuMode?: 'gpu' | 'gpu-next';
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
     onEnd?: () => void;
     onError?: (error: { error: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
-    metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
 }
 
 /**
@@ -34,7 +43,15 @@ interface ExpoNativeRef {
     seek?: (positionSec: number) => Promise<void>;
     setAudioTrack?: (trackId: number) => Promise<void>;
     setSubtitleTrack?: (trackId: number) => Promise<void>;
+    setSubtitleSize?: (size: number) => Promise<void>;
+    setSubtitleColor?: (color: string) => Promise<void>;
+    setSubtitleBackgroundColor?: (color: string, opacity: number) => Promise<void>;
+    setSubtitleBorderSize?: (size: number) => Promise<void>;
+    setSubtitleBorderColor?: (color: string) => Promise<void>;
+    setSubtitlePosition?: (pos: number) => Promise<void>;
     setSubtitleDelay?: (delay: number) => Promise<void>;
+    setSubtitleBold?: (bold: boolean) => Promise<void>;
+    setSubtitleItalic?: (italic: boolean) => Promise<void>;
     enterPiP?: () => Promise<void>;
 }
 
@@ -51,15 +68,36 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
             nativeRef.current?.setAudioTrack?.(trackId);
         },
         setSubtitleTrack: (trackId: number) => {
-            console.log('[MpvPlayer] setSubtitleTrack called:', trackId);
             nativeRef.current?.setSubtitleTrack?.(trackId);
         },
+        setSubtitleSize: (size: number) => {
+            nativeRef.current?.setSubtitleSize?.(size);
+        },
+        setSubtitleColor: (color: string) => {
+            nativeRef.current?.setSubtitleColor?.(color);
+        },
+        setSubtitleBackgroundColor: (color: string, opacity: number) => {
+            nativeRef.current?.setSubtitleBackgroundColor?.(color, opacity);
+        },
+        setSubtitleBorderSize: (size: number) => {
+            nativeRef.current?.setSubtitleBorderSize?.(size);
+        },
+        setSubtitleBorderColor: (color: string) => {
+            nativeRef.current?.setSubtitleBorderColor?.(color);
+        },
+        setSubtitlePosition: (pos: number) => {
+            nativeRef.current?.setSubtitlePosition?.(pos);
+        },
         setSubtitleDelay: (delay: number) => {
-            console.log('[MpvPlayer] setSubtitleDelay called:', delay);
             nativeRef.current?.setSubtitleDelay?.(delay);
         },
+        setSubtitleBold: (bold: boolean) => {
+            nativeRef.current?.setSubtitleBold?.(bold);
+        },
+        setSubtitleItalic: (italic: boolean) => {
+            nativeRef.current?.setSubtitleItalic?.(italic);
+        },
         enterPiP: () => {
-            console.log('[MpvPlayer] enterPiP called');
             nativeRef.current?.enterPiP?.();
         },
     }), []);
@@ -107,12 +145,13 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
             headers={props.headers}
             paused={props.paused ?? true}
             resizeMode={props.resizeMode ?? 'contain'}
+            decoderMode={props.decoderMode ?? 'auto'}
+            gpuMode={props.gpuMode ?? 'gpu'}
             onLoad={handleLoad}
             onProgress={handleProgress}
             onEnd={handleEnd}
             onError={handleError}
             onTracksChanged={handleTracksChanged}
-            metadata={props.metadata}
         />
     );
 });

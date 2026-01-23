@@ -101,8 +101,12 @@ class CrispyNativeCoreModule : Module() {
         view.setResizeMode(mode)
       }
 
-      Prop("metadata") { view: CrispyVideoView, metadata: CrispyMediaMetadata? ->
-        view.setMetadata(metadata)
+      Prop("decoderMode") { view: CrispyVideoView, mode: String ->
+        view.decoderMode = mode
+      }
+
+      Prop("gpuMode") { view: CrispyVideoView, mode: String ->
+        view.gpuMode = mode
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
@@ -119,12 +123,40 @@ class CrispyNativeCoreModule : Module() {
         view.setSubtitleTrack(trackId)
       }
 
-      AsyncFunction("addExternalSubtitle") { view: CrispyVideoView, url: String, title: String?, lang: String? ->
-        view.addExternalSubtitle(url, title, lang)
+      AsyncFunction("setSubtitleSize") { view: CrispyVideoView, size: Int ->
+        view.setSubtitleSize(size)
+      }
+
+      AsyncFunction("setSubtitleColor") { view: CrispyVideoView, color: String ->
+        view.setSubtitleColor(color)
+      }
+
+      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyVideoView, color: String, opacity: Float ->
+        view.setSubtitleBackgroundColor(color, opacity)
+      }
+
+      AsyncFunction("setSubtitleBorderSize") { view: CrispyVideoView, size: Int ->
+        view.setSubtitleBorderSize(size)
+      }
+
+      AsyncFunction("setSubtitleBorderColor") { view: CrispyVideoView, color: String ->
+        view.setSubtitleBorderColor(color)
+      }
+
+      AsyncFunction("setSubtitlePosition") { view: CrispyVideoView, pos: Int ->
+        view.setSubtitlePosition(pos)
       }
 
       AsyncFunction("setSubtitleDelay") { view: CrispyVideoView, delay: Double ->
         view.setSubtitleDelay(delay)
+      }
+
+      AsyncFunction("setSubtitleBold") { view: CrispyVideoView, bold: Boolean ->
+        view.setSubtitleBold(bold)
+      }
+
+      AsyncFunction("setSubtitleItalic") { view: CrispyVideoView, italic: Boolean ->
+        view.setSubtitleItalic(italic)
       }
     }
   }
