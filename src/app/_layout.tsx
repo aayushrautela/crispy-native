@@ -1,4 +1,5 @@
 import { AuthProvider, useAuth } from '@/src/core/AuthContext';
+import { TraktProvider } from '@/src/core/context/TraktContext';
 import { DiscoveryProvider } from '@/src/core/DiscoveryContext';
 import { ThemeProvider, useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -91,7 +92,9 @@ export default function RootLayout() {
         <AuthProvider>
           <ThemeProvider>
             <DiscoveryProvider>
-              <RootLayoutNav />
+              <TraktProvider>
+                <RootLayoutNav />
+              </TraktProvider>
             </DiscoveryProvider>
           </ThemeProvider>
         </AuthProvider>

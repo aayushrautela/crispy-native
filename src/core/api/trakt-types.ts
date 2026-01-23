@@ -195,3 +195,62 @@ export interface TraktContentComment {
         };
     };
 }
+
+export interface TraktSyncPayload {
+    movies?: Array<{
+        ids: { trakt?: number; slug?: string; imdb?: string; tmdb?: number };
+        title?: string;
+        year?: number;
+    }>;
+    shows?: Array<{
+        ids: { trakt?: number; slug?: string; imdb?: string; tmdb?: number };
+        title?: string;
+        year?: number;
+    }>;
+    episodes?: Array<{
+        ids: { trakt?: number; imdb?: string; tmdb?: number };
+    }>;
+}
+
+export interface TraktSyncResponse {
+    added: {
+        movies: number;
+        episodes: number;
+        shows: number;
+    };
+    existing: {
+        movies: number;
+        episodes: number;
+        shows: number;
+    };
+    deleted: {
+        movies: number;
+        episodes: number;
+        shows: number;
+    };
+    not_found: {
+        movies: Array<{ ids: any }>;
+        shows: Array<{ ids: any }>;
+        episodes: Array<{ ids: any }>;
+        seasons: Array<{ ids: any }>;
+        people: Array<{ ids: any }>;
+    };
+}
+
+export interface TraktRatingPayload {
+    movies?: Array<{
+        ids: { trakt?: number; slug?: string; imdb?: string; tmdb?: number };
+        rating: number;
+        rated_at?: string;
+    }>;
+    shows?: Array<{
+        ids: { trakt?: number; slug?: string; imdb?: string; tmdb?: number };
+        rating: number;
+        rated_at?: string;
+    }>;
+    episodes?: Array<{
+        ids: { trakt?: number; imdb?: string; tmdb?: number };
+        rating: number;
+        rated_at?: string;
+    }>;
+}

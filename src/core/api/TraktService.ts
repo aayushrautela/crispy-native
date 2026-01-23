@@ -1,14 +1,16 @@
 import { useUserStore } from '../stores/userStore';
 import { TMDBService } from './TMDBService';
-import {
-    TraktCollectionItem,
+TraktCollectionItem,
     TraktDeviceCodeResponse,
     TraktPlaybackItem,
     TraktRatingItem,
     TraktTokenResponse,
     TraktWatchedMovie,
     TraktWatchedShow,
-    TraktWatchlistItem
+    TraktWatchlistItem,
+    TraktSyncPayload,
+    TraktSyncResponse,
+    TraktRatingPayload
 } from './trakt-types';
 
 const TRAKT_API_BASE = 'https://api.trakt.tv';
@@ -513,33 +515,79 @@ export class TraktService {
             console.error('[TraktService] getComments error', e);
             return [];
         }
+    // --- Write Operations ---
+
+    static async addToWatchlist(type: 'movies' | 'shows' | 'episodes', items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('watchlist', items);
     }
 
-    private static hydrateLibraryItem(item: any, timestamp: string): TraktPlaybackItem {
-        const type = item.type === 'show' ? 'episode' : item.type;
-        const media = item.movie || item.show;
-        const ids = media?.ids;
-        const id = ids?.imdb || (ids?.tmdb ? `tmdb:${ids.tmdb}` : String(ids?.trakt || ''));
+    static async removeFromWatchlist(type: 'movies' | 'shows' | 'episodes', items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('watchlist/remove', items);
+    }
+
+    static async addToHistory(items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('history', items);
+    }
+
+    static async removeFromHistory(items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('history/remove', items);
+    }
+
+    static async addToCollection(items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('collection', items);
+    }
+
+    static async removeFromCollection(items: TraktSyncPayload): Promise<TraktSyncResponse> {
+        return this.postSync('collection/remove', items);
+    }
+
+    static async addRating(items: TraktRatingPayload): Promise<TraktSyncResponse> {
+        return this.postSync('ratings', items);
+    }
+
+    static async removeRating(items: TraktRatingPayload): Promise<TraktSyncResponse> {
+        return this.postSync('ratings/remove', items);
+    }
+
+    private static async postSync(endpoint: string, body: any): Promise<TraktSyncResponse> {
+        if (!this.auth.accessToken) throw new Error('Not authenticated');
+
+        const res = await fetch(`${TRAKT_API_BASE}/sync/${endpoint}`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+            throw new Error(`Trakt sync failed: ${res.statusText}`);
+        }
+
+        return await res.json();
+    }
+    const type = item.type === 'show' ? 'episode' : item.type;
+    const media = item.movie || item.show;
+    const ids = media?.ids;
+    const id = ids?.imdb || (ids?.tmdb ? `tmdb:${ids.tmdb}` : String(ids?.trakt || ''));
 
         let poster = media?.images?.poster?.[0];
-        if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
+if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
 
-        return {
-            id: ids?.trakt || Math.random(),
-            progress: 0,
-            paused_at: timestamp,
-            type: type,
-            movie: item.movie,
-            show: item.show,
-            meta: {
-                id: id,
-                name: media?.title || 'Unknown',
-                poster: poster,
-                year: media?.year?.toString(),
-                genres: media?.genres,
-                rating: media?.rating?.toFixed(1),
-            }
-        };
+return {
+    id: ids?.trakt || Math.random(),
+    progress: 0,
+    paused_at: timestamp,
+    type: type,
+    movie: item.movie,
+    show: item.show,
+    meta: {
+        id: id,
+        name: media?.title || 'Unknown',
+        poster: poster,
+        year: media?.year?.toString(),
+        genres: media?.genres,
+        rating: media?.rating?.toFixed(1),
+    }
+};
     }
 }
 

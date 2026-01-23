@@ -1,12 +1,15 @@
 import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
+import { ActionItem, ActionSheet } from '@/src/components/ui/ActionSheet';
+import { RatingModal } from '@/src/components/ui/RatingModal';
 import { MetaPreview } from '@/src/core/api/AddonService';
 import { TMDBMeta } from '@/src/core/api/TMDBService';
+import { useTraktContext } from '@/src/core/context/TraktContext';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Star } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { Check, Eye, EyeOff, Info, Plus, Star } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
@@ -23,17 +26,29 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const [focused, setFocused] = useState(false);
     const [meta, setMeta] = useState<Partial<TMDBMeta>>({});
 
-    useEffect(() => {
-        // DISABLED AS REQUESTED: No automatic TMDB hydration for catalog cards.
-        // We only use cached metadata or data provided by the parent.
-        /*
-        const needsHydration = !item.poster || (item.posterShape === 'landscape' && !item.backdrop) || !item.logo;
+    // Interactive State
+    const [showActionSheet, setShowActionSheet] = useState(false);
+    const [showRatingModal, setShowRatingModal] = useState(false);
 
-        if ((item.type === 'movie' || item.type === 'series') && (needsHydration || !item.poster)) {
-            TMDBService.getEnrichedMeta(item.id, item.type as any).then(setMeta);
-        }
-        */
-    }, [item.id, item.type, item.poster, item.backdrop, item.logo, item.posterShape]);
+    const {
+        isAuthenticated,
+        isInWatchlist,
+        addToWatchlist,
+        removeFromWatchlist,
+        isMovieWatched,
+        markMovieAsWatched,
+        removeMovieFromHistory,
+        getUserRating,
+        rateContent,
+        removeContentRating
+    } = useTraktContext();
+
+    const id = item.id;
+    const type = item.type === 'movie' ? 'movie' : 'show';
+
+    useEffect(() => {
+        // Hydration logic disabled
+    }, []);
 
     const aspectRatio = item.posterShape === 'landscape' ? 16 / 9 : item.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
@@ -44,6 +59,71 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
             params: { id: item.id, type: item.type }
         });
     };
+
+    const handleLongPress = () => {
+        if (isAuthenticated) {
+            setShowActionSheet(true);
+        }
+    };
+
+    // Construct Menu Actions
+    const menuActions: ActionItem[] = useMemo(() => {
+        if (!isAuthenticated) return [];
+
+        const isWatched = type === 'movie' ? isMovieWatched(id) : false; // Shows need complex partial watched logic
+        const inList = isInWatchlist(id, type);
+        const userRating = getUserRating(id, type);
+
+        const actions: ActionItem[] = [
+            {
+                id: 'details',
+                label: 'View Details',
+                icon: <Info size={20} color={theme.colors.onSurface} />,
+                onPress: handlePress
+            }
+        ];
+
+        // Watchlist
+        actions.push({
+            id: 'watchlist',
+            label: inList ? 'Remove from My List' : 'Add to My List',
+            icon: inList ? <Check size={20} color={theme.colors.primary} /> : <Plus size={20} color={theme.colors.onSurface} />,
+            onPress: async () => {
+                if (inList) await removeFromWatchlist(id, type);
+                else await addToWatchlist(id, type);
+            }
+        });
+
+        // Watched Status (Simple toggle for movies, just generic for shows?)
+        // Trakt usually allows "Add to History" for shows which marks all eps watched.
+        if (type === 'movie') {
+            actions.push({
+                id: 'watched',
+                label: isWatched ? 'Mark as Unwatched' : 'Mark as Watched',
+                icon: isWatched ? <EyeOff size={20} color={theme.colors.onSurface} /> : <Eye size={20} color={theme.colors.onSurface} />,
+                onPress: async () => {
+                    if (isWatched) await removeMovieFromHistory(id);
+                    else await markMovieAsWatched(id);
+                }
+            });
+        }
+
+        // Ratings
+        actions.push({
+            id: 'rate',
+            label: userRating ? `Rate (Rated ${userRating * 2})` : 'Rate',
+            icon: <Star size={20} color={userRating ? '#FFD700' : theme.colors.onSurface} fill={userRating ? '#FFD700' : 'transparent'} />,
+            onPress: () => {
+                // Must close sheet first, wait a bit? 
+                // The ActionSheet closes automatically on press.
+                // We'll set showRatingModal in a timeout to avoid collision 
+                // or just rely on state update order.
+                setTimeout(() => setShowRatingModal(true), 300);
+            }
+        });
+
+        return actions;
+    }, [isAuthenticated, id, type, isInWatchlist, isMovieWatched, getUserRating, theme]);
 
     const animatedImageStyle = useAnimatedStyle(() => {
         return {
@@ -63,6 +143,7 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                     }
                 ]}
                 onPress={handlePress}
+                onLongPress={handleLongPress}
                 onFocusChange={setFocused}
             >
                 <View style={styles.imageContainer}>
@@ -169,6 +250,22 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                     )}
                 </View>
             </View >
+
+            <ActionSheet
+                visible={showActionSheet}
+                onClose={() => setShowActionSheet(false)}
+                title={item.name}
+                actions={menuActions}
+            />
+
+            <RatingModal
+                visible={showRatingModal}
+                onClose={() => setShowRatingModal(false)}
+                title={item.name}
+                initialRating={getUserRating(id, type) ? (getUserRating(id, type)! * 2) : 0}
+                onRate={(r) => rateContent(id, type, r)}
+                onRemoveRating={() => removeContentRating(id, type)}
+            />
         </View >
     );
 };
