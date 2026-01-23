@@ -62,6 +62,7 @@
       ],
       "./plugins/withAndroidSplits.js",
       "./plugins/withLocalAarDependencies.js",
+      "./plugins/withAndroidFixes.js",
       "expo-font"
     ],
     "experiments": {

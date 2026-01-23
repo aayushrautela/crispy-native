@@ -1,15 +1,13 @@
-# STATE: Trakt Integration & Bundling Fix
+# Mission Control
 
-## Current Position
-- **Phase**: core-api-hooks (Phase 1)
-- **Task**: Resolving Bundling Errors
-- **Status**: DONE (Resolution Verified)
+**Current Phase:** Debugging libmpv Crash
+**Status:** Fix Applied (Nuvio Aligned), Pending CI Verification
 
-## Accomplishments
-- Fixed "Unable to resolve '@/src/...'" bundling error by installing and configuring `babel-plugin-module-resolver`.
-- Verified alias resolution via `tsc` check.
-- Confirmed project structure and identified missing Babel configuration as the root cause.
+## Accomplished
+- Analyzed NuvioStreaming: Uses NDK 29.
+- Updated `app.json`: Reverted NDK to `29.0.14206865`.
+- Updated `withAndroidFixes.js`: Ensures `pickFirst` for `libc++_shared.so`.
 
 ## Next Steps
-- Extend `TraktService.ts` with comments fetching methods (as per Phase 1 of ROADMAP.md).
-- Implement `useTraktWatchState` hook for dynamic button logic.
+- User to push to GitHub.
+- Verify in CI.
