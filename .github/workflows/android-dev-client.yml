@@ -38,16 +38,6 @@ jobs:
           EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
         run: npx expo prebuild --platform android --no-install
 
-      - name: 📥 Download jlibtorrent JARs
-        run: |
-          mkdir -p modules/crispy-native-core/android/libs
-          JLIBTORRENT_VERSION="2.0.12.7"
-          BASE_URL="https://github.com/frostwire/frostwire-jlibtorrent/releases/download/release%2F${JLIBTORRENT_VERSION}"
-          curl -L -o modules/crispy-native-core/android/libs/jlibtorrent.jar "${BASE_URL}/jlibtorrent-${JLIBTORRENT_VERSION}.jar"
-          curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-arm.jar "${BASE_URL}/jlibtorrent-android-arm-${JLIBTORRENT_VERSION}.jar"
-          curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-arm64.jar "${BASE_URL}/jlibtorrent-android-arm64-${JLIBTORRENT_VERSION}.jar"
-          curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-x86.jar "${BASE_URL}/jlibtorrent-android-x86-${JLIBTORRENT_VERSION}.jar"
-          curl -L -o modules/crispy-native-core/android/libs/jlibtorrent-android-x86_64.jar "${BASE_URL}/jlibtorrent-android-x86_64-${JLIBTORRENT_VERSION}.jar"
 
       - name: 🏗 Setup Gradle
         uses: gradle/actions/setup-gradle@v4

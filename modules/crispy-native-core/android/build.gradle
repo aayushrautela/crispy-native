@@ -26,11 +26,22 @@ android {
   }
 }
 
+repositories {
+  flatDir {
+    dirs "${projectDir}/libs"
+  }
+}
+
 dependencies {
   implementation project(':expo-modules-core')
 
-  // jlibtorrent for torrent streaming (local JARs/AARs + jniLibs)
-  implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
+  // React Native bridge (for LifecycleEventListener, ReactContext)
+  implementation "com.facebook.react:react-android"
+
+  // jlibtorrent and MPV binaries (local JARs/AARs)
+  implementation(name: 'libmpv-release', ext: 'aar')
+  implementation(name: 'lib-decoder-ffmpeg-release', ext: 'aar')
+  implementation fileTree(dir: 'libs', include: ['*.jar'])
   
   // NanoHTTPD for local HTTP streaming server
   implementation 'org.nanohttpd:nanohttpd:2.3.1'
