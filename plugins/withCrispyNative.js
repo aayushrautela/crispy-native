@@ -1,4 +1,4 @@
-const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod } = require('@expo/config-plugins');
+const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod, withAndroidManifest } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -15,6 +15,9 @@ const withCrispyNative = (config) => {
 
     // 3. Android App Configuration (Splits & Packaging)
     config = withAppConfiguration(config);
+
+    // 4. Picture-in-Picture Support
+    config = withAndroidManifestPiP(config);
 
     return config;
 };
@@ -139,6 +142,40 @@ const withAppConfiguration = (config) => {
 
             config.modResults.contents = buildGradle;
         }
+        return config;
+    });
+};
+
+/**
+ * Configure AndroidManifest for PiP support.
+ */
+const withAndroidManifestPiP = (config) => {
+    return withAndroidManifest(config, (config) => {
+        const mainActivity = config.modResults.manifest.application[0].activity.find(
+            (activity) => activity.$['android:name'] === '.MainActivity'
+        );
+
+        if (mainActivity) {
+            // 1. Enable PiP support
+            mainActivity.$['android:supportsPictureInPicture'] = 'true';
+
+            // 2. Add required configChanges
+            const configChanges = mainActivity.$['android:configChanges'] || '';
+            const requiredChanges = ['smallestScreenSize', 'screenLayout', 'screenSize'];
+
+            let changesArr = configChanges.split('|').map(s => s.trim()).filter(Boolean);
+            requiredChanges.forEach(change => {
+                if (!changesArr.includes(change)) {
+                    changesArr.push(change);
+                }
+            });
+            mainActivity.$['android:configChanges'] = changesArr.join('|');
+
+            console.log('withCrispyNative: Configured AndroidManifest for PiP support');
+        } else {
+            console.warn('withCrispyNative: MainActivity not found in AndroidManifest');
+        }
+
         return config;
     });
 };
