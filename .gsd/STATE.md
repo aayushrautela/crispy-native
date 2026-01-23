@@ -1,17 +1,15 @@
-# STATE: Performance & UX Optimization (Fixes)
+# STATE: Trakt Integration & Bundling Fix
 
 ## Current Position
-- **Phase**: Optimization Phase
-- **Task**: Load Time & Visual Stability
-- **Status**: DONE (Fixes Verified)
+- **Phase**: core-api-hooks (Phase 1)
+- **Task**: Resolving Bundling Errors
+- **Status**: DONE (Resolution Verified)
 
 ## Accomplishments
-- Integrated color extraction into `useMetaAggregator`.
-- Implemented `LoadingIndicator` based on Material Expressive standards.
-- Fixed native view resolution by naming views explicitly in Kotlin.
-- Reverted to `requireNativeViewManager` to resolve `TypeError`.
-- Fixed `ReferenceError` for `LoadingIndicator` caused by module load failures.
-- Added progressive loading (skeletons) to `RatingsSection` and `CommentsSection`.
+- Fixed "Unable to resolve '@/src/...'" bundling error by installing and configuring `babel-plugin-module-resolver`.
+- Verified alias resolution via `tsc` check.
+- Confirmed project structure and identified missing Babel configuration as the root cause.
 
 ## Next Steps
-- Awaiting user feedback on page responsiveness and visual transitions.
+- Extend `TraktService.ts` with comments fetching methods (as per Phase 1 of ROADMAP.md).
+- Implement `useTraktWatchState` hook for dynamic button logic.

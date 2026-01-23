@@ -50,6 +50,7 @@
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "buildToolsVersion": "35.0.0",
+            "ndkVersion": "29.0.14206865",
             "extraMavenRepos": [
               "https://oss.sonatype.org/content/repositories/snapshots"
             ],

@@ -66,7 +66,9 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
-    "patch-package": "^8.0.1"
+    "babel-plugin-module-resolver": "^5.0.2",
+    "patch-package": "^8.0.1",
+    "typescript": "~5.9.2"
   },
   "private": true
 }
