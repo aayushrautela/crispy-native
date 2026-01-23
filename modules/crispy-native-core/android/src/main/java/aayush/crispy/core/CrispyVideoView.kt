@@ -312,16 +312,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     // MPVLib.EventObserver
-    override fun eventProperty(property: String?) {
+    override fun eventProperty(property: String) {
         if (property == "track-list") parseAndSendTracks()
     }
 
-    override fun eventProperty(property: String?, value: Long) {}
-    override fun eventProperty(property: String?, value: Boolean) {
+    override fun eventProperty(property: String, value: Long) {}
+    override fun eventProperty(property: String, value: Boolean) {
         if (property == "eof-reached" && value) onEnd(Unit)
     }
-    override fun eventProperty(property: String?, value: String?) {}
-    override fun eventProperty(property: String?, value: Double) {
+    override fun eventProperty(property: String, value: String) {}
+    override fun eventProperty(property: String, value: Double) {
         when (property) {
             "time-pos" -> {
                 val duration = MPVLib.getPropertyDouble("duration") ?: 0.0
