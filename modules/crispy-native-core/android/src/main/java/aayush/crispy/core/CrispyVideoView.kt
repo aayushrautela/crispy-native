@@ -87,6 +87,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
         ))
         
+        // Keep screen on during playback
+        setKeepScreenOn(true)
+
         // Register lifecycle listener properly
         (context as? ReactContext)?.addLifecycleEventListener(lifeCycleListener)
     }
@@ -247,6 +250,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
+        // Log.d(TAG, "Updating metadata: $title by $artist (artwork: $artworkUrl)")
         mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
     }
 
@@ -373,6 +377,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                     if (width > 0 && height > 0) {
                         hasLoadEventFired = true
                         onLoad(mapOf("duration" to value, "width" to width, "height" to height))
+
+                        // Update Activity PiP params proactively for auto-PiP
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            val activity = appContext.currentActivity
+                            val builder = android.app.PictureInPictureParams.Builder()
+                            try {
+                                builder.setAspectRatio(android.util.Rational(width, height))
+                                activity?.setPictureInPictureParams(builder.build())
+                            } catch (e: Exception) {}
+                        }
                     }
                 }
             }

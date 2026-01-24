@@ -289,6 +289,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     resizeMode={resizeMode}
                     decoderMode={props.decoderMode}
                     gpuMode={props.gpuMode}
+                    metadata={props.metadata}
                     style={styles.player}
                     onLoad={handleMpvLoad}
                     onProgress={handleMpvProgress}

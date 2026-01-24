@@ -44,3 +44,9 @@ Implement comprehensive Trakt user interactions (Library management, Rating, Wat
 - **Details Page**: Buttons correctly reflect current state (e.g., "In List" vs "My List") and toggle state.
 - **Catalog**: Long press opens Bottom Sheet. Menu items work and update state.
 - **Optimism**: UI updates immediately before API response.
+
+## 5. Media & PiP Stability (Phase 9)
+- **Media Notifications**: Must show title, episode/artist, and artwork correctly.
+- **Auto-PiP**: App must enter PiP mode automatically on home swipe (backgrounding while playing).
+- **PiP Visuals**: PiP window must respect video aspect ratio (16:9) and hide all UI controls/overlays.
+- **Screen Management**: Device must not sleep while video is playing (Keep Screen On).

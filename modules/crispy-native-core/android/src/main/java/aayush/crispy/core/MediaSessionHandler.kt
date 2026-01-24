@@ -66,8 +66,14 @@ class MediaSessionHandler(
             
             setPlaybackState(
                 PlaybackStateCompat.Builder()
-                    .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                    .setState(PlaybackStateCompat.STATE_NONE, 0, 1f)
+                    .setActions(
+                        PlaybackStateCompat.ACTION_PLAY or 
+                        PlaybackStateCompat.ACTION_PAUSE or 
+                        PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                        PlaybackStateCompat.ACTION_SEEK_TO or
+                        PlaybackStateCompat.ACTION_STOP
+                    )
+                    .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1f)
                     .build()
             )
             isActive = true
@@ -173,8 +179,7 @@ class MediaSessionHandler(
     }
 
     private fun updateNotification() {
-        val controller = mediaSession.controller
-        val mediaMetadata = controller.metadata ?: return
+        // We don't need the controller to check for updates, we have our local state values
         
         // Use a generic intent if MainActivity class name is unknown at compile time,
         // or assume the standard package structure.

@@ -73,11 +73,20 @@ class CrispyNativeCoreModule : Module() {
       torrentService?.handleSeek(infoHash, fileIdx, position)
     }
 
-    AsyncFunction("enterPiP") {
+    AsyncFunction("enterPiP") { width: Double?, height: Double? ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
       if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-          val params = android.app.PictureInPictureParams.Builder().build()
-          activity.enterPictureInPictureMode(params)
+          val builder = android.app.PictureInPictureParams.Builder()
+          if (width != null && height != null && height > 0) {
+              val rational = android.util.Rational(width.toInt(), height.toInt())
+              // Android PiP has limits on aspect ratio (max 2.39:1, min 1:2.39)
+              try {
+                  builder.setAspectRatio(rational)
+              } catch (e: Exception) {
+                  Log.w("CrispyModule", "Failed to set aspect ratio: ${e.message}")
+              }
+          }
+          activity.enterPictureInPictureMode(builder.build())
           return@AsyncFunction true
       }
       return@AsyncFunction false
@@ -162,7 +171,7 @@ class CrispyNativeCoreModule : Module() {
       Prop("metadata") { view: CrispyVideoView, metadata: Map<String, Any>? ->
         metadata?.let {
           val title = it["title"] as? String ?: ""
-          val artist = it["artist"] as? String ?: ""
+          val artist = (it["artist"] as? String) ?: (it["subtitle"] as? String) ?: ""
           val artworkUrl = it["artworkUrl"] as? String
           view.setMetadata(title, artist, artworkUrl)
         }

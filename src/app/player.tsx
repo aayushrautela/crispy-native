@@ -128,7 +128,7 @@ export default function PlayerScreen() {
     // Media Metadata for Notification
     const mediaMetadata = useMemo(() => ({
         title: (type === 'movie' ? title : (episodeTitle || title)) as string,
-        subtitle: (type === 'movie' ? 'Movie' : title) as string,
+        artist: (type === 'movie' ? 'Movie' : title) as string,
         artworkUrl: poster as string,
     }), [title, episodeTitle, type, poster]);
 
@@ -242,7 +242,10 @@ export default function PlayerScreen() {
         // Listen for PiP mode changes (Android)
         const pipSubscription = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
             console.log('[Player] PiP Mode Changed:', isPip);
-            setShowControls(!isPip);
+            if (isPip) {
+                setShowControls(false);
+                setActiveTab('none');
+            }
         });
 
         return () => {
@@ -478,15 +481,7 @@ export default function PlayerScreen() {
                                     </Text>
                                 )}
                             </View>
-                            {/* PiP Button */}
-                            {Platform.OS === 'android' && (
-                                <Pressable
-                                    onPress={() => CrispyNativeCore.enterPiP()}
-                                    style={[styles.backBtn, { marginLeft: 'auto' }]}
-                                >
-                                    <Layers color="#fff" size={20} />
-                                </Pressable>
-                            )}
+                            {/* PiP Button removed per user request - handled via Home swipe */}
                         </View>
 
                         {/* 2. Center Area: Feedback & Play/Pause */}
