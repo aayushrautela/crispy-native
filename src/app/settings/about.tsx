@@ -1,7 +1,7 @@
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { Typography } from '@/src/cdk/components/Typography';
-import { SettingsSubpage } from '@/src/cdk/layout/SettingsSubpage';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Github, Globe, Heart, Shield } from 'lucide-react-native';
 import React from 'react';

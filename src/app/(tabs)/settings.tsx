@@ -1,9 +1,9 @@
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { Typography } from '@/src/cdk/components/Typography';
-import { Screen } from '@/src/cdk/layout/Screen';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { Screen } from '@/src/core/ui/layout/Screen';
 import { useRouter } from 'expo-router';
 import {
     Brain,

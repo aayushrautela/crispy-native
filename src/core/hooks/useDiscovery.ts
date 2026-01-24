@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { AddonService } from '../api/AddonService';
+import { AddonService } from '../services/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 import { AddonManifest } from '../types/addon-types';
 

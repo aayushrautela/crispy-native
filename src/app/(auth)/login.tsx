@@ -1,7 +1,7 @@
-import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
-import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
-import { supabase } from '@/src/core/api/supabase';
+import { supabase } from '@/src/core/services/supabase';
 import { useTheme } from '@/src/core/ThemeContext';
+import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
+import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';

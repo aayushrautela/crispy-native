@@ -1,8 +1,11 @@
-import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
-import { Typography } from '@/src/cdk/components/Typography';
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
+import { Typography } from '@/src/core/ui/Typography';
+import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
+import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
+import { HeroCarousel } from '@/src/features/home/components/HeroCarousel';
 import { useRouter } from 'expo-router';
 import { CircleUser } from 'lucide-react-native';
 import React, { useMemo } from 'react';
@@ -13,9 +16,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue
 } from 'react-native-reanimated';
-import { CatalogRow } from '../../components/CatalogRow';
-import { HeroCarousel } from '../../components/HeroCarousel';
-import { ContinueWatchingRow } from '../../components/home/ContinueWatchingRow';
 
 const HEADER_HEIGHT = 100;
 

@@ -1,6 +1,6 @@
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { SettingsSubpage } from '@/src/cdk/layout/SettingsSubpage';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useTheme } from '@/src/core/ThemeContext';
 import React from 'react';
 import { Switch, View } from 'react-native';

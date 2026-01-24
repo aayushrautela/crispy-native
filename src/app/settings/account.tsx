@@ -1,7 +1,7 @@
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { Typography } from '@/src/cdk/components/Typography';
-import { SettingsSubpage } from '@/src/cdk/layout/SettingsSubpage';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';

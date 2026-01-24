@@ -40,3 +40,18 @@
 - [ ] Verify adding/removing items updates UI immediately.
 - [ ] Verify persistence across app restarts (via Store).
 - [ ] Test long-press on various card sizes/device types.
+
+## Phase 9: Media & PiP Stability ✅ [DONE]
+- [x] Pass correct metadata to native player.
+- [x] Implement Home swipe auto-PiP.
+- [x] Implement "Keep Screen On" logic.
+
+## Phase 10: Performance Optimization ✅ [DONE]
+- [x] Memoize TraktContext.
+- [x] useCallback for MetaDetails handlers.
+
+## Phase 15: Architecture Refactor 🏗️ [/]
+- [ ] Refactor Directory Structure (Feature-First).
+- [ ] Decouple Trakt/TMDB Services.
+- [ ] Migrate to TanStack Query & Zustand.
+- [ ] Consolidate UI Kit into `src/core/ui`.

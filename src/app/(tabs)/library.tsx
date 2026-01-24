@@ -1,14 +1,14 @@
-import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
-import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
-import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
-import { Typography } from '@/src/cdk/components/Typography';
-import { Screen } from '@/src/cdk/layout/Screen';
-import { CatalogCard } from '@/src/components/CatalogCard';
-import { EmptyState } from '@/src/components/EmptyState';
-import { MetaPreview } from '@/src/core/api/AddonService';
-import { TraktService } from '@/src/core/api/TraktService';
+import { MetaPreview } from '@/src/core/services/AddonService';
+import { TraktService } from '@/src/core/services/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
+import { EmptyState } from '@/src/core/ui/EmptyState';
+import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
+import { Screen } from '@/src/core/ui/layout/Screen';
+import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
+import { Typography } from '@/src/core/ui/Typography';
+import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
 import {
     Bookmark,

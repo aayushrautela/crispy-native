@@ -1,8 +1,8 @@
-import { ExpressiveSwitch } from '@/src/cdk/components/ExpressiveSwitch';
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { Typography } from '@/src/cdk/components/Typography';
-import { SettingsSubpage } from '@/src/cdk/layout/SettingsSubpage';
+import { ExpressiveSwitch } from '@/src/core/ui/ExpressiveSwitch';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { FastForward, PlayCircle, Settings2 } from 'lucide-react-native';

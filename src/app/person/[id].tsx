@@ -1,8 +1,9 @@
-import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
-import { LoadingIndicator } from '@/src/cdk/components/LoadingIndicator';
-import { Typography } from '@/src/cdk/components/Typography';
-import { TMDBPerson, TMDBService } from '@/src/core/api/TMDBService';
+import { TMDBPerson, TMDBService } from '@/src/core/services/TMDBService';
 import { useTheme } from '@/src/core/ThemeContext';
+import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
+import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
+import { Typography } from '@/src/core/ui/Typography';
+import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,7 +19,6 @@ import Animated, {
     useSharedValue
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CatalogRow } from '../../components/CatalogRow';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 450;

@@ -1,24 +1,24 @@
-import { BottomSheetRef, CustomBottomSheet } from '@/src/cdk/components/BottomSheet';
-import { Typography } from '@/src/cdk/components/Typography';
-import { CastSection } from '@/src/components/meta/CastSection';
-import { CommentsSection } from '@/src/components/meta/CommentsSection';
-import { EpisodesSection } from '@/src/components/meta/EpisodesSection';
-import { HeroSection } from '@/src/components/meta/HeroSection';
-import { MetaDetailsSkeleton } from '@/src/components/meta/MetaDetailsSkeleton';
-import { RatingsSection } from '@/src/components/meta/RatingsSection';
-import { StreamSelector } from '@/src/components/player/StreamSelector';
-import { RatingModal } from '@/src/components/ui/RatingModal';
-import { useTraktContext } from '@/src/core/context/TraktContext';
-import { useAiInsights } from '@/src/core/hooks/useAiInsights';
-import { useMetaAggregator } from '@/src/core/hooks/useMetaAggregator';
 import { useTheme } from '@/src/core/ThemeContext';
+import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
+import { RatingModal } from '@/src/core/ui/RatingModal';
+import { Typography } from '@/src/core/ui/Typography';
+import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
+import { CastSection } from '@/src/features/meta/components/CastSection';
+import { CommentsSection } from '@/src/features/meta/components/CommentsSection';
+import { EpisodesSection } from '@/src/features/meta/components/EpisodesSection';
+import { HeroSection } from '@/src/features/meta/components/HeroSection';
+import { MetaDetailsSkeleton } from '@/src/features/meta/components/MetaDetailsSkeleton';
+import { RatingsSection } from '@/src/features/meta/components/RatingsSection';
+import { useAiInsights } from '@/src/features/meta/hooks/useAiInsights';
+import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
+import { StreamSelector } from '@/src/features/player/components/StreamSelector';
+import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Check, Circle, Plus, Share2, Star } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CatalogRow } from '../../components/CatalogRow';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DARK_BASE = '#121212';
@@ -73,7 +73,7 @@ export default function MetaDetailsScreen() {
     }, [meta, enriched.imdbId, id, isSeries, isInWatchlist]);
 
     const isWatched = useMemo(() => {
-        if (!meta || isSeries) return false; // Shows need complex logic usually (all eps watched?)
+        if (!meta || isSeries) return false;
         const baseId = enriched.imdbId || id as string;
         return isMovieWatched(baseId);
     }, [meta, enriched.imdbId, id, isSeries, isMovieWatched]);
@@ -85,20 +85,20 @@ export default function MetaDetailsScreen() {
         return getUserRating(baseId, traktType);
     }, [meta, enriched.imdbId, id, isSeries, getUserRating]);
 
-    const handleWatchlistToggle = async () => {
+    const handleWatchlistToggle = useCallback(async () => {
         if (!isAuthenticated) return;
         const baseId = enriched.imdbId || id as string;
         const traktType = isSeries ? 'show' : 'movie';
         if (isListed) await removeFromWatchlist(baseId, traktType);
         else await addToWatchlist(baseId, traktType);
-    };
+    }, [isAuthenticated, enriched.imdbId, id, isSeries, isListed, removeFromWatchlist, addToWatchlist]);
 
-    const handleWatchedToggle = async () => {
+    const handleWatchedToggle = useCallback(async () => {
         if (!isAuthenticated || isSeries) return;
         const baseId = enriched.imdbId || id as string;
         if (isWatched) await removeMovieFromHistory(baseId);
         else await markMovieAsWatched(baseId);
-    };
+    }, [isAuthenticated, isSeries, enriched.imdbId, id, isWatched, removeMovieFromHistory, markMovieAsWatched]);
 
     // AI Hooks
     const { loadFromCache } = useAiInsights();
@@ -109,7 +109,7 @@ export default function MetaDetailsScreen() {
         }
     }, [enriched.tmdbId]);
 
-    const handleStreamSelect = (stream: any) => {
+    const handleStreamSelect = useCallback((stream: any) => {
         streamBottomSheetRef.current?.dismiss();
         const baseId = enriched.imdbId || id as string;
         const streamId = isSeries && selectedEpisode ? `${baseId}:${activeSeason}:${selectedEpisode.episode}` : baseId;
@@ -139,8 +139,9 @@ export default function MetaDetailsScreen() {
         }
 
         router.push({ pathname: '/player', params });
-    };
-    const handleShare = async () => {
+    }, [enriched.imdbId, id, isSeries, selectedEpisode, activeSeason, enriched?.title, meta?.name, availableStreams, router]);
+
+    const handleShare = useCallback(async () => {
         const baseId = enriched.imdbId || id as string;
         const url = `https://www.imdb.com/title/${baseId}/`;
         try {
@@ -152,7 +153,25 @@ export default function MetaDetailsScreen() {
         } catch (error) {
             console.error(error);
         }
-    };
+    }, [enriched.imdbId, id, enriched.title, meta?.name]);
+
+    // Sub-component Callbacks
+    const handleWatchPress = useCallback(() => {
+        streamBottomSheetRef.current?.present();
+    }, []);
+
+    const handlePersonPress = useCallback((personId: string) => {
+        router.push(`/person/${personId}`);
+    }, [router]);
+
+    const handleEpisodePress = useCallback((ep: any) => {
+        setSelectedEpisode(ep);
+        streamBottomSheetRef.current?.present();
+    }, []);
+
+    const handleIsEpisodeWatched = useCallback((epNum: number) => {
+        return isEpisodeWatched((enriched.imdbId || id) as string, activeSeason, epNum);
+    }, [isEpisodeWatched, enriched.imdbId, id, activeSeason]);
 
     const seasons = useMemo(() => {
         if (enriched?.seasons?.length > 0) {
@@ -191,7 +210,7 @@ export default function MetaDetailsScreen() {
                     enriched={enriched}
                     colors={colors}
                     scrollY={scrollY}
-                    onWatchPress={() => streamBottomSheetRef.current?.present()}
+                    onWatchPress={handleWatchPress}
                 />
 
                 <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
@@ -273,7 +292,7 @@ export default function MetaDetailsScreen() {
                     )}
 
                     <View style={{ marginHorizontal: -20 }}>
-                        <CastSection cast={enriched.cast} theme={theme} colors={colors} onPersonPress={(id) => router.push(`/person/${id}`)} />
+                        <CastSection cast={enriched.cast} theme={theme} colors={colors} onPersonPress={handlePersonPress} />
                     </View>
 
                     <View style={{ marginHorizontal: -20 }}>
@@ -294,11 +313,8 @@ export default function MetaDetailsScreen() {
                                 colors={colors}
                                 theme={theme}
                                 enrichedSeasons={enriched.seasons}
-                                isWatched={(epNum) => isEpisodeWatched((enriched.imdbId || id) as string, activeSeason, epNum)}
-                                onEpisodePress={(ep) => {
-                                    setSelectedEpisode(ep);
-                                    streamBottomSheetRef.current?.present();
-                                }}
+                                isWatched={handleIsEpisodeWatched}
+                                onEpisodePress={handleEpisodePress}
                             />
                         </View>
                     )}
@@ -314,7 +330,7 @@ export default function MetaDetailsScreen() {
                         </View>
                     )}
                 </View>
-            </Animated.ScrollView >
+            </Animated.ScrollView>
 
             <CustomBottomSheet ref={streamBottomSheetRef} title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`} enableDynamicSizing maxHeight={SCREEN_WIDTH * 1.5} scrollable={false}>
                 <StreamSelector
@@ -325,7 +341,7 @@ export default function MetaDetailsScreen() {
                     onStreamsLoaded={setAvailableStreams}
                 />
             </CustomBottomSheet>
-        </View >
+        </View>
     );
 }
 

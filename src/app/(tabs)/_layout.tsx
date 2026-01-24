@@ -1,6 +1,6 @@
-import { MaterialNavigationRail } from '@/src/cdk/layout/MaterialNavigationRail';
-import { SplitTabBar } from '@/src/cdk/layout/SplitTabBar';
 import { useTheme } from '@/src/core/ThemeContext';
+import { MaterialNavigationRail } from '@/src/core/ui/layout/MaterialNavigationRail';
+import { SplitTabBar } from '@/src/core/ui/layout/SplitTabBar';
 import { Tabs } from 'expo-router';
 import { Compass, Home, Library, Search, Settings as SettingsIcon } from 'lucide-react-native';
 import React from 'react';

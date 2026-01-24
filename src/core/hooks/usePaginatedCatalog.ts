@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AddonService, MetaPreview } from '../api/AddonService';
+import { AddonService, MetaPreview } from '../services/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 
 const PAGE_SIZE = 20;

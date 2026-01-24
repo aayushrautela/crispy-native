@@ -1,10 +1,10 @@
-import { ExpressiveButton } from '@/src/cdk/components/ExpressiveButton';
-import { SettingsGroup } from '@/src/cdk/components/SettingsGroup';
-import { SettingsItem } from '@/src/cdk/components/SettingsItem';
-import { Typography } from '@/src/cdk/components/Typography';
-import { SettingsSubpage } from '@/src/cdk/layout/SettingsSubpage';
-import { TraktDeviceCodeResponse } from '@/src/core/api/trakt-types';
-import { TraktService } from '@/src/core/api/TraktService';
+import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
+import { TraktDeviceCodeResponse } from '@/src/core/services/trakt-types';
+import { TraktService } from '@/src/core/services/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { CheckCircle2, Copy, ExternalLink, Globe, Layout, RefreshCw, XCircle } from 'lucide-react-native';
