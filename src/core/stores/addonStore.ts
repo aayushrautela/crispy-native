@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { AddonService } from '../api/AddonService';
+import { AddonService } from '../services/AddonService';
 import { StorageService } from '../storage';
 import { AddonManifest } from '../types/addon-types';
 

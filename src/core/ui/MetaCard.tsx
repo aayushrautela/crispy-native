@@ -2,8 +2,8 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { MetaPreview } from '../../core/api/AddonService';
 import { useTheme } from '../../core/ThemeContext';
+import { MetaPreview } from '../services/AddonService';
 import { ExpressiveSurface } from './ExpressiveSurface';
 import { Typography } from './Typography';
 

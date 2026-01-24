@@ -1,20 +1,19 @@
 # Project State - Refactor Phase Complete
 
 ## Current Position
-- **Milestone**: Feature Decoupling & Structure Standardization
+- **Position**: Home UI Redesign (Phase 16)
 - **Status**: COMPLETED
-- **Next Steps**: Verification of UI and Playback flows in the new structure.
+- **Next Steps**: Monitor user feedback on the new immersive hero section and continue with Phase 15 refactoring. Fix confirmed for `CatalogScreen` crash.
+
+
 
 ## What Was Accomplished
-1. **Core UI Consolidation**: Moved all generic components from `src/cdk/components`, `src/components/ui`, and `src/components` to `src/core/ui`.
-2. **Service Layer Reform**: Renamed `src/core/api` to `src/core/services` and updated all services to be cleaner.
-3. **Feature Decoupling**: 
-   - `src/features/home`: Hero carousel, Continue Watching.
-   - `src/features/meta`: Hero sections, AI insights, cast/reviews.
-   - `src/features/player`: All video playback logic, tabs, and torrent resolution.
-   - `src/features/catalog`: Grid views, rows, and pagination.
-4. **Cleanup**: Removed `src/cdk`, root-level `src/components`, `src/core/api`, and `src/core/context` (moved to relevant features).
-5. **Import Mapping**: Fixed all imports across `src/app`, `src/core`, and `src/features` using recursive global replacements.
+1. **Continue Watching Redesign**:
+   - Updated `TraktService` to extract episode-specific metadata (Show Title, Season, Episode).
+   - Redesigned `CatalogCard` for `landscape` layout: Backdrop images, centered logo overlays.
+   - Enhanced metadata display: `SxEy: Title` and `Episode Date • Genre` row for show episodes.
+   - Positioned progress bar at the bottom for better visibility on landscape cards.
+2. **Type System**: Extended `MetaPreview` in `AddonService` to support new Trakt metadata.
 
 ## Decisions Made
 - Chose `src/core/ui` for generic components (atomic UI) and `src/features` for domain-specific components.

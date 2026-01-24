@@ -13,12 +13,21 @@ export interface MetaPreview {
     // Trakt / Continue Watching fields
     progressPercent?: number;
     episodeTitle?: string;
+    showTitle?: string;
+    season?: number;
+    episodeNumber?: number;
     airDate?: string;
     logo?: string;
     genres?: string[];
     rating?: string;
     imdbRating?: string;
     numericRating?: number; // Pre-parsed 0-10 rating for performant filtering
+    ids?: {
+        trakt?: number;
+        imdb?: string;
+        tmdb?: number;
+        slug?: string;
+    };
 }
 
 export interface CatalogResponse {

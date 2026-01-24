@@ -126,7 +126,7 @@ export const ExpressiveButton = ({
                 ) : (
                     <>
                         {icon && (
-                            <View style={styles.iconContainer}>
+                            <View style={[styles.iconContainer, !title && { marginRight: 0 }]}>
                                 {React.isValidElement(icon) ? (
                                     icon
                                 ) : (
@@ -137,19 +137,21 @@ export const ExpressiveButton = ({
                                 )}
                             </View>
                         )}
-                        <Text
-                            style={[
-                                styles.text,
-                                {
-                                    color: colors.text,
-                                    fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16,
-                                    fontWeight: '500' // Label Large/Medium/Small
-                                },
-                                textStyle,
-                            ]}
-                        >
-                            {title}
-                        </Text>
+                        {title ? (
+                            <Text
+                                style={[
+                                    styles.text,
+                                    {
+                                        color: colors.text,
+                                        fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16,
+                                        fontWeight: '500' // Label Large/Medium/Small
+                                    },
+                                    textStyle,
+                                ]}
+                            >
+                                {title}
+                            </Text>
+                        ) : null}
                     </>
                 )}
             </View>

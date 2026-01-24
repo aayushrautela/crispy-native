@@ -1,6 +1,3 @@
-import { Typography } from '@/src/core/ui/Typography';
-import { Screen } from '@/src/core/ui/layout/Screen';
-import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import React from 'react';
@@ -13,6 +10,9 @@ import Animated, {
     useSharedValue
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../ThemeContext';
+import { Typography } from '../Typography';
+import { Screen } from './Screen';
 
 interface SettingsSubpageProps {
     title: string;

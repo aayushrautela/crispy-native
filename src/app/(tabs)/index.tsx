@@ -1,7 +1,6 @@
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
@@ -17,7 +16,7 @@ import Animated, {
   useSharedValue
 } from 'react-native-reanimated';
 
-const HEADER_HEIGHT = 100;
+const HEADER_HEIGHT = 96;
 
 export default function HomeScreen() {
   const { theme } = useTheme();
@@ -113,22 +112,31 @@ export default function HomeScreen() {
       {/* Collapsible Header */}
       <Animated.View style={[
         styles.header,
-        { backgroundColor: theme.colors.background },
         headerStyle
       ]}>
         <View style={styles.branding}>
-          <Typography variant="label-medium" weight="medium" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}>Good Evening,</Typography>
-          <Typography variant="headline-large" weight="black" style={{ color: theme.colors.primary, marginTop: -2 }}>Crispy</Typography>
+          <Typography
+            weight="black"
+            style={{
+              color: 'white',
+              fontSize: 22,
+              letterSpacing: -0.5,
+              lineHeight: 22,
+              marginTop: 4,
+            }}
+          >
+            Crispy
+          </Typography>
         </View>
         <View style={styles.headerActions}>
-          <ExpressiveSurface
-            variant="tonal"
-            rounding="full"
-            style={styles.iconBtn}
-            onPress={() => router.push('/(tabs)/settings')}
-          >
-            <CircleUser size={26} color={theme.colors.onSurface} strokeWidth={1.5} />
-          </ExpressiveSurface>
+          <Animated.View style={{ opacity: 0.9 }}>
+            <CircleUser
+              size={34}
+              color="white"
+              strokeWidth={1.5}
+              onPress={() => router.push('/(tabs)/settings')}
+            />
+          </Animated.View>
         </View>
       </Animated.View>
 
@@ -137,7 +145,7 @@ export default function HomeScreen() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingTop: HEADER_HEIGHT }]}
+        contentContainerStyle={styles.scrollContent}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         ListHeaderComponent={() => (
           <>
@@ -189,8 +197,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 48,
-    paddingBottom: 8,
+    paddingTop: 60,
+    paddingBottom: 0,
     paddingHorizontal: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -202,17 +210,11 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  iconBtn: {
-    width: 48,
-    height: 48,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
   },
   scrollContent: {
     paddingBottom: 40,
+    paddingTop: 0,
   },
   sections: {
     gap: 12,

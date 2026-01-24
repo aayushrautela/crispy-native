@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import Video from 'react-native-video';
+import { Video } from 'react-native-video';
 
 interface TrailerPlayerProps {
     url: string;

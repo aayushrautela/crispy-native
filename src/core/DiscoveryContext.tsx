@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useEffect, useMemo } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { persistQueryClient } from '@tanstack/react-query-persist-client';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import { AddonService } from './services/AddonService';
 import { storage } from './storage';
 import { useAddonStore } from './stores/addonStore';
-import { AddonService } from './api/AddonService';
 
 const queryClient = new QueryClient({
     defaultOptions: {

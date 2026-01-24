@@ -1,11 +1,11 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
-import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ActionItem, ActionSheet } from '@/src/core/ui/ActionSheet';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
+import { useTraktEnrichment } from '@/src/hooks/useTraktEnrichment';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Check, Eye, EyeOff, Info, Plus, Star } from 'lucide-react-native';
@@ -24,7 +24,13 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
-    const [meta, setMeta] = useState<Partial<TMDBMeta>>({});
+
+    // Lazy Enrichment Hook
+    const enrichedItem = useTraktEnrichment(item);
+    // Determine which meta to use (Enriched > Prop)
+    const displayItem = enrichedItem || item;
+    // We can just use displayItem directly instead of merging state manually
+
 
     // Interactive State
     const [showActionSheet, setShowActionSheet] = useState(false);
@@ -43,14 +49,14 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
         removeContentRating
     } = useTraktContext();
 
-    const id = item.id;
-    const type = item.type === 'movie' ? 'movie' : 'show';
+    const id = displayItem.id;
+    const type = displayItem.type === 'movie' ? 'movie' : 'series';
 
     useEffect(() => {
         // Hydration logic disabled
     }, []);
 
-    const aspectRatio = item.posterShape === 'landscape' ? 16 / 9 : item.posterShape === 'square' ? 1 : 2 / 3;
+    const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
 
     const handlePress = () => {
@@ -148,9 +154,9 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
             >
                 <View style={styles.imageContainer}>
                     {(() => {
-                        const imageSrc = item.posterShape === 'landscape'
-                            ? (item.backdrop || meta.backdrop || item.poster || meta.poster)
-                            : (item.poster || meta.poster);
+                        const imageSrc = displayItem.posterShape === 'landscape'
+                            ? (displayItem.backdrop || displayItem.poster)
+                            : (displayItem.poster);
 
                         if (imageSrc) {
                             return (
@@ -170,28 +176,28 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                                     weight="bold"
                                     style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}
                                 >
-                                    {item.name}
+                                    {displayItem.name}
                                 </Typography>
                             </View>
                         )}
 
                     {/* Logo Overlay (Landscape only) */}
-                    {(item.posterShape === 'landscape' && (item.logo || meta.logo)) && (
-                        <View style={{ position: 'absolute', bottom: 12, left: 10, right: 10, alignItems: 'center', justifyContent: 'flex-end', height: '30%' }}>
+                    {(displayItem.posterShape === 'landscape' && displayItem.logo) && (
+                        <View style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
                             <ExpoImage
-                                source={{ uri: item.logo || meta.logo }}
-                                style={{ width: '80%', height: '100%' }}
+                                source={{ uri: displayItem.logo }}
+                                style={{ width: '70%', height: '50%' }}
                                 contentFit="contain"
                             />
                         </View>
                     )}
 
                     {/* Rating Overlay */}
-                    {(item.imdbRating || item.rating || meta.rating) && (
+                    {(displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating) && (
                         <View style={styles.ratingOverlay}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
                             <Typography variant="label-small" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                                {item.imdbRating || item.rating || meta.rating}
+                                {displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating}
                             </Typography>
                         </View>
                     )}
@@ -226,7 +232,12 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                     numberOfLines={1}
                     style={{ color: theme.colors.onSurface }}
                 >
-                    {item.name}
+                    {(() => {
+                        if (displayItem.season !== undefined && displayItem.episodeNumber !== undefined) {
+                            return `S${displayItem.season}E${displayItem.episodeNumber}: ${displayItem.episodeTitle || displayItem.name}`;
+                        }
+                        return displayItem.name;
+                    })()}
                 </Typography>
                 <View style={styles.badgeRow}>
                     <Typography
@@ -235,16 +246,33 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                         numberOfLines={1}
                         style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}
                     >
-                        {item.airDate || meta.year || item.releaseInfo}
+                        {(() => {
+                            const isEpisode = displayItem.season !== undefined && displayItem.episodeNumber !== undefined;
+                            let dateStr = displayItem.airDate || displayItem.meta?.year || displayItem.releaseInfo || displayItem.year;
+
+                            if (isEpisode && displayItem.airDate) {
+                                try {
+                                    const date = new Date(displayItem.airDate);
+                                    dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                                } catch (e) {
+                                    // Fallback to year if parsing fails
+                                    dateStr = displayItem.airDate.split('-')[0];
+                                }
+                            } else if (dateStr && dateStr.includes('-')) {
+                                dateStr = dateStr.split('-')[0];
+                            }
+
+                            return dateStr;
+                        })()}
                     </Typography>
-                    {(item.genres?.[0] || meta.genres?.[0]) && (
+                    {(displayItem.genres?.[0] || displayItem.meta?.genres?.[0]) && (
                         <View style={[styles.genrePill, { backgroundColor: (theme.colors.primary + '20') || theme.colors.surfaceVariant }]}>
                             <Typography
                                 variant="label-small"
                                 weight="black"
                                 style={{ color: theme.colors.primary, fontSize: 9 }}
                             >
-                                {(item.genres?.[0] || meta.genres?.[0])}
+                                {(displayItem.genres?.[0] || displayItem.meta?.genres?.[0])}
                             </Typography>
                         </View>
                     )}

@@ -110,14 +110,19 @@ export class TMDBService {
             const findPath = type === 'movie' ? 'movie' : 'tv';
             let foundTmdbId: string | number = 0;
 
+            console.log(`[TMDBService] Enriching ${idStr} (${type})`);
+
             if (idStr.startsWith('tmdb:')) {
                 foundTmdbId = idStr.split(':')[1];
             } else if (idStr.startsWith('tt')) {
                 // 1. Find TMDB ID from External ID (IMDB)
                 const findUrl = `${BASE_URL}/find/${idStr}?api_key=${API_KEY}&external_source=imdb_id`;
                 const findRes = await axios.get(findUrl);
-                const result = type === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
-                if (!result) return {};
+                const result = findPath === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
+                if (!result) {
+                    console.warn(`[TMDBService] No TMDB results for ${idStr}`);
+                    return {};
+                }
                 foundTmdbId = result.id;
             } else {
                 // Fallback: If it's a plain number, assume it's a TMDB ID (like Web UI)
@@ -353,6 +358,25 @@ export class TMDBService {
             }));
         } catch (e) {
             return [];
+        }
+    }
+
+    static async getEpisodeDetails(tmdbId: number, seasonNumber: number, episodeNumber: number): Promise<any | null> {
+        try {
+            const url = `${BASE_URL}/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${API_KEY}`;
+            const res = await axios.get(url);
+            const e = res.data;
+            return {
+                episode: e.episode_number,
+                name: e.name,
+                overview: e.overview,
+                thumbnail: e.still_path ? `${IMAGE_BASE}/w500${e.still_path}` : null,
+                released: e.air_date,
+                runtime: e.runtime ? `${e.runtime}m` : null,
+            };
+        } catch (e) {
+            console.error('[TMDBService] Failed to fetch episode details:', e);
+            return null;
         }
     }
 

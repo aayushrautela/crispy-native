@@ -1,4 +1,4 @@
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '@/src/features/trakt/stores/userStore';
 
 export interface OmdbRating {
     Source: string;

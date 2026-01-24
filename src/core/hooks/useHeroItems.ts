@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { AddonService, MetaPreview } from '../api/AddonService';
+import { AddonService, MetaPreview } from '../services/AddonService';
 import { useAddonStore } from '../stores/addonStore';
 
 export interface Meta extends MetaPreview {

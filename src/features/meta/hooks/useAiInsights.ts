@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { AIService } from '../../../core/services/AIService';
 import { StorageService } from '../../../core/storage';
-import { useUserStore } from '../../../core/stores/userStore';
+import { useUserStore } from '@/src/features/trakt/stores/userStore';
 
 export interface InsightCard {
     type: 'consensus' | 'performance' | 'theme' | 'vibe' | 'style' | 'performance_actor' | 'controversy' | 'character';

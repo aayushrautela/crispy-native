@@ -1,10 +1,10 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
 import { TraktService } from '@/src/core/services/TraktService';
-import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { useUserStore } from '@/src/features/trakt/stores/userStore';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -39,57 +39,7 @@ export const ContinueWatchingRow = () => {
         setLoading(true);
         try {
             const data = await TraktService.getContinueWatching();
-            const mapped: MetaPreview[] = data.map(item => {
-                const isMovie = item.type === 'movie';
-                const media = isMovie ? item.movie : item.show;
-                if (!media) return null;
-
-                const id = media.ids.imdb || (media.ids.tmdb ? `tmdb:${media.ids.tmdb}` : undefined);
-
-                // Prioritize hydrated images (WebUI matches this)
-                const poster = item.meta?.poster || media.images?.poster?.[0];
-                const backdrop = item.meta?.background || media.images?.fanart?.[0];
-                const logo = item.meta?.logo || media.images?.logo?.[0];
-
-                const isEpisode = item.type === 'episode' || !isMovie;
-                const showTitle = item.meta?.name || media.title || '';
-                const epTitle = item.meta?.episodeTitle || item.episode?.title || `Episode ${item.episode?.number}`;
-                const displayName = isEpisode
-                    ? `S${item.episode?.season}E${item.episode?.number}: ${epTitle}`
-                    : showTitle;
-
-                // Format Air Date logic exactly as WebUI (MetaCard.tsx:14)
-                let formattedDate = undefined;
-                if (item.meta?.airDate) {
-                    try {
-                        const date = new Date(item.meta.airDate);
-                        const isCurrentYear = date.getFullYear() === new Date().getFullYear();
-                        formattedDate = date.toLocaleDateString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: !isCurrentYear ? 'numeric' : undefined
-                        });
-                    } catch (e) { }
-                }
-
-                return {
-                    id: id || '',
-                    type: item.type,
-                    name: displayName,
-                    poster: poster,
-                    backdrop: backdrop,
-                    posterShape: 'landscape',
-                    description: item.meta?.description,
-                    progressPercent: item.progress,
-                    // WebUI: sub-text is Year/Date + Genres. 
-                    // No show title in that row for episodes (it's in the logo).
-                    releaseInfo: isEpisode ? undefined : (media.year?.toString() || item.meta?.rating),
-                    airDate: formattedDate,
-                    logo: logo,
-                    genres: item.meta?.genres,
-                };
-            }).filter(i => i && i.id) as MetaPreview[];
-            setItems(mapped);
+            setItems(data);
         } catch (e) {
             console.error(e);
         } finally {

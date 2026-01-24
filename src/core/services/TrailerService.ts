@@ -17,6 +17,7 @@ export class TrailerService {
      * @param title - Optional title for logging/caching on the server
      * @param year - Optional year for logging/caching on the server
      * @returns Promise<string | null> - Direct streaming URL or null if failed
+     * @deprecated Use YouTubeTrailer component with the key directly instead of extracting stream
      */
     static async getTrailerFromYouTubeKey(youtubeKey: string, title?: string, year?: string): Promise<string | null> {
         try {
@@ -45,27 +46,54 @@ export class TrailerService {
             return response.data.url;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                console.error(`[TrailerService] Axios error (${error.code}): ${error.message}`);
+                console.warn(`[TrailerService] Axios error (${error.code}): ${error.message}`);
             } else {
-                console.error(`[TrailerService] Unknown error:`, error);
+                console.warn(`[TrailerService] Unknown error:`, error);
             }
             return null;
         }
     }
 
     /**
-     * Helper to find the first suitable trailer from TMDB videos array
+     * Helper to find the best suitable trailer from TMDB videos array
+     * Prioritizes Official YouTube Trailers
      * @param videos - The results array from TMDB videos response
-     * @returns string | null - The first YouTube trailer key or null
+     * @returns string | null - The best YouTube trailer key or null
      */
     static getFirstTrailerKey(videos: any[]): string | null {
         if (!videos || !Array.isArray(videos)) return null;
 
-        // Priority: Site must be YouTube, Type must be Trailer
-        const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer') ||
-            videos.find(v => v.site === 'YouTube' && v.type === 'Teaser');
+        // Filter for YouTube videos
+        const youtubeVideos = videos.filter(v => v.site === 'YouTube');
 
-        return trailer?.key || null;
+        if (youtubeVideos.length === 0) return null;
+
+        // 1. Look for Trailers
+        const trailers = youtubeVideos.filter(v => v.type === 'Trailer');
+
+        if (trailers.length > 0) {
+            // Sort: Official ones first
+            trailers.sort((a, b) => {
+                if (a.official === b.official) return 0;
+                return a.official ? -1 : 1;
+            });
+            return trailers[0].key;
+        }
+
+        // 2. Fallback to Teasers
+        const teasers = youtubeVideos.filter(v => v.type === 'Teaser');
+        if (teasers.length > 0) {
+            teasers.sort((a, b) => {
+                if (a.official === b.official) return 0;
+                return a.official ? -1 : 1;
+            });
+            return teasers[0].key;
+        }
+
+        // 3. Fallback to any YouTube video (Clip, Featurette, etc) if really desperate, 
+        // but maybe better to show nothing than a random clip? 
+        // Let's stick to Trailers/Teasers for high quality experience.
+        return null;
     }
 }
 

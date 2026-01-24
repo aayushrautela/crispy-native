@@ -1,7 +1,7 @@
 import { Session } from '@supabase/supabase-js';
-import { supabase } from './api/supabase';
-import { StorageService } from './storage';
 import { router } from 'expo-router';
+import { supabase } from './services/supabase';
+import { StorageService } from './storage';
 
 export interface KnownAccount {
     user_id: string;

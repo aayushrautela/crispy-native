@@ -1,15 +1,15 @@
-import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
-import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
-import { SettingsItem } from '@/src/core/ui/SettingsItem';
-import { Typography } from '@/src/core/ui/Typography';
-import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { TraktDeviceCodeResponse } from '@/src/core/services/trakt-types';
-import { TraktService } from '@/src/core/services/TraktService';
-import { useUserStore } from '@/src/core/stores/userStore';
-import { useTheme } from '@/src/core/ThemeContext';
 import { CheckCircle2, Copy, ExternalLink, Globe, Layout, RefreshCw, XCircle } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, Clipboard, StyleSheet, View } from 'react-native';
+import { Alert, Clipboard, Linking, StyleSheet, View } from 'react-native';
+import { TraktDeviceCodeResponse } from '../../core/services/trakt-types';
+import { TraktService } from '../../core/services/TraktService';
+import { useTheme } from '../../core/ThemeContext';
+import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
+import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
+import { SettingsGroup } from '../../core/ui/SettingsGroup';
+import { SettingsItem } from '../../core/ui/SettingsItem';
+import { Typography } from '../../core/ui/Typography';
+import { useUserStore } from '../../features/trakt/stores/userStore';
 
 export default function TraktScreen() {
     const { theme } = useTheme();
@@ -29,27 +29,33 @@ export default function TraktScreen() {
     }, []);
 
     const handleConnectTrakt = async () => {
+        console.log('[TraktScreen] Starting connection flow...');
         setIsTraktLoading(true);
         try {
+            console.log('[TraktScreen] Requesting device code...');
             const code = await TraktService.oauthDeviceCode();
+            console.log('[TraktScreen] Device code received:', code.user_code);
             setTraktCode(code);
 
             pollInterval.current = setInterval(async () => {
                 try {
+                    console.log('[TraktScreen] Polling for token...');
                     const auth = await TraktService.oauthToken(code.device_code);
-                    if (auth.access_token) {
+                    if (auth.accessToken) {
+                        console.log('[TraktScreen] Token received! Auth successful.');
                         if (pollInterval.current) clearInterval(pollInterval.current);
                         setTraktCode(null);
                         updateTraktAuth(auth);
                         Alert.alert('Success', 'Trakt connected!');
                     }
                 } catch (e) {
-                    // Still pending or error
+                    console.log('[TraktScreen] Polling error (as expected if pending):', e);
                 }
             }, code.interval * 1000);
 
-        } catch (e) {
-            Alert.alert('Error', 'Failed to initialize Trakt auth');
+        } catch (e: any) {
+            console.error('[TraktScreen] Connection flow failed:', e);
+            Alert.alert('Error', `Failed to initialize Trakt auth: ${e.message}`);
         } finally {
             setIsTraktLoading(false);
         }
@@ -135,7 +141,13 @@ export default function TraktScreen() {
                                 icon={ExternalLink}
                                 variant="outline"
                                 style={{ marginTop: 12 }}
-                                onPress={() => { /* Link logic */ }}
+                                onPress={() => {
+                                    if (traktCode?.verification_url) {
+                                        Linking.openURL(traktCode.verification_url);
+                                    } else {
+                                        Linking.openURL('https://trakt.tv/activate');
+                                    }
+                                }}
                             />
                         </View>
                     )}

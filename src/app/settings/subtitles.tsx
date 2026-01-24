@@ -2,7 +2,7 @@ import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useUserStore } from '@/src/core/stores/userStore';
+import { useUserStore } from '@/src/features/trakt/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Baseline, MoveVertical, Palette, Type } from 'lucide-react-native';
 import React from 'react';

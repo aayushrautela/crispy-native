@@ -1,7 +1,3 @@
-import { AuthProvider, useAuth } from '@/src/core/AuthContext';
-import { TraktProvider } from '@/src/core/context/TraktContext';
-import { DiscoveryProvider } from '@/src/core/DiscoveryContext';
-import { ThemeProvider, useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +8,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import { AuthProvider, useAuth } from '../core/AuthContext';
+import { DiscoveryProvider } from '../core/DiscoveryContext';
+import { SyncService } from '../core/services/SyncService';
+import { TraktService } from '../core/services/TraktService';
+import { SessionManager } from '../core/SessionManager';
+import { ThemeProvider, useTheme } from '../core/ThemeContext';
+import { TraktProvider } from '../features/trakt/context/TraktContext';
+import { useUserStore } from '../features/trakt/stores/userStore';
 import '../styles/global.css';
 
 // Create a client
@@ -67,6 +71,17 @@ function RootLayoutNav() {
     }
   }, [user, loading, segments, router]);
 
+  // Listen for Account Switches
+  useEffect(() => {
+    const unsub = SessionManager.subscribe(() => {
+      // When accounts change (login/logout/switch), reload the store
+      // This ensures the store reads data for the *new* active user
+      useUserStore.getState().reset(); // Reset to defaults/load from storage
+      TraktService.getInstance().reset(); // Reset Trakt service to load new user tokens
+    });
+    return unsub;
+  }, []);
+
   return (
     <NavigationThemeProvider value={theme}>
       <BottomSheetModalProvider>
@@ -77,6 +92,7 @@ function RootLayoutNav() {
           <Stack.Screen name="player" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="catalog/[id]" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
           <Stack.Screen name="person/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+          <Stack.Screen name="settings" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -90,6 +106,7 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <AuthProvider>
+          <SyncService />
           <ThemeProvider>
             <DiscoveryProvider>
               <TraktProvider>

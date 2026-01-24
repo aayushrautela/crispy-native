@@ -1,4 +1,4 @@
-import { useTraktComments } from '@/src/core/hooks/useTraktComments';
+import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
 import { TraktContentComment } from '@/src/core/services/trakt-types';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
@@ -6,7 +6,7 @@ import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { Shimmer } from '@/src/core/ui/Shimmer';
 import { Typography } from '@/src/core/ui/Typography';
 import { Star } from 'lucide-react-native';
-import React, { memo, useRef, useState } from 'react';
+import React, { memo, useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { CommentCard } from './CommentCard';
 

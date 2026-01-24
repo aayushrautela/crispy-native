@@ -1,7 +1,7 @@
-import { Typography } from '@/src/core/ui/Typography';
-import { useTheme } from '@/src/core/ThemeContext';
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
+import { useTheme } from '../ThemeContext';
+import { Typography } from './Typography';
 
 interface SettingsGroupProps {
     title?: string;

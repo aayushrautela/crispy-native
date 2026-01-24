@@ -4,8 +4,8 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Surface } from '../components/Surface';
-import { Touchable } from '../components/Touchable';
+import { Surface } from '../Surface';
+import { Touchable } from '../Touchable';
 
 const GlassTabItem = ({
     route,

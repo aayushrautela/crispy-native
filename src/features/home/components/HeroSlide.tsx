@@ -8,10 +8,10 @@ import React from 'react';
 import { Dimensions, Image, ImageBackground, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const HERO_WIDTH = SCREEN_WIDTH - 32;
-const ASPECT_RATIO = 1; // Shorter (Square)
-const HERO_HEIGHT = HERO_WIDTH / ASPECT_RATIO;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HERO_WIDTH = SCREEN_WIDTH;
+const ASPECT_RATIO = 0.7; // Taller for edge-to-edge
+const HERO_HEIGHT = SCREEN_WIDTH / ASPECT_RATIO;
 
 interface HeroSlideProps {
     item: Meta;
@@ -27,10 +27,8 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
     // Animated Parallax Style
     const animatedStyle = useAnimatedStyle(() => {
         const input = [(index - 1) * SCREEN_WIDTH, index * SCREEN_WIDTH, (index + 1) * SCREEN_WIDTH];
-        const scale = interpolate(scrollX.value, input, [0.96, 1, 0.96]);
         const opacity = interpolate(scrollX.value, input, [0.8, 1, 0.8]);
         return {
-            transform: [{ scale }],
             opacity,
         };
     });
@@ -50,8 +48,14 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                     style={styles.backgroundImage}
                 >
                     <LinearGradient
-                        colors={['rgba(0,0,0,0.3)', 'transparent', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.95)']}
-                        locations={[0, 0.3, 0.6, 1]}
+                        colors={[
+                            'rgba(0,0,0,0.5)',
+                            'transparent',
+                            'transparent',
+                            'rgba(0,0,0,0.4)',
+                            theme.colors.background
+                        ]}
+                        locations={[0, 0.2, 0.5, 0.8, 1]}
                         style={styles.gradient}
                     >
                         <View style={styles.content}>
@@ -93,7 +97,7 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             <Typography
                                 variant="body-medium"
                                 numberOfLines={3}
-                                style={{ color: 'white', opacity: 0.7, marginBottom: 20 }}
+                                style={{ color: 'white', opacity: 0.7, marginBottom: 24 }}
                             >
                                 {item.description}
                             </Typography>
@@ -108,12 +112,11 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                                     style={styles.actionBtn}
                                 />
                                 <ExpressiveButton
-                                    title="More Info"
+                                    title=""
                                     variant="tonal"
                                     onPress={() => onInfo(item)}
-                                    icon={<Info size={20} color="white" />}
-                                    style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
-                                    textStyle={{ color: 'white' }}
+                                    icon={<Info size={22} color="white" />}
+                                    style={styles.infoBtn}
                                 />
                             </View>
                         </View>
@@ -124,17 +127,15 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
     );
 };
 
+
+
 const styles = StyleSheet.create({
     itemContainer: {
         width: SCREEN_WIDTH,
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 16,
     },
     heroCard: {
         width: HERO_WIDTH,
         height: HERO_HEIGHT,
-        borderRadius: 32,
         overflow: 'hidden',
     },
     backgroundImage: {
@@ -144,18 +145,18 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'flex-end',
         padding: 24,
-        paddingBottom: 56, // Reduced padding
+        paddingBottom: 40,
     },
     content: {
     },
     brandingSection: {
         marginBottom: 8,
         alignItems: 'flex-start',
-        width: '100%', // Ensure container takes full width
+        width: '100%',
     },
     logo: {
-        width: 250, // Constrain width so it doesn't look centered in a huge box
-        height: 80,
+        width: 250,
+        height: 100, // Slightly taller logo area for better impact
         marginBottom: 8,
         alignSelf: 'flex-start',
     },
@@ -177,11 +178,24 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
         width: '100%',
-        justifyContent: 'center', // Align Center
+        justifyContent: 'flex-start',
+        alignItems: 'center',
     },
     actionBtn: {
-        width: 140,
-        height: 44, // Slightly shorter for sleeker pill look
+        width: 160,
+        height: 52,
         borderRadius: 100,
     },
+    infoBtn: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 0,
+    },
 });
+
+
+

@@ -1,6 +1,6 @@
+import { Shimmer } from '@/src/core/ui/Shimmer';
 import React, { memo } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import { Shimmer } from '@/src/core/ui/Shimmer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BACKDROP_HEIGHT = 480;
@@ -50,7 +50,7 @@ export const MetaDetailsSkeleton = memo(() => {
             </View>
         </View>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {

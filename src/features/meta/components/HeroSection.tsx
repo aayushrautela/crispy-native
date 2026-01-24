@@ -3,14 +3,14 @@ import { TrailerService } from '@/src/core/services/TrailerService';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { adjustBrightness, isDarkColor } from '@/src/core/utils/colors';
-import { TrailerPlayer } from '@/src/features/player/components/TrailerPlayer';
+import { YouTubeTrailer } from '@/src/features/player/components/YouTubeTrailer';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Play, RotateCcw, Star } from 'lucide-react-native';
 import React, { memo, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 750;
@@ -27,56 +27,36 @@ interface HeroSectionProps {
 
 export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress }: HeroSectionProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-    const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+    const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [showTrailer, setShowTrailer] = useState(false);
-    const trailerOpacity = useSharedValue(0);
 
     // Trailer Autoplay Logic
     React.useEffect(() => {
-        let isMounted = true;
-        let autoplayTimer: NodeJS.Timeout;
+        const key = TrailerService.getFirstTrailerKey(enriched.videos || []);
+        setTrailerKey(key);
 
-        const loadTrailer = async () => {
-            const key = TrailerService.getFirstTrailerKey(enriched.videos || []);
-            if (!key) return;
-
-            const directUrl = await TrailerService.getTrailerFromYouTubeKey(key, enriched.title, enriched.year);
-            if (directUrl && isMounted) {
-                setTrailerUrl(directUrl);
-                // Wait 2 seconds before showing
-                autoplayTimer = setTimeout(() => {
-                    if (isMounted) {
-                        setShowTrailer(true);
-                        trailerOpacity.value = withTiming(1, { duration: 800 });
-                    }
-                }, 2000);
-            }
-        };
-
-        loadTrailer();
+        let timer: NodeJS.Timeout;
+        if (key) {
+            // Wait 2 seconds before showing for autoplay
+            timer = setTimeout(() => {
+                setShowTrailer(true);
+            }, 2000);
+        }
 
         return () => {
-            isMounted = false;
-            clearTimeout(autoplayTimer);
+            clearTimeout(timer);
         };
-    }, [enriched.videos, enriched.title, enriched.year]);
+    }, [enriched.videos]);
 
-    const trailerAnimatedStyle = useAnimatedStyle(() => ({
-        opacity: trailerOpacity.value,
-    }));
+    const toggleTrailer = () => {
+        if (trailerKey) {
+            setShowTrailer(!showTrailer);
+        }
+    };
 
     const { state, progress, isLoading, episode, lastWatchedAt } = useTraktWatchState(enriched.imdbId || meta?.id, meta?.type);
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
-
-    const backdropStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                { translateY: interpolate(scrollY.value, [0, HERO_HEIGHT], [0, -HERO_HEIGHT * 0.4], Extrapolation.CLAMP) },
-                { scale: interpolate(scrollY.value, [-100, 0], [1.2, 1], Extrapolation.CLAMP) }
-            ],
-        };
-    });
 
     const watchButtonLabel = useMemo(() => {
         if (state === 'continue') {
@@ -131,22 +111,16 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
         return `Ends at ${formattedTime}`;
     }, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
 
-
-
     return (
         <View style={styles.container}>
-            {/* Parallax Layer */}
-            <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
+            {/* Static Background Layer */}
+            <View style={styles.staticBackdrop}>
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
 
-                {showTrailer && trailerUrl && (
-                    <Animated.View style={[StyleSheet.absoluteFill, trailerAnimatedStyle]}>
-                        <TrailerPlayer
-                            url={trailerUrl}
-                            style={styles.heroImage}
-                            muted={true}
-                        />
-                    </Animated.View>
+                {showTrailer && trailerKey && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <YouTubeTrailer videoId={trailerKey} />
+                    </View>
                 )}
 
                 <LinearGradient
@@ -154,9 +128,9 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                     locations={[0, 0.6, 1]}
                     style={styles.heroGradient}
                 />
-            </Animated.View>
+            </View>
 
-            {/* Spacer and Content Area */}
+            {/* Content Area */}
             <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
                 <LinearGradient
                     colors={['transparent', DARK_BASE, DARK_BASE]}
@@ -167,9 +141,15 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
 
                 <View style={styles.heroContent}>
                     {/* Trailer Button */}
-                    <Pressable style={styles.trailerBtn}>
-                        <Play size={14} color="white" fill="white" />
-                        <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>Trailer</Typography>
+                    <Pressable
+                        style={[styles.trailerBtn, !trailerKey && { opacity: 0.5 }]}
+                        onPress={toggleTrailer}
+                        disabled={!trailerKey}
+                    >
+                        <Play size={14} color="white" fill={showTrailer ? "white" : "transparent"} />
+                        <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>
+                            {showTrailer ? 'Pause' : 'Trailer'}
+                        </Typography>
                     </Pressable>
 
                     {/* Title / Logo */}
@@ -278,7 +258,7 @@ const styles = StyleSheet.create({
     container: {
         width: SCREEN_WIDTH,
     },
-    parallaxLayer: {
+    staticBackdrop: {
         position: 'absolute',
         top: 0,
         left: 0,

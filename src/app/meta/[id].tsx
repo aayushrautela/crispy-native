@@ -14,7 +14,7 @@ import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Check, Circle, Plus, Share2, Star } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, Check, Circle, LayoutGrid, Share2, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -57,6 +57,9 @@ export default function MetaDetailsScreen() {
         isEpisodeWatched,
         markMovieAsWatched,
         removeMovieFromHistory,
+        isInCollection,
+        addToCollection,
+        removeFromCollection,
         getUserRating,
         rateContent,
         removeContentRating
@@ -85,6 +88,13 @@ export default function MetaDetailsScreen() {
         return getUserRating(baseId, traktType);
     }, [meta, enriched.imdbId, id, isSeries, getUserRating]);
 
+    const isCollected = useMemo(() => {
+        if (!meta) return false;
+        const baseId = enriched.imdbId || id as string;
+        const traktType = isSeries ? 'show' : 'movie';
+        return isInCollection(baseId, traktType);
+    }, [meta, enriched.imdbId, id, isSeries, isInCollection]);
+
     const handleWatchlistToggle = useCallback(async () => {
         if (!isAuthenticated) return;
         const baseId = enriched.imdbId || id as string;
@@ -92,6 +102,14 @@ export default function MetaDetailsScreen() {
         if (isListed) await removeFromWatchlist(baseId, traktType);
         else await addToWatchlist(baseId, traktType);
     }, [isAuthenticated, enriched.imdbId, id, isSeries, isListed, removeFromWatchlist, addToWatchlist]);
+
+    const handleCollectionToggle = useCallback(async () => {
+        if (!isAuthenticated) return;
+        const baseId = enriched.imdbId || id as string;
+        const traktType = isSeries ? 'show' : 'movie';
+        if (isCollected) await removeFromCollection(baseId, traktType);
+        else await addToCollection(baseId, traktType);
+    }, [isAuthenticated, enriched.imdbId, id, isSeries, isCollected, removeFromCollection, addToCollection]);
 
     const handleWatchedToggle = useCallback(async () => {
         if (!isAuthenticated || isSeries) return;
@@ -220,11 +238,26 @@ export default function MetaDetailsScreen() {
                             onPress={handleWatchlistToggle}
                             disabled={!isAuthenticated}
                         >
-                            {isListed ? (
-                                <Check size={24} color={'white'} />
-                            ) : (
-                                <Plus size={24} color="white" />
-                            )}
+                            <Bookmark
+                                size={24}
+                                color="white"
+                                fill={isListed ? 'white' : 'transparent'}
+                            />
+                            <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                                Watchlist
+                            </Typography>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.iconActionItem}
+                            onPress={handleCollectionToggle}
+                            disabled={!isAuthenticated}
+                        >
+                            <LayoutGrid
+                                size={24}
+                                color="white"
+                                fill={isCollected ? 'white' : 'transparent'}
+                            />
                             <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
                                 Collection
                             </Typography>
@@ -351,7 +384,7 @@ const styles = StyleSheet.create({
     topRightActions: { flexDirection: 'row', gap: 12 },
     backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     body: { flex: 1 },
-    iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 40, marginTop: 24 },
+    iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 32, marginTop: 24 },
     iconActionItem: { alignItems: 'center', gap: 8 },
     iconActionLabel: { color: 'white', opacity: 0.6, fontSize: 10 },
     subLabel: { color: 'white', opacity: 0.4, fontSize: 10 },

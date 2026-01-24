@@ -4,9 +4,8 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Touchable } from '../components/Touchable';
-
-import { Typography } from '../components/Typography';
+import { Touchable } from '../Touchable';
+import { Typography } from '../Typography';
 
 const MaterialTabItem = ({
     route,

@@ -1,6 +1,4 @@
-import { MetaPreview } from '@/src/core/services/AddonService';
 import { TraktService } from '@/src/core/services/TraktService';
-import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
@@ -9,6 +7,7 @@ import { Screen } from '@/src/core/ui/layout/Screen';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { useUserStore } from '@/src/features/trakt/stores/userStore';
 import { FlashList } from '@shopify/flash-list';
 import {
     Bookmark,
@@ -159,14 +158,7 @@ export default function LibraryScreen() {
     const renderItem = useCallback(({ item }: { item: any }) => (
         <View style={{ width: itemWidth, marginBottom: gap }}>
             <CatalogCard
-                item={{
-                    id: item.meta?.id || '',
-                    type: item.type === 'episode' ? 'series' : item.type,
-                    name: item.meta?.name || 'Unknown',
-                    poster: item.meta?.poster,
-                    releaseInfo: item.meta?.year,
-                    genres: item.meta?.genres,
-                } as MetaPreview}
+                item={item}
                 width={itemWidth}
             />
         </View>

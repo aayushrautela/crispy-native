@@ -71,7 +71,7 @@ export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
                 onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
             />
 
-            {/* Dot Indicators */}
+            {/* Static Dot Indicators */}
             {items.length > 1 && (
                 <View style={styles.dotsContainer}>
                     {items.map((_, i) => (
@@ -81,7 +81,7 @@ export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
                                 styles.dot,
                                 {
                                     backgroundColor: activeIndex === i ? theme.colors.primary : 'rgba(255,255,255,0.3)',
-                                    width: activeIndex === i ? 24 : 8,
+                                    width: activeIndex === i ? 20 : 6,
                                 }
                             ]}
                         />
@@ -94,30 +94,29 @@ export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 8,
+        marginBottom: 0,
     },
     skeletonContainer: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
-        marginBottom: 8,
+        paddingHorizontal: 0,
+        paddingTop: 0,
+        marginBottom: 0,
     },
     skeleton: {
-        width: SCREEN_WIDTH - 32,
-        height: (SCREEN_WIDTH - 32), // Aspect Ratio 1
-        borderRadius: 32,
+        width: SCREEN_WIDTH,
+        height: SCREEN_WIDTH * 1.5,
         opacity: 0.5,
     },
     dotsContainer: {
         position: 'absolute',
-        bottom: 20,
-        left: 0,
-        right: 0,
+        bottom: 63, // Aligned with center of 52px buttons (40px padding + 26px center - 3px dot)
+        right: 24,  // Matches gradient padding
         flexDirection: 'row',
-        justifyContent: 'center',
+        justifyContent: 'flex-end',
         gap: 6,
     },
     dot: {
-        height: 8,
-        borderRadius: 4,
+        height: 6,
+        borderRadius: 3,
     }
 });
+

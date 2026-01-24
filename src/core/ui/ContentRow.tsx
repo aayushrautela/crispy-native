@@ -1,7 +1,7 @@
 import React from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { MetaPreview } from '../../core/api/AddonService';
 import { useTheme } from '../../core/ThemeContext';
+import { MetaPreview } from '../services/AddonService';
 import { MetaCard } from './MetaCard';
 
 interface ContentRowProps {

@@ -1,8 +1,8 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Video, { ResizeMode, VideoRef } from 'react-native-video';
+import { usePlayerControls } from '../hooks/usePlayerControls';
 import MpvPlayer, { MpvPlayerRef } from './MpvPlayer';
-import { usePlayerControls } from './usePlayerControls';
 
 // Codec error patterns that should trigger MPV fallback
 const CODEC_ERROR_PATTERNS = [

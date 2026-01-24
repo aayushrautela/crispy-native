@@ -1,4 +1,4 @@
-import type { AiInsightsResult, InsightCard } from '@/src/core/hooks/useAiInsights';
+import type { AiInsightsResult, InsightCard } from '@/src/features/meta/hooks/useAiInsights';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Typography } from '@/src/core/ui/Typography';

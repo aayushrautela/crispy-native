@@ -1,7 +1,7 @@
-import { useTheme } from '@/src/core/ThemeContext';
 import { ChevronRight } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useTheme } from '../ThemeContext';
 import { Touchable } from './Touchable';
 import { Typography } from './Typography';
 

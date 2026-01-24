@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AddonService, CatalogResponse, MetaPreview } from '../api/AddonService';
+import { AddonService, CatalogResponse, MetaPreview } from '../services/AddonService';
 import { useAddonStore } from './addonStore';
 
 interface ProviderState {

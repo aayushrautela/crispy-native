@@ -55,3 +55,10 @@
 - [ ] Decouple Trakt/TMDB Services.
 - [ ] Migrate to TanStack Query & Zustand.
 - [ ] Consolidate UI Kit into `src/core/ui`.
+
+## Phase 16: Home UI Redesign 🎨 [DONE]
+- [x] Make Hero Section edge-to-edge.
+- [x] Implement bottom fade for Hero.
+- [x] Make Header transparent and overlay on Hero.
+
+

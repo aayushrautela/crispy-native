@@ -8,6 +8,7 @@ import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowLeft, ChevronDown, Filter, Star } from 'lucide-react-native';
 import * as React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native';

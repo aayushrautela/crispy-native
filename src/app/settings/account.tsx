@@ -1,20 +1,24 @@
-import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
-import { SettingsItem } from '@/src/core/ui/SettingsItem';
-import { Typography } from '@/src/core/ui/Typography';
-import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useUserStore } from '@/src/core/stores/userStore';
-import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
 import { LogIn, User, UserCircle } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useAuth } from '../../core/AuthContext';
+import { useTheme } from '../../core/ThemeContext';
+import { SettingsGroup } from '../../core/ui/SettingsGroup';
+import { SettingsItem } from '../../core/ui/SettingsItem';
+import { Typography } from '../../core/ui/Typography';
+import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
+import { useUserStore } from '../../features/trakt/stores/userStore';
 
 export default function AccountScreen() {
     const { theme } = useTheme();
     const router = useRouter();
+    const auth = useAuth();
+    const user = auth?.user;
     const traktAuth = useUserStore(s => s.traktAuth);
 
-    const isAuthenticated = !!traktAuth?.accessToken;
+    const isTraktAuthenticated = !!traktAuth?.accessToken;
+    const isSupabaseAuthenticated = !!user;
 
     return (
         <SettingsSubpage title="Account">
@@ -25,10 +29,10 @@ export default function AccountScreen() {
                     </View>
                     <View style={styles.profileInfo}>
                         <Typography variant="title-large" weight="bold" style={{ color: theme.colors.onSurface }}>
-                            {traktAuth?.user?.name || traktAuth?.user?.username || 'Guest User'}
+                            {user?.user_metadata?.name || user?.email || 'Guest User'}
                         </Typography>
                         <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {isAuthenticated ? 'Connected to Trakt' : 'Sign in to sync your library'}
+                            {isSupabaseAuthenticated ? 'Cloud Sync Active' : 'Sign in to sync your library'}
                         </Typography>
                     </View>
                 </View>
@@ -37,18 +41,18 @@ export default function AccountScreen() {
                     <SettingsItem
                         icon={User}
                         label="Trakt.tv"
-                        description={isAuthenticated ? "Account synced & active" : "Sync watch history across devices"}
+                        description={isTraktAuthenticated ? "Account synced & active" : "Sync watch history across devices"}
                         onPress={() => router.push('/settings/trakt')}
                     />
                 </SettingsGroup>
 
-                {!isAuthenticated && (
+                {!isSupabaseAuthenticated && (
                     <SettingsGroup title="Cloud Sync">
                         <SettingsItem
                             icon={LogIn}
                             label="Sign In"
                             description="Access your profile and favorites"
-                            onPress={() => { }}
+                            onPress={() => router.replace('/(auth)/login')}
                         />
                     </SettingsGroup>
                 )}

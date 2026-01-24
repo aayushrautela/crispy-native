@@ -5,6 +5,8 @@ export const storage = createMMKV({
     id: 'crispy-storage'
 });
 
+console.log('[Storage] MMKV Initialized. Active User:', storage.getString('crispy_active_user_id') || 'None');
+
 export type UserStorageKey =
     | 'crispy-mobile-navbar-style'
     | 'crispy-intro-skip-mode'
@@ -32,17 +34,25 @@ class StorageServiceImpl {
     public getUser<T>(key: UserStorageKey): T | null;
     public getUser<T>(key: UserStorageKey, defaultValue?: T): T | null {
         const activeUserId = storage.getString('crispy_active_user_id');
-        if (!activeUserId) return this.getRaw(key, defaultValue);
+        if (!activeUserId) {
+            const val = this.getRaw(key, defaultValue);
+            // console.log(`[Storage] GET ${key} (Global) ->`, val ? 'Found' : 'Null');
+            return val;
+        }
         const namespacedKey = "u_" + activeUserId + ":" + key;
-        return this.getRaw(namespacedKey, defaultValue);
+        const val = this.getRaw(namespacedKey, defaultValue);
+        // console.log(`[Storage] GET ${namespacedKey} (User ${activeUserId}) ->`, val ? 'Found' : 'Null');
+        return val;
     }
     public setUser<T>(key: UserStorageKey, value: T): void {
         const activeUserId = storage.getString('crispy_active_user_id');
         if (!activeUserId) {
+            console.log(`[Storage] SET ${key} (Global)`);
             this.setRaw(key, value);
             return;
         }
         const namespacedKey = "u_" + activeUserId + ":" + key;
+        console.log(`[Storage] SET ${namespacedKey} (User ${activeUserId})`);
         this.setRaw(namespacedKey, value);
     }
     public removeUser(key: UserStorageKey): void {
