@@ -136,7 +136,7 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
                         ]}
                     >
                         <Typography variant="label-large" weight="bold" style={{ color: theme.colors.onPrimary }}>
-                            Rate {rating * 2}/10
+                            Rate {rating}/5
                         </Typography>
                     </Pressable>
                 </View>

@@ -156,46 +156,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
         return `Ends at ${formattedTime}`;
     }, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
 
-    const {
-        isInWatchlist,
-        addToWatchlist,
-        removeFromWatchlist,
-        getUserRating,
-        rateContent,
-        removeContentRating,
-        isAuthenticated
-    } = useTraktContext();
 
-    const [showRatingModal, setShowRatingModal] = useState(false);
-
-    const isListed = useMemo(() => {
-        if (!meta) return false;
-        const id = meta.imdbId || meta.id;
-        const type = meta.type === 'movie' ? 'movie' : 'show';
-        return isInWatchlist(id, type);
-    }, [meta, isInWatchlist]);
-
-    const userRating = useMemo(() => {
-        if (!meta) return null;
-        const id = meta.imdbId || meta.id;
-        const type = meta.type === 'movie' ? 'movie' : 'show';
-        return getUserRating(id, type);
-    }, [meta, getUserRating]);
-
-    const handleListToggle = async () => {
-        if (!meta) return;
-        const id = meta.imdbId || meta.id;
-        const type = meta.type === 'movie' ? 'movie' : 'show'; // map 'tv'/'series' -> 'show'
-
-        // Safety check for types
-        const traktType = (meta.type === 'movie') ? 'movie' : 'show';
-
-        if (isListed) {
-            await removeFromWatchlist(id, traktType);
-        } else {
-            await addToWatchlist(id, traktType);
-        }
-    };
 
     return (
         <View style={styles.container}>
@@ -331,73 +292,9 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                             )}
                         </Pressable>
 
-                        {/* Secondary Actions (Trakt) */}
-                        {isAuthenticated && (
-                            <View style={styles.secondaryActions}>
-                                <Pressable
-                                    style={styles.secondaryBtn}
-                                    onPress={handleListToggle}
-                                >
-                                    {isListed ? (
-                                        <Check size={20} color={watchButtonColor} />
-                                    ) : (
-                                        <Plus size={20} color="white" />
-                                    )}
-                                    <Typography
-                                        variant="label"
-                                        weight="bold"
-                                        style={{ color: isListed ? watchButtonColor : 'white', marginLeft: 8 }}
-                                    >
-                                        My List
-                                    </Typography>
-                                </Pressable>
-
-                                <View style={styles.divider} />
-
-                                <Pressable
-                                    style={styles.secondaryBtn}
-                                    onPress={() => setShowRatingModal(true)}
-                                >
-                                    <Star
-                                        size={20}
-                                        color={userRating ? '#FFD700' : 'white'}
-                                        fill={userRating ? '#FFD700' : 'transparent'}
-                                    />
-                                    <Typography
-                                        variant="label"
-                                        weight="bold"
-                                        style={{ color: userRating ? '#FFD700' : 'white', marginLeft: 8 }}
-                                    >
-                                        {userRating ? `Rated ${userRating * 2}` : 'Rate'}
-                                    </Typography>
-                                </Pressable>
-                            </View>
-                        )}
                     </View>
                 </View>
             </View>
-
-            {/* Modals */}
-            <RatingModal
-                visible={showRatingModal}
-                onClose={() => setShowRatingModal(false)}
-                title={enriched.title || meta?.name}
-                initialRating={userRating ? userRating * 2 : 0}
-                onRate={(r) => {
-                    const id = meta.imdbId || meta.id;
-                    const type = meta.type === 'movie' ? 'movie' : 'show';
-                    // We need to handle 'episode' rating logic if this was an episode play, 
-                    // but meta details usually rates the SHOW/MOVIE.
-                    // If enriched has episode info, we might be rating episode? 
-                    // Usually Hero is Show/Movie level.
-                    rateContent(id, type, r); // r is 1-5, context handles *2
-                }}
-                onRemoveRating={() => {
-                    const id = meta.imdbId || meta.id;
-                    const type = meta.type === 'movie' ? 'movie' : 'show';
-                    removeContentRating(id, type);
-                }}
-            />
         </View>
     );
 });

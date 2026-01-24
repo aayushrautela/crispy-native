@@ -1,16 +1,15 @@
 import { useUserStore } from '../stores/userStore';
 import { TMDBService } from './TMDBService';
-TraktCollectionItem,
+import {
+    TraktCollectionItem,
     TraktDeviceCodeResponse,
     TraktPlaybackItem,
     TraktRatingItem,
+    TraktSyncResponse,
     TraktTokenResponse,
     TraktWatchedMovie,
     TraktWatchedShow,
-    TraktWatchlistItem,
-    TraktSyncPayload,
-    TraktSyncResponse,
-    TraktRatingPayload
+    TraktWatchlistItem
 } from './trakt-types';
 
 const TRAKT_API_BASE = 'https://api.trakt.tv';
@@ -515,38 +514,134 @@ export class TraktService {
             console.error('[TraktService] getComments error', e);
             return [];
         }
+    }
+
     // --- Write Operations ---
 
-    static async addToWatchlist(type: 'movies' | 'shows' | 'episodes', items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('watchlist', items);
+    // --- Write Operations (High Level) ---
+
+    // Generic helper to normalize IDs
+    private static getIdPayload(id: string | number) {
+        const idStr = String(id);
+        if (idStr.startsWith('tt')) return { ids: { imdb: idStr } };
+        const tmdbId = parseInt(idStr, 10);
+        if (!isNaN(tmdbId)) return { ids: { tmdb: tmdbId } };
+        return { ids: { tmdb: tmdbId } };
     }
 
-    static async removeFromWatchlist(type: 'movies' | 'shows' | 'episodes', items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('watchlist/remove', items);
+    static async addToWatchlist(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        const payload = type === 'movie'
+            ? { movies: [this.getIdPayload(id)] }
+            : { shows: [this.getIdPayload(id)] };
+        try {
+            await this.postSync('watchlist', payload);
+            return true;
+        } catch (e) {
+            console.error('addToWatchlist failed', e);
+            return false;
+        }
     }
 
-    static async addToHistory(items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('history', items);
+    static async removeFromWatchlist(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        const payload = type === 'movie'
+            ? { movies: [this.getIdPayload(id)] }
+            : { shows: [this.getIdPayload(id)] };
+        try {
+            await this.postSync('watchlist/remove', payload);
+            return true;
+        } catch (e) {
+            console.error('removeFromWatchlist failed', e);
+            return false;
+        }
     }
 
-    static async removeFromHistory(items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('history/remove', items);
+    static async addToCollection(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        const payload = type === 'movie'
+            ? { movies: [this.getIdPayload(id)] }
+            : { shows: [this.getIdPayload(id)] };
+        try {
+            await this.postSync('collection', payload);
+            return true;
+        } catch (e) {
+            console.error('addToCollection failed', e);
+            return false;
+        }
     }
 
-    static async addToCollection(items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('collection', items);
+    static async removeFromCollection(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        const payload = type === 'movie'
+            ? { movies: [this.getIdPayload(id)] }
+            : { shows: [this.getIdPayload(id)] };
+        try {
+            await this.postSync('collection/remove', payload);
+            return true;
+        } catch (e) {
+            console.error('removeFromCollection failed', e);
+            return false;
+        }
     }
 
-    static async removeFromCollection(items: TraktSyncPayload): Promise<TraktSyncResponse> {
-        return this.postSync('collection/remove', items);
+    static async addToHistory(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        // For shows, this marks the whole show as watched? Or should be season/episode specific?
+        // Nuvio has separate methods. For now let's support Movie and Show level.
+        const payload = type === 'movie'
+            ? { movies: [{ ...this.getIdPayload(id), watched_at: new Date().toISOString() }] }
+            : { shows: [{ ...this.getIdPayload(id), watched_at: new Date().toISOString() }] };
+
+        try {
+            await this.postSync('history', payload);
+            return true;
+        } catch (e) {
+            console.error('addToHistory failed', e);
+            return false;
+        }
     }
 
-    static async addRating(items: TraktRatingPayload): Promise<TraktSyncResponse> {
-        return this.postSync('ratings', items);
+    static async removeFromHistory(id: string | number, type: 'movie' | 'show'): Promise<boolean> {
+        const payload = type === 'movie'
+            ? { movies: [this.getIdPayload(id)] }
+            : { shows: [this.getIdPayload(id)] };
+        try {
+            await this.postSync('history/remove', payload);
+            return true;
+        } catch (e) {
+            console.error('removeFromHistory failed', e);
+            return false;
+        }
     }
 
-    static async removeRating(items: TraktRatingPayload): Promise<TraktSyncResponse> {
-        return this.postSync('ratings/remove', items);
+    static async addRating(id: string | number, type: 'movie' | 'show' | 'episode', rating: number): Promise<boolean> {
+        const ratingVal = Math.min(10, Math.max(1, rating)); // Ensure 1-10
+        const item = { ...this.getIdPayload(id), rating: ratingVal, rated_at: new Date().toISOString() };
+
+        let payload: any = {};
+        if (type === 'movie') payload.movies = [item];
+        if (type === 'show') payload.shows = [item];
+        if (type === 'episode') payload.episodes = [item];
+
+        try {
+            await this.postSync('ratings', payload);
+            return true;
+        } catch (e) {
+            console.error('addRating failed', e);
+            return false;
+        }
+    }
+
+    static async removeRating(id: string | number, type: 'movie' | 'show' | 'episode'): Promise<boolean> {
+        const item = this.getIdPayload(id);
+        let payload: any = {};
+        if (type === 'movie') payload.movies = [item];
+        if (type === 'show') payload.shows = [item];
+        if (type === 'episode') payload.episodes = [item];
+
+        try {
+            await this.postSync('ratings/remove', payload);
+            return true;
+        } catch (e) {
+            console.error('removeRating failed', e);
+            return false;
+        }
     }
 
     private static async postSync(endpoint: string, body: any): Promise<TraktSyncResponse> {
@@ -564,30 +659,32 @@ export class TraktService {
 
         return await res.json();
     }
-    const type = item.type === 'show' ? 'episode' : item.type;
-    const media = item.movie || item.show;
-    const ids = media?.ids;
-    const id = ids?.imdb || (ids?.tmdb ? `tmdb:${ids.tmdb}` : String(ids?.trakt || ''));
+
+    private static hydrateLibraryItem(item: any, timestamp: string): TraktPlaybackItem {
+        const type = item.type === 'show' ? 'episode' : item.type;
+        const media = item.movie || item.show;
+        const ids = media?.ids;
+        const id = ids?.imdb || (ids?.tmdb ? `tmdb:${ids.tmdb}` : String(ids?.trakt || ''));
 
         let poster = media?.images?.poster?.[0];
-if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
+        if (poster && !poster.startsWith('http')) poster = `https://${poster}`;
 
-return {
-    id: ids?.trakt || Math.random(),
-    progress: 0,
-    paused_at: timestamp,
-    type: type,
-    movie: item.movie,
-    show: item.show,
-    meta: {
-        id: id,
-        name: media?.title || 'Unknown',
-        poster: poster,
-        year: media?.year?.toString(),
-        genres: media?.genres,
-        rating: media?.rating?.toFixed(1),
-    }
-};
+        return {
+            id: ids?.trakt || Math.random(),
+            progress: 0,
+            paused_at: timestamp,
+            type: type,
+            movie: item.movie,
+            show: item.show,
+            meta: {
+                id: id,
+                name: media?.title || 'Unknown',
+                poster: poster,
+                year: media?.year?.toString(),
+                genres: media?.genres,
+                rating: media?.rating?.toFixed(1),
+            }
+        };
     }
 }
 

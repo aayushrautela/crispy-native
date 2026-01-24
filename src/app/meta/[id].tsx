@@ -7,11 +7,13 @@ import { HeroSection } from '@/src/components/meta/HeroSection';
 import { MetaDetailsSkeleton } from '@/src/components/meta/MetaDetailsSkeleton';
 import { RatingsSection } from '@/src/components/meta/RatingsSection';
 import { StreamSelector } from '@/src/components/player/StreamSelector';
+import { RatingModal } from '@/src/components/ui/RatingModal';
+import { useTraktContext } from '@/src/core/context/TraktContext';
 import { useAiInsights } from '@/src/core/hooks/useAiInsights';
 import { useMetaAggregator } from '@/src/core/hooks/useMetaAggregator';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Bookmark, Circle, MoreVertical, Share2, Star } from 'lucide-react-native';
+import { ArrowLeft, Check, Circle, MoreVertical, Plus, Share2, Star } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -44,6 +46,58 @@ export default function MetaDetailsScreen() {
     });
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
+
+    // Trakt Logic
+    const {
+        isAuthenticated,
+        isInWatchlist,
+        addToWatchlist,
+        removeFromWatchlist,
+        isMovieWatched,
+        markMovieAsWatched,
+        removeMovieFromHistory,
+        getUserRating,
+        rateContent,
+        removeContentRating
+    } = useTraktContext();
+
+    const [showRatingModal, setShowRatingModal] = useState(false);
+
+    // Computed states
+    const isListed = useMemo(() => {
+        if (!meta) return false;
+        const baseId = enriched.imdbId || id as string;
+        const traktType = isSeries ? 'show' : 'movie';
+        return isInWatchlist(baseId, traktType);
+    }, [meta, enriched.imdbId, id, isSeries, isInWatchlist]);
+
+    const isWatched = useMemo(() => {
+        if (!meta || isSeries) return false; // Shows need complex logic usually (all eps watched?)
+        const baseId = enriched.imdbId || id as string;
+        return isMovieWatched(baseId);
+    }, [meta, enriched.imdbId, id, isSeries, isMovieWatched]);
+
+    const userRating = useMemo(() => {
+        if (!meta) return null;
+        const baseId = enriched.imdbId || id as string;
+        const traktType = isSeries ? 'show' : 'movie';
+        return getUserRating(baseId, traktType);
+    }, [meta, enriched.imdbId, id, isSeries, getUserRating]);
+
+    const handleWatchlistToggle = async () => {
+        if (!isAuthenticated) return;
+        const baseId = enriched.imdbId || id as string;
+        const traktType = isSeries ? 'show' : 'movie';
+        if (isListed) await removeFromWatchlist(baseId, traktType);
+        else await addToWatchlist(baseId, traktType);
+    };
+
+    const handleWatchedToggle = async () => {
+        if (!isAuthenticated || isSeries) return;
+        const baseId = enriched.imdbId || id as string;
+        if (isWatched) await removeMovieFromHistory(baseId);
+        else await markMovieAsWatched(baseId);
+    };
 
     // AI Hooks
     const { loadFromCache } = useAiInsights();
@@ -127,19 +181,70 @@ export default function MetaDetailsScreen() {
 
                 <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
                     <View style={styles.iconActionRow}>
-                        <Pressable style={styles.iconActionItem}>
-                            <Bookmark size={24} color="white" />
-                            <Typography variant="label" style={styles.iconActionLabel}>Watchlist</Typography>
+                        <Pressable
+                            style={styles.iconActionItem}
+                            onPress={handleWatchlistToggle}
+                            disabled={!isAuthenticated}
+                        >
+                            {isListed ? (
+                                <Check size={24} color={'white'} />
+                            ) : (
+                                <Plus size={24} color="white" />
+                            )}
+                            <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                                Collection
+                            </Typography>
                         </Pressable>
-                        <Pressable style={styles.iconActionItem}>
-                            <Circle size={24} color="white" />
-                            <Typography variant="label" style={styles.iconActionLabel}>Watched it?</Typography>
-                        </Pressable>
-                        <Pressable style={styles.iconActionItem}>
-                            <Star size={24} color="white" />
-                            <Typography variant="label" style={styles.iconActionLabel}>Rate</Typography>
+
+                        {!isSeries && (
+                            <Pressable
+                                style={styles.iconActionItem}
+                                onPress={handleWatchedToggle}
+                                disabled={!isAuthenticated}
+                            >
+                                {isWatched ? (
+                                    <Check size={24} color={'white'} />
+                                ) : (
+                                    <Circle size={24} color="white" />
+                                )}
+                                <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                                    Watched
+                                </Typography>
+                            </Pressable>
+                        )}
+
+                        <Pressable
+                            style={styles.iconActionItem}
+                            onPress={() => isAuthenticated && setShowRatingModal(true)}
+                            disabled={!isAuthenticated}
+                        >
+                            <Star
+                                size={24}
+                                color={userRating ? '#FFD700' : 'white'}
+                                fill={userRating ? '#FFD700' : 'transparent'}
+                            />
+                            <Typography variant="label" style={[styles.iconActionLabel, userRating && { color: '#FFD700' }]}>
+                                {userRating ? `Rated ${userRating * 2}` : 'Rate'}
+                            </Typography>
                         </Pressable>
                     </View>
+
+                    <RatingModal
+                        visible={showRatingModal}
+                        onClose={() => setShowRatingModal(false)}
+                        title={enriched.title || meta?.name}
+                        initialRating={userRating ? userRating * 2 : 0}
+                        onRate={(r) => {
+                            const baseId = enriched.imdbId || id as string;
+                            const traktType = isSeries ? 'show' : 'movie';
+                            rateContent(baseId, traktType, r);
+                        }}
+                        onRemoveRating={() => {
+                            const baseId = enriched.imdbId || id as string;
+                            const traktType = isSeries ? 'show' : 'movie';
+                            removeContentRating(baseId, traktType);
+                        }}
+                    />
 
                     <View style={{ marginHorizontal: -20 }}>
                         <RatingsSection enriched={enriched} colors={colors} />
@@ -193,7 +298,7 @@ export default function MetaDetailsScreen() {
                         </View>
                     )}
                 </View>
-            </Animated.ScrollView>
+            </Animated.ScrollView >
 
             <CustomBottomSheet ref={streamBottomSheetRef} title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`} enableDynamicSizing maxHeight={SCREEN_WIDTH * 1.5} scrollable={false}>
                 <StreamSelector
@@ -204,7 +309,7 @@ export default function MetaDetailsScreen() {
                     onStreamsLoaded={setAvailableStreams}
                 />
             </CustomBottomSheet>
-        </View>
+        </View >
     );
 }
 

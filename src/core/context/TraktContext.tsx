@@ -176,13 +176,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         [loadAllCollections]
     );
 
-    // Helpers
-    const createTraktId = (id: string) => {
-        if (id.startsWith('tt')) return { ids: { imdb: id } };
-        const tmdbId = parseInt(id, 10);
-        if (!isNaN(tmdbId)) return { ids: { tmdb: tmdbId } };
-        return { ids: { tmdb: tmdbId } }; // Fallback
-    };
+
 
     // --- Status Checks ---
 
@@ -198,39 +192,43 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         return false;
     }, []);
 
-    const isInWatchlist = useCallback((id: string, type: 'movie' | 'show') => {
-        return watchlistIds.has(`${type}:${id}`) || watchlistIds.has(id);
+    const isInWatchlist = useCallback((id: string | number, type: 'movie' | 'show') => {
+        const idStr = String(id);
+        return watchlistIds.has(`${type}:${idStr}`) || watchlistIds.has(idStr);
     }, [watchlistIds]);
 
-    const isInCollection = useCallback((id: string, type: 'movie' | 'show') => {
-        return collectionIds.has(`${type}:${id}`) || collectionIds.has(id);
+    const isInCollection = useCallback((id: string | number, type: 'movie' | 'show') => {
+        const idStr = String(id);
+        return collectionIds.has(`${type}:${idStr}`) || collectionIds.has(idStr);
     }, [collectionIds]);
 
-    const getUserRating = useCallback((id: string, type: 'movie' | 'show'): number | null => {
+    const getUserRating = useCallback((id: string | number, type: 'movie' | 'show'): number | null => {
+        const idStr = String(id);
         const item = ratedContent.find(r => {
             const media = type === 'movie' ? r.movie : r.show;
             if (!media) return false;
             // Check IDs
-            if (id.startsWith('tt')) return media.ids.imdb === id;
-            return media.ids.tmdb === parseInt(id, 10);
+            if (idStr.startsWith('tt')) return media.ids.imdb === idStr;
+            return media.ids.tmdb === parseInt(idStr, 10);
         });
         return item ? Math.round(item.rating / 2) : null; // 10 -> 5 scale
     }, [ratedContent]);
 
-    const getWatchState = useCallback((id: string, type: 'movie' | 'show') => {
+    const getWatchState = useCallback((id: string | number, type: 'movie' | 'show') => {
+        const idStr = String(id);
         // 1. Check Continue Watching
         const playbackItem = continueWatching.find(item => {
             if (type === 'movie' && item.type === 'movie') {
                 const m = item.movie;
                 if (!m) return false;
-                if (id.startsWith('tt')) return m.ids.imdb === id;
-                return m.ids.tmdb === parseInt(id, 10);
+                if (idStr.startsWith('tt')) return m.ids.imdb === idStr;
+                return m.ids.tmdb === parseInt(idStr, 10);
             }
             if (type === 'show' && (item.type === 'episode' || item.show)) {
                 const s = item.show;
                 if (!s) return false;
-                if (id.startsWith('tt')) return s.ids.imdb === id;
-                return s.ids.tmdb === parseInt(id, 10);
+                if (idStr.startsWith('tt')) return s.ids.imdb === idStr;
+                return s.ids.tmdb === parseInt(idStr, 10);
             }
             return false;
         });
@@ -244,7 +242,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Check Watched
-        if (isMovieWatched(id) || (type === 'show' && watchedIds.has(`show:${id}`))) {
+        if (isMovieWatched(idStr) || (type === 'show' && watchedIds.has(`show:${idStr}`))) {
             return { state: 'rewatch' as const };
         }
 
@@ -254,18 +252,20 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
     // --- Actions ---
 
+    // --- Actions ---
+
     const addToWatchlist = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
 
         // Optimistic
         setWatchlistIds(prev => new Set(prev).add(`${type}:${id}`).add(id));
 
-        const payload = type === 'movie' ? { movies: [createTraktId(id)] } : { shows: [createTraktId(id)] };
-        try {
-            await TraktService.addToWatchlist(type === 'movie' ? 'movies' : 'shows', payload);
+        const success = await TraktService.addToWatchlist(id, type);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
+            // Revert
             setWatchlistIds(prev => {
                 const next = new Set(prev);
                 next.delete(`${type}:${id}`);
@@ -287,12 +287,11 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             return next;
         });
 
-        const payload = type === 'movie' ? { movies: [createTraktId(id)] } : { shows: [createTraktId(id)] };
-        try {
-            await TraktService.removeFromWatchlist(type === 'movie' ? 'movies' : 'shows', payload);
+        const success = await TraktService.removeFromWatchlist(id, type);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
             // Revert
             setWatchlistIds(prev => new Set(prev).add(`${type}:${id}`).add(id));
             return false;
@@ -302,12 +301,12 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const addToCollection = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
         setCollectionIds(prev => new Set(prev).add(`${type}:${id}`).add(id));
-        const payload = type === 'movie' ? { movies: [createTraktId(id)] } : { shows: [createTraktId(id)] };
-        try {
-            await TraktService.addToCollection(payload);
+
+        const success = await TraktService.addToCollection(id, type);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
             setCollectionIds(prev => {
                 const next = new Set(prev);
                 next.delete(`${type}:${id}`);
@@ -325,12 +324,12 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             next.delete(id);
             return next;
         });
-        const payload = type === 'movie' ? { movies: [createTraktId(id)] } : { shows: [createTraktId(id)] };
-        try {
-            await TraktService.removeFromCollection(payload);
+
+        const success = await TraktService.removeFromCollection(id, type);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
@@ -339,21 +338,15 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         if (!isAuthenticated) return false;
 
         const traktRating = rating * 2; // 5 -> 10 scale
-        const payloadBase = createTraktId(id);
-        const itemPayload = { ...payloadBase, rating: traktRating, rated_at: new Date().toISOString() };
-
-        let payload: any = {};
-        if (type === 'movie') payload.movies = [itemPayload];
-        if (type === 'show') payload.shows = [itemPayload];
-        if (type === 'episode') payload.episodes = [itemPayload];
 
         // Optimistic Update
         const optimisticItem: TraktRatingItem = {
             rating: traktRating,
             rated_at: new Date().toISOString(),
             type: type,
-            movie: type === 'movie' ? { ids: payloadBase.ids, title: '' } as any : undefined,
-            show: type === 'show' ? { ids: payloadBase.ids, title: '' } as any : undefined,
+            // Minimal optimistic object
+            movie: type === 'movie' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
+            show: type === 'show' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
         };
 
         setRatedContent(prev => {
@@ -366,23 +359,17 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             return [...filtered, optimisticItem];
         });
 
-        try {
-            await TraktService.addRating(payload);
+        const success = await TraktService.addRating(id, type, rating);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
 
     const removeContentRating = useCallback(async (id: string, type: 'movie' | 'show' | 'episode') => {
         if (!isAuthenticated) return false;
-
-        const payloadBase = createTraktId(id);
-        let payload: any = {};
-        if (type === 'movie') payload.movies = [payloadBase];
-        if (type === 'show') payload.shows = [payloadBase];
-        if (type === 'episode') payload.episodes = [payloadBase];
 
         setRatedContent(prev => {
             return prev.filter(r => {
@@ -393,11 +380,11 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             });
         });
 
-        try {
-            await TraktService.removeRating(payload);
+        const success = await TraktService.removeRating(id, type);
+        if (success) {
             debouncedSync();
             return true;
-        } catch {
+        } else {
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
@@ -405,11 +392,14 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const markMovieAsWatched = async (id: string) => {
         if (!isAuthenticated) return false;
         setWatchedIds(prev => new Set(prev).add(`movie:${id}`).add(id));
-        try {
-            await TraktService.addToHistory({ movies: [createTraktId(id)] });
+
+        const success = await TraktService.addToHistory(id, 'movie');
+        if (success) {
             debouncedSync();
             return true;
-        } catch { return false; }
+        } else {
+            return false;
+        }
     };
 
     const removeMovieFromHistory = async (id: string) => {
@@ -420,11 +410,14 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             next.delete(id);
             return next;
         });
-        try {
-            await TraktService.removeFromHistory({ movies: [createTraktId(id)] });
+
+        const success = await TraktService.removeFromHistory(id, 'movie');
+        if (success) {
             debouncedSync();
             return true;
-        } catch { return false; }
+        } else {
+            return false;
+        }
     };
 
     // Placeholder
