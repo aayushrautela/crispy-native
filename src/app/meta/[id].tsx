@@ -13,9 +13,9 @@ import { useAiInsights } from '@/src/core/hooks/useAiInsights';
 import { useMetaAggregator } from '@/src/core/hooks/useMetaAggregator';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Check, Circle, MoreVertical, Plus, Share2, Star } from 'lucide-react-native';
+import { ArrowLeft, Check, Circle, Plus, Share2, Star } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
+import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CatalogRow } from '../../components/CatalogRow';
@@ -54,6 +54,7 @@ export default function MetaDetailsScreen() {
         addToWatchlist,
         removeFromWatchlist,
         isMovieWatched,
+        isEpisodeWatched,
         markMovieAsWatched,
         removeMovieFromHistory,
         getUserRating,
@@ -139,6 +140,19 @@ export default function MetaDetailsScreen() {
 
         router.push({ pathname: '/player', params });
     };
+    const handleShare = async () => {
+        const baseId = enriched.imdbId || id as string;
+        const url = `https://www.imdb.com/title/${baseId}/`;
+        try {
+            await Share.share({
+                message: `Check out ${enriched.title || meta?.name} on IMDb: ${url}`,
+                url: url, // iOS
+                title: enriched.title || meta?.name // Android
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     const seasons = useMemo(() => {
         if (enriched?.seasons?.length > 0) {
@@ -159,8 +173,9 @@ export default function MetaDetailsScreen() {
                     <ArrowLeft color="white" size={24} />
                 </Pressable>
                 <View style={styles.topRightActions}>
-                    <Pressable style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}><Share2 color="white" size={20} /></Pressable>
-                    <Pressable style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}><MoreVertical color="white" size={20} /></Pressable>
+                    <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                        <Share2 color="white" size={20} />
+                    </Pressable>
                 </View>
             </View>
 
@@ -279,6 +294,7 @@ export default function MetaDetailsScreen() {
                                 colors={colors}
                                 theme={theme}
                                 enrichedSeasons={enriched.seasons}
+                                isWatched={(epNum) => isEpisodeWatched((enriched.imdbId || id) as string, activeSeason, epNum)}
                                 onEpisodePress={(ep) => {
                                     setSelectedEpisode(ep);
                                     streamBottomSheetRef.current?.present();

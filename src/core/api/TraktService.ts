@@ -427,6 +427,17 @@ export class TraktService {
         }
     }
 
+    static async getWatchedShows(): Promise<TraktWatchedShow[]> {
+        if (!this.auth.accessToken) return [];
+        try {
+            const res = await fetch(`${TRAKT_API_BASE}/sync/watched/shows?extended=images,full`, { headers: this.headers });
+            return await res.json();
+        } catch (e) {
+            console.error('Trakt getWatchedShows error', e);
+            return [];
+        }
+    }
+
     static async getWatched(): Promise<TraktPlaybackItem[]> {
         if (!this.auth.accessToken) return [];
         try {

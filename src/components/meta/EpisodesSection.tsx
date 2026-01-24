@@ -2,28 +2,45 @@ import { ExpressiveSurface } from '@/src/cdk/components/ExpressiveSurface';
 import { Typography } from '@/src/cdk/components/Typography';
 import { SectionHeader } from '@/src/components/SectionHeader';
 import { Image as ExpoImage } from 'expo-image';
+import { Eye } from 'lucide-react-native';
 import React, { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-const hexToRgba = (hex: string, opacity: number) => {
-    let r = 0, g = 0, b = 0;
-    if (hex.length === 4) {
-        r = parseInt(hex[1] + hex[1], 16);
-        g = parseInt(hex[2] + hex[2], 16);
-        b = parseInt(hex[3] + hex[3], 16);
-    } else if (hex.length === 7) {
-        r = parseInt(hex.slice(1, 3), 16);
-        g = parseInt(hex.slice(3, 5), 16);
-        b = parseInt(hex.slice(5, 7), 16);
-    }
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+const isDarkColor = (hex: string) => {
+    if (!hex) return true;
+    const c = hex.substring(1);      // strip #
+    const rgb = parseInt(c, 16);   // convert rrggbb to decimal
+    const r = (rgb >> 16) & 0xff;  // extract red
+    const g = (rgb >> 8) & 0xff;   // extract green
+    const b = (rgb >> 0) & 0xff;   // extract blue
+
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b; // per ITU-R BT.709
+
+    return luma < 60;
 };
 
-const EpisodeItem = memo(({ episode, palette, onPress }: { episode: any; palette: any; onPress: () => void }) => {
+const EpisodeItem = memo(({ episode, palette, onPress, watched }: { episode: any; palette: any; onPress: () => void; watched?: boolean }) => {
+    const accentColor = useMemo(() => {
+        if (isDarkColor(palette.lightVibrant)) {
+            return palette.lightMuted;
+        }
+        return palette.lightVibrant;
+    }, [palette]);
+
     return (
         <Pressable onPress={onPress}>
             <View style={[styles.episodeCard, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
-                <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
+                <View>
+                    <ExpoImage source={{ uri: episode.thumbnail || episode.poster }} style={styles.episodeThumb} />
+                    {watched && (
+                        <View style={styles.watchedOverlay}>
+                            <View style={[styles.watchedBadge, { backgroundColor: accentColor }]}>
+                                <Eye size={12} color="black" />
+                                <Typography variant="label" weight="bold" style={{ color: 'black', fontSize: 10 }}>Watched</Typography>
+                            </View>
+                        </View>
+                    )}
+                </View>
                 <View style={styles.episodeInfo}>
                     <Typography variant="label" weight="black" numberOfLines={1} style={{ color: 'white' }}>
                         E{episode.episode || episode.number}: {episode.name || episode.title}
@@ -62,6 +79,7 @@ interface EpisodesSectionProps {
     colors: any;
     theme: any;
     enrichedSeasons?: any[];
+    isWatched?: (epNumber: number) => boolean;
 }
 
 export const EpisodesSection = memo(({
@@ -72,7 +90,8 @@ export const EpisodesSection = memo(({
     onEpisodePress,
     colors,
     theme,
-    enrichedSeasons
+    enrichedSeasons,
+    isWatched
 }: EpisodesSectionProps) => {
     return (
         <View style={styles.section}>
@@ -118,6 +137,7 @@ export const EpisodesSection = memo(({
                         episode={ep}
                         palette={colors}
                         onPress={() => onEpisodePress(ep)}
+                        watched={isWatched ? isWatched(ep.episode || ep.number) : false}
                     />
                 ))}
             </ScrollView>
@@ -158,5 +178,24 @@ const styles = StyleSheet.create({
     },
     episodeInfo: {
         padding: 12,
+    },
+    watchedOverlay: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        zIndex: 10,
+    },
+    watchedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     }
 });

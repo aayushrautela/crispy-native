@@ -79,6 +79,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
     const [collectionIds, setCollectionIds] = useState<Set<string>>(new Set());
     const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
+    const [watchedEpisodeIds, setWatchedEpisodeIds] = useState<Set<string>>(new Set());
 
     // Derived Lists for specific Types (matching webui interface)
     const watchlistMovies = useMemo(() => watchlist.filter(i => i.type === 'movie').map(i => ({ ...i, movie: i.movie, type: 'movie' } as any)), [watchlist]); // Cast as any because PlaybackItem != WatchlistItem exactly, but close enough for UI
@@ -96,11 +97,12 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         if (!isAuthenticated) return;
         setIsLoading(true);
         try {
-            const [w, c, p, r] = await Promise.all([
+            const [w, c, p, r, watchedShowsRaw] = await Promise.all([
                 TraktService.getWatchlist(),
                 TraktService.getCollection(),
                 TraktService.getContinueWatching(),
-                TraktService.getRated()
+                TraktService.getRated(),
+                TraktService.getWatchedShows()
             ]);
 
             // We also need watched history for "watched" checks (completed items)
@@ -154,6 +156,20 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             });
             setWatchedIds(newWatchedIds);
 
+            // Populate Watched Episodes
+            const newWatchedEpisodeIds = new Set<string>();
+            watchedShowsRaw.forEach(show => {
+                if (show.show?.ids?.imdb && show.seasons) {
+                    const showId = show.show.ids.imdb;
+                    show.seasons.forEach(season => {
+                        season.episodes.forEach(ep => {
+                            newWatchedEpisodeIds.add(`${showId}:${season.number}:${ep.number}`);
+                        });
+                    });
+                }
+            });
+            setWatchedEpisodeIds(newWatchedEpisodeIds);
+
         } catch (e) {
             console.error('Failed to load Trakt collections', e);
         } finally {
@@ -185,12 +201,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     }, [watchedIds]);
 
     const isEpisodeWatched = useCallback((imdbId: string, season: number, episode: number) => {
-        // This is harder with just sets. Requires detailed history check.
-        // For now, return false or implement detailed check if needed.
-        // Or store episodes in a specific set structure "showId:S:E"
-        // Let's implement basic support via API check or detailed history download later
-        return false;
-    }, []);
+        return watchedEpisodeIds.has(`${imdbId}:${season}:${episode}`);
+    }, [watchedEpisodeIds]);
 
     const isInWatchlist = useCallback((id: string | number, type: 'movie' | 'show') => {
         const idStr = String(id);
