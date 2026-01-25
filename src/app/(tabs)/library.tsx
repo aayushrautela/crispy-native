@@ -105,7 +105,20 @@ export default function LibraryScreen() {
             switch (selectedFilter) {
                 case 'watchlist': data = await TraktService.getWatchlist(); break;
                 case 'watched': data = await TraktService.getWatched(); break;
-                case 'continue': data = await TraktService.getContinueWatching(); break;
+                case 'continue':
+                    const continueData = await TraktService.getContinueWatching();
+                    data = continueData.map(item => ({
+                        ...item,
+                        // Force Poster shape for Grid View
+                        posterShape: 'poster',
+                        // Use Show Title instead of "Show - Episode" for cleaner grid
+                        name: item.show?.title || item.movie?.title || item.name,
+                        // Strip Episode details to prevent "S1E1" display
+                        season: undefined,
+                        episodeNumber: undefined,
+                        episodeTitle: undefined,
+                    }));
+                    break;
                 case 'collection': data = await TraktService.getCollection(); break;
                 case 'rated': data = await TraktService.getRated(); break;
             }
