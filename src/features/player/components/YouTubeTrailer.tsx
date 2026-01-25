@@ -75,5 +75,6 @@ const styles = StyleSheet.create({
     webview: {
         flex: 1,
         backgroundColor: 'black',
+        transform: [{ scale: 1.35 }], // Zoom in to crop cinematic black bars
     },
 });
