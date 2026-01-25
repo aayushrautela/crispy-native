@@ -4,7 +4,7 @@ import { persistQueryClient } from '@tanstack/react-query-persist-client';
 import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import { AddonService } from './services/AddonService';
 import { storage } from './storage';
-import { useAddonStore } from './stores/addonStore';
+import { useUserStore } from './stores/userStore';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -19,7 +19,7 @@ const persister = createSyncStoragePersister({
     storage: {
         getItem: (key) => storage.getString(key) ?? null,
         setItem: (key, value) => storage.set(key, value),
-        removeItem: (key) => storage.delete(key),
+        removeItem: (key) => storage.remove(key),
     },
 });
 
@@ -35,15 +35,15 @@ interface DiscoveryContextValue {
 const DiscoveryContext = createContext<DiscoveryContextValue | null>(null);
 
 export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { addonUrls, updateManifest } = useAddonStore();
+    const { addons, updateManifest } = useUserStore();
 
     const refreshAddons = async () => {
-        for (const url of addonUrls) {
+        for (const addon of addons) {
             try {
-                const manifest = await AddonService.fetchManifest(url);
-                updateManifest(url, manifest);
+                const manifest = await AddonService.fetchManifest(addon.url);
+                updateManifest(addon.url, manifest);
             } catch (e) {
-                console.error(`Failed to refresh addon: ${url}`, e);
+                console.error(`Failed to refresh addon: ${addon.url}`, e);
             }
         }
     };

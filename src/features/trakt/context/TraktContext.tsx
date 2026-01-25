@@ -1,5 +1,5 @@
-
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useTraktStore } from '@/src/core/stores/traktStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import debounce from 'lodash.debounce';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -57,29 +57,29 @@ const TraktContext = createContext<TraktContextProps | undefined>(undefined);
 export function TraktProvider({ children }: { children: ReactNode }) {
     const { traktAuth } = useUserStore();
     const isAuthenticated = !!traktAuth.accessToken;
-    const [isLoading, setIsLoading] = useState<boolean>(isAuthenticated);
     const [userProfile, setUserProfile] = useState<TraktUser | null>(null);
 
-    // State
-    const [watchedMovies, setWatchedMovies] = useState<TraktWatchedMovie[]>([]);
-    const [watchedShows, setWatchedShows] = useState<TraktWatchedShow[]>([]); // Note: This structure differs from playback items
-    // We might need to fetch full history or derive from playback/watched sync
-
-    // For native app simplification, we'll map getWatched() response (PlaybackItems) 
-    // to separate arrays if needed, or just use sets for checking status.
-    // TraktService.getWatched() returns TraktPlaybackItem[] (hydrated).
-    // Let's stick to the requested interface but adapt our data source.
-
-    const [watchlist, setWatchlist] = useState<TraktPlaybackItem[]>([]);
-    const [collection, setCollection] = useState<TraktPlaybackItem[]>([]);
-    const [continueWatching, setContinueWatching] = useState<TraktPlaybackItem[]>([]);
-    const [ratedContent, setRatedContent] = useState<TraktRatingItem[]>([]);
-
-    // Helper Sets for O(1) Access
-    const [watchlistIds, setWatchlistIds] = useState<Set<string>>(new Set());
-    const [collectionIds, setCollectionIds] = useState<Set<string>>(new Set());
-    const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
-    const [watchedEpisodeIds, setWatchedEpisodeIds] = useState<Set<string>>(new Set());
+    // Consume Zustand Store
+    const store = useTraktStore();
+    const {
+        watchlist,
+        collection,
+        continueWatching,
+        ratedContent,
+        isLoading,
+        setIsLoading,
+        setWatchlist,
+        setCollection,
+        setContinueWatching,
+        setRatedContent,
+        setWatchedShowsRaw,
+        setWatchedHistory,
+        hydrate,
+        isInWatchlist: storeIsInWatchlist,
+        isInCollection: storeIsInCollection,
+        isWatched: storeIsWatched,
+        isEpisodeWatched: storeIsEpisodeWatched
+    } = store;
 
     // Derived Lists for specific Types (matching webui interface)
     const watchlistMovies = useMemo(() => watchlist.filter(i => i.type === 'movie').map(i => ({ ...i, movie: i.movie, type: 'movie' } as any)), [watchlist]); // Cast as any because PlaybackItem != WatchlistItem exactly, but close enough for UI
@@ -87,6 +87,10 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
     const collectionMovies = useMemo(() => collection.filter(i => i.type === 'movie').map(i => ({ ...i, movie: i.movie, type: 'movie' } as any)), [collection]);
     const collectionShows = useMemo(() => collection.filter(i => i.type === 'episode' || i.show).map(i => ({ ...i, show: i.show, type: 'show' } as any)), [collection]);
+
+    // Compatibility for legacy types
+    const watchedMovies: TraktWatchedMovie[] = [];
+    const watchedShows: TraktWatchedShow[] = [];
 
     const checkAuthStatus = useCallback(async () => {
         // user profile fetching could be added to TraktService if needed
@@ -105,70 +109,30 @@ export function TraktProvider({ children }: { children: ReactNode }) {
                 TraktService.getWatchedShows()
             ]);
 
-            // We also need watched history for "watched" checks (completed items)
-            // extending to fetch watched history
-            const h = await TraktService.getWatched(); // This returns PlaybackItems derived from watched history
+            const h = await TraktService.getWatched();
 
-            setWatchlist(w);
-            setCollection(c);
-            setContinueWatching(p);
-            setRatedContent(r);
-
-            // Rebuild Sets with explicit providers
-            const newWatchlistIds = new Set<string>();
-            w.forEach(item => {
-                const media = item.movie || item.show;
-                if (media?.ids?.imdb) newWatchlistIds.add(`imdb:${media.ids.imdb}`);
-                if (media?.ids?.tmdb) newWatchlistIds.add(`tmdb:${media.ids.tmdb}`);
-                if (media?.ids?.trakt) newWatchlistIds.add(`trakt:${media.ids.trakt}`);
-            });
-            setWatchlistIds(newWatchlistIds);
-
-            const newCollectionIds = new Set<string>();
-            c.forEach(item => {
-                const media = item.movie || item.show;
-                if (media?.ids?.imdb) newCollectionIds.add(`imdb:${media.ids.imdb}`);
-                if (media?.ids?.tmdb) newCollectionIds.add(`tmdb:${media.ids.tmdb}`);
-                if (media?.ids?.trakt) newCollectionIds.add(`trakt:${media.ids.trakt}`);
-            });
-            setCollectionIds(newCollectionIds);
-
-            const newWatchedIds = new Set<string>();
-            h.forEach(item => {
-                const media = item.movie || item.show;
-                if (media?.ids?.imdb) newWatchedIds.add(`imdb:${media.ids.imdb}`);
-                if (media?.ids?.tmdb) newWatchedIds.add(`tmdb:${media.ids.tmdb}`);
-                if (media?.ids?.trakt) newWatchedIds.add(`trakt:${media.ids.trakt}`);
-            });
-            setWatchedIds(newWatchedIds);
-
-            // Populate Watched Episodes
-            const newWatchedEpisodeIds = new Set<string>();
-            watchedShowsRaw.forEach(show => {
-                if (show.show?.ids?.imdb && show.seasons) {
-                    const showId = show.show.ids.imdb;
-                    show.seasons.forEach(season => {
-                        season.episodes.forEach(ep => {
-                            newWatchedEpisodeIds.add(`${showId}:${season.number}:${ep.number}`);
-                        });
-                    });
-                }
-            });
-            setWatchedEpisodeIds(newWatchedEpisodeIds);
+            // Atomic Store Updates
+            setWatchlist(w || []);
+            setCollection(c || []);
+            setContinueWatching(p || []);
+            setRatedContent(r || []);
+            setWatchedShowsRaw(watchedShowsRaw || []);
+            setWatchedHistory(h || []);
 
         } catch (e) {
             console.error('Failed to load Trakt collections', e);
         } finally {
             setIsLoading(false);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, setIsLoading, setWatchlist, setCollection, setContinueWatching, setRatedContent, setWatchedShowsRaw, setWatchedHistory]);
 
-    // Initial Load
+    // Initial Load & Hydration
     useEffect(() => {
+        hydrate(); // Load from MMKV immediately
         if (isAuthenticated) {
             loadAllCollections();
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, hydrate]);
 
     // Debounced Sync
     const debouncedSync = useMemo(
@@ -183,28 +147,28 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     // --- Status Checks ---
 
     const isMovieWatched = useCallback((imdbId: string) => {
-        return watchedIds.has(`imdb:${imdbId}`) || watchedIds.has(imdbId);
-    }, [watchedIds]);
+        return storeIsWatched(`imdb:${imdbId}`) || storeIsWatched(imdbId);
+    }, [storeIsWatched]);
 
     const isEpisodeWatched = useCallback((imdbId: string, season: number, episode: number) => {
-        return watchedEpisodeIds.has(`${imdbId}:${season}:${episode}`);
-    }, [watchedEpisodeIds]);
+        return storeIsEpisodeWatched(imdbId, season, episode);
+    }, [storeIsEpisodeWatched]);
 
     const isInWatchlist = useCallback((id: string | number, type: 'movie' | 'series') => {
         const idStr = String(id);
-        if (idStr.startsWith('tt')) return watchlistIds.has(`imdb:${idStr}`);
-        if (idStr.startsWith('tmdb:')) return watchlistIds.has(`tmdb:${idStr.replace('tmdb:', '')}`);
-        if (idStr.startsWith('trakt:')) return watchlistIds.has(`trakt:${idStr.replace('trakt:', '')}`);
-        return watchlistIds.has(`${type}:${idStr}`) || watchlistIds.has(idStr);
-    }, [watchlistIds]);
+        if (idStr.startsWith('tt')) return storeIsInWatchlist(`imdb:${idStr}`);
+        if (idStr.startsWith('tmdb:')) return storeIsInWatchlist(`tmdb:${idStr.replace('tmdb:', '')}`);
+        if (idStr.startsWith('trakt:')) return storeIsInWatchlist(`trakt:${idStr.replace('trakt:', '')}`);
+        return storeIsInWatchlist(`${type}:${idStr}`) || storeIsInWatchlist(idStr);
+    }, [storeIsInWatchlist]);
 
     const isInCollection = useCallback((id: string | number, type: 'movie' | 'series') => {
         const idStr = String(id);
-        if (idStr.startsWith('tt')) return collectionIds.has(`imdb:${idStr}`);
-        if (idStr.startsWith('tmdb:')) return collectionIds.has(`tmdb:${idStr.replace('tmdb:', '')}`);
-        if (idStr.startsWith('trakt:')) return collectionIds.has(`trakt:${idStr.replace('trakt:', '')}`);
-        return collectionIds.has(`${type}:${idStr}`) || collectionIds.has(idStr);
-    }, [collectionIds]);
+        if (idStr.startsWith('tt')) return storeIsInCollection(`imdb:${idStr}`);
+        if (idStr.startsWith('tmdb:')) return storeIsInCollection(`tmdb:${idStr.replace('tmdb:', '')}`);
+        if (idStr.startsWith('trakt:')) return storeIsInCollection(`trakt:${idStr.replace('trakt:', '')}`);
+        return storeIsInCollection(`${type}:${idStr}`) || storeIsInCollection(idStr);
+    }, [storeIsInCollection]);
 
     const getUserRating = useCallback((id: string | number, type: 'movie' | 'series'): number | null => {
         const idStr = String(id);
@@ -246,12 +210,12 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Check Watched
-        if (isMovieWatched(idStr) || (type === 'show' && watchedIds.has(`show:${idStr}`))) {
+        if (isMovieWatched(idStr)) {
             return { state: 'rewatch' as const };
         }
 
         return { state: 'watch' as const };
-    }, [continueWatching, isMovieWatched, watchedIds]);
+    }, [continueWatching, isMovieWatched]);
 
 
     // --- Actions ---
@@ -261,21 +225,11 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const addToWatchlist = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
 
-        // Optimistic
-        setWatchlistIds(prev => new Set(prev).add(`imdb:${id}`).add(id));
-
         const success = await TraktService.addToWatchlist(id, type);
         if (success) {
             debouncedSync();
             return true;
         } else {
-            // Revert
-            setWatchlistIds(prev => {
-                const next = new Set(prev);
-                next.delete(`imdb:${id}`);
-                next.delete(id);
-                return next;
-            });
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
@@ -283,51 +237,29 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const removeFromWatchlist = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
 
-        // Optimistic
-        setWatchlistIds(prev => {
-            const next = new Set(prev);
-            next.delete(`imdb:${id}`);
-            next.delete(id);
-            return next;
-        });
-
         const success = await TraktService.removeFromWatchlist(id, type);
         if (success) {
             debouncedSync();
             return true;
         } else {
-            // Revert
-            setWatchlistIds(prev => new Set(prev).add(`imdb:${id}`).add(id));
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
 
     const addToCollection = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
-        setCollectionIds(prev => new Set(prev).add(`imdb:${id}`).add(id));
 
         const success = await TraktService.addToCollection(id, type);
         if (success) {
             debouncedSync();
             return true;
         } else {
-            setCollectionIds(prev => {
-                const next = new Set(prev);
-                next.delete(`imdb:${id}`);
-                return next;
-            });
             return false;
         }
     }, [isAuthenticated, debouncedSync]);
 
     const removeFromCollection = useCallback(async (id: string, type: 'movie' | 'show') => {
         if (!isAuthenticated) return false;
-        setCollectionIds(prev => {
-            const next = new Set(prev);
-            next.delete(`imdb:${id}`);
-            next.delete(id);
-            return next;
-        });
 
         const success = await TraktService.removeFromCollection(id, type);
         if (success) {
@@ -395,7 +327,6 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
     const markMovieAsWatched = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;
-        setWatchedIds(prev => new Set(prev).add(`imdb:${id}`).add(id));
 
         const success = await TraktService.addToHistory(id, 'movie');
         if (success) {
@@ -408,12 +339,6 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
     const removeMovieFromHistory = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;
-        setWatchedIds(prev => {
-            const next = new Set(prev);
-            next.delete(`imdb:${id}`);
-            next.delete(id);
-            return next;
-        });
 
         const success = await TraktService.removeFromHistory(id, 'movie');
         if (success) {

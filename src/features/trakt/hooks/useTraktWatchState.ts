@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TraktService } from '../../../core/services/TraktService';
-import { useUserStore } from '../stores/userStore';
+import { useUserStore } from '../../../core/stores/userStore';
 
 export type WatchState = 'watch' | 'continue' | 'rewatch';
 

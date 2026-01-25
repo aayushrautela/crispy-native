@@ -68,4 +68,15 @@
 - [ ] Enhance "Guest Mode" entry visual prominence.
 - [ ] Add smooth reanimated transitions between Auth modes.
 
+---
 
+## Phase 18: Service-Level Hydration & Trakt Optimization 🏗️ [DONE]
+- [x] Update `TraktService` to use `?extended=images` for all sync calls.
+- [x] Update `normalize()` in `TraktService` to handle Trakt images.
+- [x] Remove redundant TMDB calls for items with existing posters.
+
+## Phase 19: Dumb Card Pattern & Zustand Migration 🩹 [DONE]
+- [x] Implement early exit in `useTraktEnrichment` hook.
+- [x] Create Zustand store for Trakt state management.
+- [x] Refactor `CatalogCard` and `details.tsx` to use Zenstand selectors.
+- [x] Implement concurrency-controlled queue for remaining enrichment.

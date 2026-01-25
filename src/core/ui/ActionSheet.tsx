@@ -1,11 +1,10 @@
 
+import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { Typography } from '@/src/core/ui/Typography';
-import { useTheme } from '@/src/core/ThemeContext';
 import { Check } from 'lucide-react-native';
 import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface ActionItem {
     id: string;
@@ -26,7 +25,6 @@ interface ActionSheetProps {
 export const ActionSheet = ({ visible, onClose, title, actions }: ActionSheetProps) => {
     const { theme } = useTheme();
     const sheetRef = useRef<BottomSheetRef>(null);
-    const { bottom } = useSafeAreaInsets();
     // We strictly use the sheet's state to determine visibility from the UI
 
     useEffect(() => {
@@ -45,7 +43,7 @@ export const ActionSheet = ({ visible, onClose, title, actions }: ActionSheetPro
             enableDynamicSizing={true}
             scrollable={true}
         >
-            <View style={[styles.content, { paddingBottom: bottom + 12 }]}>
+            <View style={styles.content}>
                 {actions.map((action) => (
                     <Pressable
                         key={action.id}
@@ -87,6 +85,7 @@ export const ActionSheet = ({ visible, onClose, title, actions }: ActionSheetPro
 const styles = StyleSheet.create({
     content: {
         gap: 0,
+        paddingBottom: 0,
     },
     actionItem: {
         flexDirection: 'row',

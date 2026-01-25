@@ -1,12 +1,11 @@
 
+import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { Typography } from '@/src/core/ui/Typography';
-import { useTheme } from '@/src/core/ThemeContext';
 import { Star } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface RatingModalProps {
     visible: boolean;
@@ -49,7 +48,6 @@ const RatingStar = ({ index, filled, onPress }: { index: number, filled: boolean
 export const RatingModal = ({ visible, onClose, title, initialRating, onRate, onRemoveRating }: RatingModalProps) => {
     const { theme } = useTheme();
     const sheetRef = useRef<BottomSheetRef>(null);
-    const { bottom } = useSafeAreaInsets();
 
     // We maintain internal rating state for the UI interaction
     const [rating, setRating] = useState<number>(0);
@@ -82,7 +80,7 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
             onDismiss={onClose}
             enableDynamicSizing={true}
         >
-            <View style={[styles.container, { paddingBottom: bottom + 20 }]}>
+            <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
                     <Typography variant="title-large" weight="bold" style={{ color: theme.colors.onSurface, textAlign: 'center' }}>
@@ -149,8 +147,9 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
 const styles = StyleSheet.create({
     container: {
         paddingHorizontal: 24,
-        gap: 32,
-        paddingTop: 8,
+        gap: 24,
+        paddingTop: 12,
+        paddingBottom: 0, // Explicitly zero
     },
     header: {
         alignItems: 'center',

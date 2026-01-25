@@ -1,10 +1,10 @@
-import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
 import { TraktContentComment } from '@/src/core/services/trakt-types';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { Shimmer } from '@/src/core/ui/Shimmer';
 import { Typography } from '@/src/core/ui/Typography';
+import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
 import { Star } from 'lucide-react-native';
 import React, { memo, useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -97,8 +97,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     modalContent: {
-        paddingHorizontal: 4,
-        paddingBottom: 20,
+        paddingHorizontal: 24,
+        paddingBottom: 0,
     },
     modalRating: {
         flexDirection: 'row',

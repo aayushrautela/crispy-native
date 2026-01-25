@@ -1,4 +1,5 @@
 import { TraktService } from '@/src/core/services/TraktService';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
@@ -7,7 +8,6 @@ import { Screen } from '@/src/core/ui/layout/Screen';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
 import { FlashList } from '@shopify/flash-list';
 import {
     Bookmark,

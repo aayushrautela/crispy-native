@@ -1,4 +1,5 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
+import { useTraktStore } from '@/src/core/stores/traktStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ActionItem, ActionSheet } from '@/src/core/ui/ActionSheet';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
@@ -9,7 +10,7 @@ import { useTraktEnrichment } from '@/src/hooks/useTraktEnrichment';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Check, Eye, EyeOff, Info, Plus, Star } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
@@ -20,7 +21,7 @@ interface CatalogCardProps {
     width?: number;
 }
 
-export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
+export const CatalogCard = React.memo(({ item, width = 144 }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -29,8 +30,22 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const enrichedItem = useTraktEnrichment(item);
     // Determine which meta to use (Enriched > Prop)
     const displayItem = enrichedItem || item;
-    // We can just use displayItem directly instead of merging state manually
+    const id = displayItem.id;
+    const type = displayItem.type === 'movie' ? 'movie' : 'series';
 
+    // Atomic State Selectors (Production-Grade Optimization)
+    // Only re-renders if these specific values change for THIS id.
+    const inList = useTraktStore(state => state.isInWatchlist(id));
+    const isWatched = useTraktStore(state => state.isWatched(id));
+    const userRating = useTraktStore(state => {
+        if (!id) return null;
+        const itemRating = state.ratedContent.find(r => {
+            const media = type === 'movie' ? r.movie : r.show;
+            if (!media) return false;
+            return media.ids.imdb === id || String(media.ids.tmdb) === id.replace('tmdb:', '');
+        });
+        return itemRating ? Math.round(itemRating.rating / 2) : null;
+    });
 
     // Interactive State
     const [showActionSheet, setShowActionSheet] = useState(false);
@@ -38,23 +53,13 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
 
     const {
         isAuthenticated,
-        isInWatchlist,
         addToWatchlist,
         removeFromWatchlist,
-        isMovieWatched,
         markMovieAsWatched,
         removeMovieFromHistory,
-        getUserRating,
         rateContent,
         removeContentRating
     } = useTraktContext();
-
-    const id = displayItem.id;
-    const type = displayItem.type === 'movie' ? 'movie' : 'series';
-
-    useEffect(() => {
-        // Hydration logic disabled
-    }, []);
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
@@ -76,10 +81,6 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
     const menuActions: ActionItem[] = useMemo(() => {
         if (!isAuthenticated) return [];
 
-        const isWatched = type === 'movie' ? isMovieWatched(id) : false; // Shows need complex partial watched logic
-        const inList = isInWatchlist(id, type);
-        const userRating = getUserRating(id, type);
-
         const actions: ActionItem[] = [
             {
                 id: 'details',
@@ -100,8 +101,7 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
             }
         });
 
-        // Watched Status (Simple toggle for movies, just generic for shows?)
-        // Trakt usually allows "Add to History" for shows which marks all eps watched.
+        // Watched Status (Simple toggle for movies)
         if (type === 'movie') {
             actions.push({
                 id: 'watched',
@@ -120,16 +120,12 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
             label: userRating ? `Rate (Rated ${userRating * 2})` : 'Rate',
             icon: <Star size={20} color={userRating ? '#FFD700' : theme.colors.onSurface} fill={userRating ? '#FFD700' : 'transparent'} />,
             onPress: () => {
-                // Must close sheet first, wait a bit? 
-                // The ActionSheet closes automatically on press.
-                // We'll set showRatingModal in a timeout to avoid collision 
-                // or just rely on state update order.
                 setTimeout(() => setShowRatingModal(true), 300);
             }
         });
 
         return actions;
-    }, [isAuthenticated, id, type, isInWatchlist, isMovieWatched, getUserRating, theme]);
+    }, [isAuthenticated, id, type, inList, isWatched, userRating, theme]);
 
     const animatedImageStyle = useAnimatedStyle(() => {
         return {
@@ -290,13 +286,13 @@ export const CatalogCard = ({ item, width = 144 }: CatalogCardProps) => {
                 visible={showRatingModal}
                 onClose={() => setShowRatingModal(false)}
                 title={item.name}
-                initialRating={getUserRating(id, type) ? (getUserRating(id, type)! * 2) : 0}
+                initialRating={userRating ? (userRating * 2) : 0}
                 onRate={(r) => rateContent(id, type, r)}
                 onRemoveRating={() => removeContentRating(id, type)}
             />
         </View >
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {

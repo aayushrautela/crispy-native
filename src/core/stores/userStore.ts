@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { getStoredLanguage, setStoredLanguage } from '../../../core/languages';
-import { StorageService } from '../../../core/storage';
+import { getStoredLanguage, setStoredLanguage } from '../languages';
+import { AddonService } from '../services/AddonService';
+import { StorageService } from '../storage';
+import { AddonManifest } from '../types/addon-types';
 
 // --- Interfaces ---
 
@@ -57,6 +59,7 @@ export interface TraktAuth {
 export interface UserState {
     settings: AppSettings;
     addons: Addon[];
+    manifests: Record<string, AddonManifest>; // In-memory separate from persistent `addons`
     catalogPrefs: CatalogPreferences;
     traktAuth: TraktAuth;
 }
@@ -123,7 +126,7 @@ const DEFAULT_TRAKT_AUTH: TraktAuth = {};
 
 // --- Store Definition ---
 
-interface UserStoreState extends UserState {
+export interface UserStoreState extends UserState {
     loading: boolean;
     setLoading: (loading: boolean) => void;
 
@@ -132,6 +135,12 @@ interface UserStoreState extends UserState {
     updateAddons: (addons: Addon[]) => void;
     updateCatalogPrefs: (prefs: Partial<CatalogPreferences>) => void;
     updateTraktAuth: (auth: TraktAuth) => void;
+
+    // Addon Actions (Unified)
+    addAddon: (url: string) => Promise<void>;
+    removeAddon: (url: string) => void;
+    updateManifest: (url: string, manifest: AddonManifest) => void;
+    syncManifests: () => Promise<void>;
 
     // Bulk Hydration
     hydrate: (data: Partial<UserState>) => void;
@@ -194,74 +203,168 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
     });
 }
 
-export const useUserStore = create<UserStoreState>((set, get) => ({
-    settings: getDefaultSettings(),
-    addons: (() => {
-        const stored = StorageService.getUser<Addon[]>('crispy-addons');
-        console.log('[UserStore] Initializing addons. Stored:', stored ? stored.length : 'null');
-        return stored || getDefaultAddons();
-    })(),
-    catalogPrefs: DEFAULT_CATALOG_PREFS,
-    traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
-
-    loading: true,
-    setLoading: (loading) => set({ loading }),
-
-    updateSettings: (updates) => {
-        const current = get().settings;
-        const next = { ...current, ...updates, updatedAt: Date.now() };
-
-        set({ settings: next });
-        persistLocalSettings(updates);
-    },
-
-    updateAddons: (addons) => {
-        set({ addons });
-        StorageService.setUser('crispy-addons', addons);
-    },
-
-    updateCatalogPrefs: (prefs) => {
-        const current = get().catalogPrefs;
-        const next = { ...current, ...prefs, updatedAt: Date.now() };
-        set({ catalogPrefs: next });
-    },
-
-    updateTraktAuth: (auth) => {
-        const next = { ...auth, updatedAt: Date.now() };
-        set({ traktAuth: next });
-        StorageService.setUser('crispy-trakt-auth', next);
-    },
-
-    hydrate: (fetched) => {
-        const current = get();
-        const nextState: Partial<UserState> = {};
-
-        if (fetched.settings) {
-            nextState.settings = { ...current.settings, ...fetched.settings };
-            persistLocalSettings(nextState.settings);
-        }
-        if (fetched.addons) {
-            nextState.addons = fetched.addons;
-            StorageService.setUser('crispy-addons', nextState.addons);
-        }
-        if (fetched.catalogPrefs) {
-            nextState.catalogPrefs = { ...current.catalogPrefs, ...fetched.catalogPrefs };
-        }
-        if (fetched.traktAuth) {
-            nextState.traktAuth = { ...current.traktAuth, ...fetched.traktAuth };
-            StorageService.setUser('crispy-trakt-auth', nextState.traktAuth);
-        }
-
-        set({ ...nextState as any, loading: false });
-    },
-
-    reset: () => {
-        set({
-            settings: getDefaultSettings(),
-            addons: StorageService.getUser<Addon[]>('crispy-addons') || getDefaultAddons(),
-            catalogPrefs: DEFAULT_CATALOG_PREFS,
-            traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
-            loading: true
-        });
+// Initializer to load addons safely
+function loadInitialAddons(): Addon[] {
+    const stored = StorageService.getUser<Addon[]>('crispy-addons');
+    // If not found or empty, try the DEFAULT_ADDONS
+    if (!stored || !Array.isArray(stored) || stored.length === 0) {
+        return getDefaultAddons();
     }
-}));
+    return stored;
+}
+
+export const useUserStore = create<UserStoreState>((set, get) => {
+    // 1. Load initial state synchronously from MMKV
+    const initialAddons = loadInitialAddons();
+
+    return {
+        settings: getDefaultSettings(),
+        addons: initialAddons,
+        manifests: {}, // Start empty, hydrate later via effect/action
+        catalogPrefs: DEFAULT_CATALOG_PREFS,
+        traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+
+        loading: true,
+        setLoading: (loading) => set({ loading }),
+
+        updateSettings: (updates) => {
+            const current = get().settings;
+            const next = { ...current, ...updates, updatedAt: Date.now() };
+
+            set({ settings: next });
+            persistLocalSettings(updates);
+        },
+
+        updateAddons: (addons) => {
+            set({ addons });
+            StorageService.setUser('crispy-addons', addons);
+        },
+
+        // --- NEW Addon Actions ---
+
+        addAddon: async (url) => {
+            const normalizedUrl = AddonService.normalizeAddonUrl(url);
+
+            // Check if already exists
+            const currentAddons = get().addons;
+            if (currentAddons.some(a => AddonService.normalizeAddonUrl(a.url) === normalizedUrl)) {
+                return; // Already exists
+            }
+
+            try {
+                // Fetch to validate and get name
+                const manifest = await AddonService.fetchManifest(normalizedUrl);
+
+                const newAddon: Addon = {
+                    url: normalizedUrl,
+                    enabled: true,
+                    name: manifest.name,
+                    updatedAt: Date.now()
+                };
+
+                const nextAddons = [...currentAddons, newAddon];
+
+                // Update State
+                set((state) => ({
+                    addons: nextAddons,
+                    manifests: { ...state.manifests, [normalizedUrl]: manifest }
+                }));
+
+                // Persist
+                StorageService.setUser('crispy-addons', nextAddons);
+
+            } catch (e) {
+                console.error('[UserStore] Failed to add addon:', url, e);
+                throw e;
+            }
+        },
+
+        removeAddon: (url) => {
+            const normalizedUrl = AddonService.normalizeAddonUrl(url);
+            const currentAddons = get().addons;
+            const nextAddons = currentAddons.filter(a => AddonService.normalizeAddonUrl(a.url) !== normalizedUrl);
+
+            set((state) => {
+                const nextManifests = { ...state.manifests };
+                delete nextManifests[normalizedUrl];
+                return {
+                    addons: nextAddons,
+                    manifests: nextManifests
+                };
+            });
+
+            StorageService.setUser('crispy-addons', nextAddons);
+        },
+
+        updateManifest: (url, manifest) => {
+            set((state) => ({
+                manifests: { ...state.manifests, [url]: manifest }
+            }));
+        },
+
+        syncManifests: async () => {
+            const { addons, updateManifest } = get();
+            const promises = addons.map(async (addon) => {
+                try {
+                    const manifest = await AddonService.fetchManifest(addon.url);
+                    updateManifest(addon.url, manifest);
+                } catch (e) {
+                    console.warn(`[UserStore] Failed to refresh manifest for ${addon.url}`, e);
+                }
+            });
+            await Promise.allSettled(promises);
+        },
+
+
+        updateCatalogPrefs: (prefs) => {
+            const current = get().catalogPrefs;
+            const next = { ...current, ...prefs, updatedAt: Date.now() };
+            set({ catalogPrefs: next });
+        },
+
+        updateTraktAuth: (auth) => {
+            const next = { ...auth, updatedAt: Date.now() };
+            set({ traktAuth: next });
+            StorageService.setUser('crispy-trakt-auth', next);
+        },
+
+        hydrate: (fetched) => {
+            const current = get();
+            const nextState: Partial<UserState> = {};
+
+            if (fetched.settings) {
+                nextState.settings = { ...current.settings, ...fetched.settings };
+                persistLocalSettings(nextState.settings);
+            }
+            if (fetched.addons) {
+                nextState.addons = fetched.addons;
+                StorageService.setUser('crispy-addons', nextState.addons);
+                // Trigger re-fetch of manifests for new addons
+                setTimeout(() => get().syncManifests(), 100);
+            }
+            if (fetched.catalogPrefs) {
+                nextState.catalogPrefs = { ...current.catalogPrefs, ...fetched.catalogPrefs };
+            }
+            if (fetched.traktAuth) {
+                nextState.traktAuth = { ...current.traktAuth, ...fetched.traktAuth };
+                StorageService.setUser('crispy-trakt-auth', nextState.traktAuth);
+            }
+
+            set({ ...nextState as any, loading: false });
+        },
+
+        reset: () => {
+            const defaults = getDefaultAddons();
+            set({
+                settings: getDefaultSettings(),
+                addons: defaults,
+                manifests: {},
+                catalogPrefs: DEFAULT_CATALOG_PREFS,
+                traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+                loading: true
+            });
+            // Ensure defaults are persisted if reset implies "wiping"
+            StorageService.setUser('crispy-addons', defaults);
+        }
+    };
+});

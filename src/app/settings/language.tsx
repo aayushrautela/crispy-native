@@ -4,7 +4,7 @@ import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Check, Languages, Subtitles, Volume2 } from 'lucide-react-native';
 import React, { useCallback, useRef, useState } from 'react';

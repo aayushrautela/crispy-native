@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { AddonService } from '../services/AddonService';
-import { useAddonStore } from '../stores/addonStore';
+import { useUserStore } from '../stores/userStore';
 import { AddonManifest } from '../types/addon-types';
 
 export const useCatalog = (type: string, id: string, extra?: Record<string, any>, addonUrl?: string) => {
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
 
     // Determine which addon(s) to fetch from
     const targetUrls = useMemo(() => {
@@ -52,7 +52,7 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
 };
 
 export const useMeta = (type: string, id: string) => {
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
     const addonUrls = Object.keys(manifests);
 
     return useQuery({

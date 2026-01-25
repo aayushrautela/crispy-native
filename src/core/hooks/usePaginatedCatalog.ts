@@ -1,6 +1,6 @@
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AddonService, MetaPreview } from '../services/AddonService';
-import { useAddonStore } from '../stores/addonStore';
 
 const PAGE_SIZE = 20;
 
@@ -19,7 +19,7 @@ export const usePaginatedCatalog = (
     extra?: Record<string, any>,
     addonUrl?: string
 ): PaginatedCatalogResult => {
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
     const [items, setItems] = useState<MetaPreview[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isFetchingMore, setIsFetchingMore] = useState(false);

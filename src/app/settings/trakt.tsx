@@ -3,13 +3,13 @@ import React, { useState } from 'react';
 import { Alert, Clipboard, Linking, StyleSheet, View } from 'react-native';
 import { TraktDeviceCodeResponse } from '../../core/services/trakt-types';
 import { TraktService } from '../../core/services/TraktService';
+import { useUserStore } from '../../core/stores/userStore';
 import { useTheme } from '../../core/ThemeContext';
 import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
 import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
 import { SettingsGroup } from '../../core/ui/SettingsGroup';
 import { SettingsItem } from '../../core/ui/SettingsItem';
 import { Typography } from '../../core/ui/Typography';
-import { useUserStore } from '../../features/trakt/stores/userStore';
 
 export default function TraktScreen() {
     const { theme } = useTheme();

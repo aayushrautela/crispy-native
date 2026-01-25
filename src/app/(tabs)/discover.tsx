@@ -1,5 +1,5 @@
 import { AddonService, MetaPreview } from '@/src/core/services/AddonService';
-import { useAddonStore } from '@/src/core/stores/addonStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
@@ -40,7 +40,7 @@ const RATING_OPTIONS = [
 
 
 export default function DiscoverScreen() {
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
     const { theme } = useTheme();
     const router = useRouter();
     const { width } = useWindowDimensions();
@@ -454,7 +454,6 @@ const styles = StyleSheet.create({
     sheetContent: {
         paddingHorizontal: 24,
         gap: 4,
-        paddingBottom: 40,
     },
     sheetChip: {
         width: '100%',

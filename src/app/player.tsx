@@ -1,7 +1,6 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { AddonService } from '@/src/core/services/AddonService';
-import { useAddonStore } from '@/src/core/stores/addonStore';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SideSheet } from '@/src/core/ui/SideSheet';
@@ -161,7 +160,7 @@ export default function PlayerScreen() {
         }
     }, [headersParam]);
 
-    const { manifests } = useAddonStore(); // Use addonStore instead of userStore
+    const { manifests } = useUserStore();
 
     // Resolve stream logic
     useEffect(() => {

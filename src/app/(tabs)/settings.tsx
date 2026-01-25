@@ -1,5 +1,5 @@
 import { useTheme } from '@/src/core/ThemeContext';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';

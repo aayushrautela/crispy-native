@@ -1,8 +1,8 @@
-import { EmptyState } from '@/src/core/ui/EmptyState';
 import { AddonService } from '@/src/core/services/AddonService';
 import { TMDBService } from '@/src/core/services/TMDBService';
-import { useAddonStore } from '@/src/core/stores/addonStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Touchable } from '@/src/core/ui/Touchable';
@@ -23,7 +23,7 @@ export default function SearchScreen() {
     const { theme } = useTheme();
     const [query, setQuery] = useState('');
     const [type, setType] = useState<SearchType>('all');
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
     const { width } = useWindowDimensions();
 
     const numColumns = width > 768 ? 5 : 3;

@@ -1,5 +1,5 @@
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
-import { useAddonStore } from '@/src/core/stores/addonStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
@@ -20,7 +20,7 @@ const HEADER_HEIGHT = 96;
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { manifests } = useAddonStore();
+  const { manifests } = useUserStore();
   const router = useRouter();
 
   const scrollY = useSharedValue(0);

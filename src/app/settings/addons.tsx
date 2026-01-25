@@ -1,17 +1,17 @@
-import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { Package, Plus, Trash2 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 export default function AddonsScreen() {
     const { theme } = useTheme();
-    const { manifests, addAddon, removeAddon } = useAddonStore();
+    const { addons, manifests, addAddon, removeAddon } = useUserStore();
     const [newAddonUrl, setNewAddonUrl] = useState('');
 
     const handleAddAddon = async () => {
@@ -59,23 +59,30 @@ export default function AddonsScreen() {
                 </SettingsGroup>
 
                 <SettingsGroup title="Installed Addons">
-                    {Object.entries(manifests).map(([url, manifest]) => (
-                        <SettingsItem
-                            key={url}
-                            icon={Package}
-                            label={manifest.name}
-                            description={manifest.description || url}
-                            rightElement={
-                                <Trash2
-                                    size={20}
-                                    color={theme.colors.error}
-                                    onPress={() => handleRemoveAddon(url)}
-                                />
-                            }
-                            showChevron={false}
-                        />
-                    ))}
-                    {Object.keys(manifests).length === 0 && (
+                    {addons.map((addon) => {
+                        const manifest = manifests[addon.url];
+                        // Fallback to addon.name or URL if manifest not loaded yet
+                        const name = manifest?.name || addon.name || 'Unknown Addon';
+                        const description = manifest?.description || addon.url;
+
+                        return (
+                            <SettingsItem
+                                key={addon.url}
+                                icon={Package}
+                                label={name}
+                                description={description}
+                                rightElement={
+                                    <Trash2
+                                        size={20}
+                                        color={theme.colors.error}
+                                        onPress={() => handleRemoveAddon(addon.url)}
+                                    />
+                                }
+                                showChevron={false}
+                            />
+                        );
+                    })}
+                    {addons.length === 0 && (
                         <View style={styles.emptyContainer}>
                             <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
                                 No addons installed

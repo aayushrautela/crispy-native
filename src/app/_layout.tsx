@@ -13,9 +13,9 @@ import { DiscoveryProvider } from '../core/DiscoveryContext';
 import { SyncService } from '../core/services/SyncService';
 import { TraktService } from '../core/services/TraktService';
 import { SessionManager } from '../core/SessionManager';
+import { useUserStore } from '../core/stores/userStore';
 import { ThemeProvider, useTheme } from '../core/ThemeContext';
 import { TraktProvider } from '../features/trakt/context/TraktContext';
-import { useUserStore } from '../features/trakt/stores/userStore';
 import '../styles/global.css';
 
 // Create a client

@@ -4,7 +4,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';

@@ -1,5 +1,5 @@
-import { TraktAuth, useUserStore } from '../../features/trakt/stores/userStore';
 import { StorageService } from '../storage';
+import { TraktAuth, useUserStore } from '../stores/userStore';
 
 // Helper to safely get IDs
 const media_ids = (item: any) => item?.ids || {};
@@ -260,20 +260,29 @@ export class TraktService {
         const ids = media.ids || item.ids || {};
 
         // Robust Image Parsing (WebUI logic)
+        // Trakt 'extended=images' returns arrays of paths or full URLs
+        const getUrl = (paths: string[] | string | undefined) => {
+            if (!paths) return undefined;
+            const path = Array.isArray(paths) ? paths[0] : paths;
+            if (!path) return undefined;
+            // Ensure Trakt relative paths get https://
+            return path.startsWith('http') ? path : `https://${path}`;
+        };
+
         const poster =
-            media.images?.poster?.[0] ||
+            getUrl(media.images?.poster) ||
             media.images?.poster?.medium ||
             media.images?.poster?.full ||
             media.poster;
 
         const background =
-            media.images?.fanart?.[0] ||
+            getUrl(media.images?.fanart) ||
             media.images?.fanart?.medium ||
             media.images?.fanart?.full ||
             media.background || media.backdrop;
 
         const logo =
-            media.images?.logo?.[0] ||
+            getUrl(media.images?.logo) ||
             media.images?.logo?.full ||
             media.logo;
 
@@ -406,8 +415,8 @@ export class TraktService {
 
     public async getCollection() {
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/collection/movies?extended=full'),
-            this.apiRequest<any[]>('/sync/collection/shows?extended=full')
+            this.apiRequest<any[]>('/sync/collection/movies?extended=images,full'),
+            this.apiRequest<any[]>('/sync/collection/shows?extended=images,full')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),
@@ -417,12 +426,12 @@ export class TraktService {
     }
 
     public async getWatchedShows() {
-        const shows = await this.apiRequest<any[]>('/sync/watched/shows?extended=full');
+        const shows = await this.apiRequest<any[]>('/sync/watched/shows?extended=images,full');
         return (shows || []).map(i => ({ ...i, type: 'show' })).map(i => this.normalize(i));
     }
 
     public async getWatchedMovies() {
-        const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=full');
+        const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=images,full');
         return (movies || []).map(i => ({ ...i, type: 'movie' })).map(i => this.normalize(i));
     }
 
@@ -492,8 +501,8 @@ export class TraktService {
 
     public async getWatchlist() {
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/watchlist/movies?extended=full'),
-            this.apiRequest<any[]>('/sync/watchlist/shows?extended=full')
+            this.apiRequest<any[]>('/sync/watchlist/movies?extended=images,full'),
+            this.apiRequest<any[]>('/sync/watchlist/shows?extended=images,full')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),

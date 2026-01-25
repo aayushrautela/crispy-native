@@ -1,7 +1,7 @@
 import debounce from 'lodash.debounce';
 import { useEffect, useRef } from 'react';
-import { AppSettings, TraktAuth, UserState, useUserStore } from '../../features/trakt/stores/userStore';
 import { useAuth } from '../AuthContext';
+import { AppSettings, TraktAuth, UserState, useUserStore } from '../stores/userStore';
 import { supabase } from './supabase';
 
 export function SyncService() {

@@ -2,7 +2,7 @@ import { ExpressiveSwitch } from '@/src/core/ui/ExpressiveSwitch';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useUserStore } from '@/src/features/trakt/stores/userStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { History, Search, Trash2 } from 'lucide-react-native';
 import React from 'react';

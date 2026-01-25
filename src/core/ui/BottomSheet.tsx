@@ -1,7 +1,8 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import React, { forwardRef, useCallback, useMemo } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { BackHandler, Dimensions, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from './Typography';
 
 interface BottomSheetProps {
@@ -28,7 +29,36 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     onDismiss
 }, ref) => {
     const { theme } = useTheme();
+    const { bottom } = useSafeAreaInsets();
     const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+    const modalRef = useRef<BottomSheetModal>(null);
+    const [isOpen, setIsOpen] = useState(false);
+
+    // Expose the modal ref to the parent
+    useImperativeHandle(ref, () => modalRef.current!);
+
+    // Handle Hardware Back Button on Android
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const onBackPress = () => {
+            if (isOpen) {
+                modalRef.current?.dismiss();
+                return true; // Prevent default behavior (navigation)
+            }
+            return false;
+        };
+
+        // Add listener with a higher priority (10) to ensure it intercepts before navigation
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+        return () => subscription.remove();
+    }, [isOpen]);
+
+    const handleAnimate = useCallback((fromIndex: number, toIndex: number) => {
+        // Sheet is "open" if it's moving to any index >= 0
+        setIsOpen(toIndex > -1);
+    }, []);
 
     const finalMaxHeight = maxHeight || SCREEN_HEIGHT * 0.7;
 
@@ -59,7 +89,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
 
     return (
         <BottomSheetModal
-            ref={ref}
+            ref={modalRef}
             index={index}
             snapPoints={finalSnapPoints}
             enableDynamicSizing={enableDynamicSizing}
@@ -69,7 +99,11 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
             style={styles.modal}
-            onDismiss={onDismiss}
+            onDismiss={() => {
+                setIsOpen(false);
+                onDismiss?.();
+            }}
+            onAnimate={handleAnimate}
         >
             <View style={styles.container}>
                 {title && (
@@ -89,11 +123,11 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
                     </View>
                 )}
                 {scrollable ? (
-                    <BottomSheetScrollView contentContainerStyle={styles.content}>
+                    <BottomSheetScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(bottom, 24) + 80 }]}>
                         {children}
                     </BottomSheetScrollView>
                 ) : (
-                    <View style={styles.container}>
+                    <View style={[styles.container, { paddingBottom: Math.max(bottom, 24) + 80 }]}>
                         {children}
                     </View>
                 )}
@@ -115,6 +149,6 @@ const styles = StyleSheet.create({
         paddingTop: 12, // Space from handle
     },
     content: {
-        paddingBottom: 40,
+        // Padding bottom is handled dynamically based on safe area
     }
 });

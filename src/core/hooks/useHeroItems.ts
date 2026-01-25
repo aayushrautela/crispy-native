@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { AddonService, MetaPreview } from '../services/AddonService';
-import { useAddonStore } from '../stores/addonStore';
 
 export interface Meta extends MetaPreview {
     background?: string;
@@ -15,7 +14,7 @@ export interface Meta extends MetaPreview {
 }
 
 export const useHeroItems = (enabled: boolean = true) => {
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
 
     // 1. Identify "hero" catalogs across all installed addons
     const heroCatalogs = useMemo(() => {
@@ -35,7 +34,7 @@ export const useHeroItems = (enabled: boolean = true) => {
     }, [manifests]);
 
     const heroSignature = useMemo(() =>
-        heroCatalogs.map(c => `${c.addonUrl}:${c.id}`).sort().join('|'),
+        heroCatalogs.map(c => `${c.addonUrl}:${c.id} `).sort().join('|'),
         [heroCatalogs]);
 
     return useQuery({

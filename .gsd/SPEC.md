@@ -1,6 +1,6 @@
 # SPEC: Trakt Integration & UI Enhancements
 
-Status: FINALIZED
+Status: FINALIZED (Performance Optimized)
 
 ## Goal
 Implement comprehensive Trakt user interactions (Library management, Rating, Watch status) and enhance the UI with actionable buttons on the Details page and a Bottom Sheet menu for Catalog cards, matching the `Crispy-webui` logic and visual style.
@@ -61,3 +61,8 @@ Implement comprehensive Trakt user interactions (Library management, Rating, Wat
 - **Layout**: Center aligned, edge-to-edge padding on mobile, maximum width on tablets.
 - **Interactions**: Smooth transitions between Login and Sign Up states using `react-native-reanimated`.
 
+## 7. Production-Grade Performance Optimization
+- **Service-Level Hydration**: `TraktService` must fetch images using `?extended=images` to avoid N+1 requests to TMDB.
+- **Dumb Card Pattern**: `CatalogCard` must be passive in list views, skipping enrichment hooks if a poster already exists.
+- **State Atomicity**: Migrate monolithic Trakt context to **Zustand** with selectors to prevent global re-renders.
+- **Concurrency Gates**: Implement a request queue for enrichment to protect the React Native bridge from congestion.

@@ -1,6 +1,6 @@
+import { useUserStore } from '@/src/core/stores/userStore';
 import { create } from 'zustand';
 import { AddonService, CatalogResponse, MetaPreview } from '../services/AddonService';
-import { useAddonStore } from './addonStore';
 
 interface ProviderState {
     catalogs: MetaPreview[];
@@ -21,14 +21,14 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
     fetchHomeCatalogs: async (type, id) => {
         set({ isLoading: true, error: null });
-        const { addonUrls, manifests } = useAddonStore.getState();
+        const { addons, manifests } = useUserStore.getState();
 
         try {
             // Aggregate from all enabled addons that have this catalog
-            const promises = addonUrls.map(url => {
-                const manifest = manifests[url];
+            const promises = addons.map(addon => {
+                const manifest = manifests[addon.url];
                 if (manifest?.catalogs?.some(c => c.type === type && c.id === id)) {
-                    return AddonService.getCatalog(url, type, id);
+                    return AddonService.getCatalog(addon.url, type, id);
                 }
                 return null;
             }).filter(p => p !== null) as Promise<CatalogResponse>[];
@@ -58,14 +58,14 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
     searchAll: async (type, query) => {
         set({ isLoading: true, error: null });
-        const { addonUrls, manifests } = useAddonStore.getState();
+        const { addons, manifests } = useUserStore.getState();
 
         try {
-            const promises = addonUrls.map(url => {
-                const manifest = manifests[url];
+            const promises = addons.map(addon => {
+                const manifest = manifests[addon.url];
                 const hasSearch = manifest?.catalogs?.some(c => c.type === type);
                 if (hasSearch) {
-                    return AddonService.search(url, type, query);
+                    return AddonService.search(addon.url, type, query);
                 }
                 return null;
             }).filter(p => p !== null) as Promise<CatalogResponse>[];
@@ -94,13 +94,13 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
     fetchMeta: async (type, id) => {
         set({ isLoading: true, error: null, selectedMeta: null });
-        const { addonUrls, manifests } = useAddonStore.getState();
+        const { addons } = useUserStore.getState();
 
         try {
             // Usually we only need one meta response, prioritizing the "best" addon (e.g. Cinemeta)
             // For now, try sequentially or take first success
-            const promises = addonUrls.map(url => {
-                return AddonService.getMeta(url, type, id);
+            const promises = addons.map(addon => {
+                return AddonService.getMeta(addon.url, type, id);
             });
 
             const results = await Promise.allSettled(promises);
@@ -124,15 +124,15 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     },
 
     getStreams: async (type, id) => {
-        const { addonUrls, manifests } = useAddonStore.getState();
+        const { addons, manifests } = useUserStore.getState();
 
-        const promises = addonUrls.map(url => {
-            const manifest = manifests[url];
+        const promises = addons.map(addon => {
+            const manifest = manifests[addon.url];
             const hasStreams = manifest?.resources?.some(r =>
                 (typeof r === 'string' ? r === 'stream' : r.name === 'stream')
             );
             if (hasStreams) {
-                return AddonService.getStreams(url, type, id);
+                return AddonService.getStreams(addon.url, type, id);
             }
             return null;
         }).filter(p => p !== null) as Promise<{ streams: any[] }>[];

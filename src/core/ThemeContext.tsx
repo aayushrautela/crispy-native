@@ -2,7 +2,7 @@ import { useMaterial3Theme } from '@pchmn/expo-material3-theme';
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import { MD3DarkTheme, MD3Theme, Provider as PaperProvider } from 'react-native-paper';
-import { useUserStore } from '../features/trakt/stores/userStore';
+import { useUserStore } from './stores/userStore';
 
 interface ThemeContextType {
     theme: MD3Theme;

@@ -1,5 +1,4 @@
 import { AddonService } from '@/src/core/services/AddonService';
-import { useAddonStore } from '@/src/core/stores/addonStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
@@ -21,7 +20,7 @@ interface StreamSelectorProps {
 
 export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded }: StreamSelectorProps) => {
     const { theme } = useTheme();
-    const { manifests } = useAddonStore();
+    const { manifests } = useUserStore();
     const { bottom } = useSafeAreaInsets();
 
     const { data: streams, isLoading } = useQuery({
