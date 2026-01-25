@@ -36,40 +36,6 @@ export function useCatalogPreferences() {
         savePrefs({ hero: newHero });
     }, [catalogPrefs.hero, savePrefs]);
 
-    const moveCatalog = useCallback((catalog: { addonUrl: string; type: string; id: string }, direction: 'up' | 'down') => {
-        const key = getCatalogKey(catalog);
-        const order = [...catalogPrefs.order];
-        let currentIndex = order.indexOf(key);
-
-        if (currentIndex === -1) {
-            order.push(key);
-            currentIndex = order.length - 1;
-        }
-
-        const newIndex = direction === 'up'
-            ? Math.max(0, currentIndex - 1)
-            : Math.min(order.length - 1, currentIndex + 1);
-
-        if (currentIndex !== newIndex && newIndex >= 0 && newIndex < order.length) {
-            [order[currentIndex], order[newIndex]] = [order[newIndex], order[currentIndex]];
-            savePrefs({ order });
-        }
-    }, [catalogPrefs.order, savePrefs]);
-
-    const sortCatalogsByPreferences = useCallback((catalogs: any[]): any[] => {
-        return [...catalogs].sort((a, b) => {
-            const keyA = getCatalogKey(a);
-            const keyB = getCatalogKey(b);
-            const indexA = catalogPrefs.order.indexOf(keyA);
-            const indexB = catalogPrefs.order.indexOf(keyB);
-
-            if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-            if (indexA !== -1) return -1;
-            if (indexB !== -1) return 1;
-            return 0;
-        });
-    }, [catalogPrefs.order]);
-
     const toggleTraktTopPicks = useCallback(() => {
         savePrefs({ traktTopPicks: !catalogPrefs.traktTopPicks });
     }, [catalogPrefs.traktTopPicks, savePrefs]);
@@ -78,10 +44,16 @@ export function useCatalogPreferences() {
         savePrefs({ continueWatching: !catalogPrefs.continueWatching });
     }, [catalogPrefs.continueWatching, savePrefs]);
 
+    // Sorting is now just filtering disabled items as reordering is removed
+    const sortCatalogsByPreferences = useCallback((catalogs: any[]): any[] => {
+        // We preserve the input order (manifest order)
+        // This function name is kept for compatibility but it could be renamed to filterCatalogs later
+        return catalogs;
+    }, []);
+
     return {
         preferences: {
             disabled: new Set(catalogPrefs.disabled),
-            order: catalogPrefs.order,
             hero: new Set(catalogPrefs.hero),
             traktTopPicks: catalogPrefs.traktTopPicks,
             continueWatching: catalogPrefs.continueWatching
@@ -90,7 +62,6 @@ export function useCatalogPreferences() {
         toggleTraktTopPicks,
         toggleContinueWatching,
         toggleHero,
-        moveCatalog,
         sortCatalogsByPreferences,
         getCatalogKey
     };

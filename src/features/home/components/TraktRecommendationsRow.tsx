@@ -2,15 +2,21 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
-import React from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import React, { useCallback } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 const CARD_WIDTH = 144;
 const SNAP_INTERVAL = CARD_WIDTH + 16;
+const ITEM_SEPARATOR_WIDTH = 16;
 
 export const TraktRecommendationsRow = () => {
     const { theme } = useTheme();
     const { recommendations, isAuthenticated } = useTraktContext();
+
+    const renderItem = useCallback(({ item }: { item: any }) => (
+        <CatalogCard item={item} width={CARD_WIDTH} />
+    ), []);
 
     if (!isAuthenticated || recommendations.length === 0) {
         return null;
@@ -20,35 +26,39 @@ export const TraktRecommendationsRow = () => {
         <View style={styles.container}>
             <SectionHeader
                 title="Trakt Top Picks"
-                style={{ paddingHorizontal: 24 }}
+                style={styles.header}
             />
-            <FlatList
-                data={recommendations}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item, index) => `trakt-rec-${item.id}-${index}`}
-                contentContainerStyle={styles.scrollContent}
-                renderItem={({ item }) => (
-                    <CatalogCard item={item} width={CARD_WIDTH} />
-                )}
-                snapToInterval={SNAP_INTERVAL}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={5}
-                windowSize={5}
-                initialNumToRender={4}
-            />
+            <View style={{ minHeight: CARD_WIDTH * 1.5 }}>
+                <FlashList
+                    data={recommendations}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyExtractor={keyExtractor}
+                    contentContainerStyle={styles.scrollContent}
+                    renderItem={renderItem}
+                    estimatedItemSize={CARD_WIDTH}
+                    drawDistance={CARD_WIDTH * 2.5}
+                    ItemSeparatorComponent={ItemSeparator}
+                    snapToInterval={SNAP_INTERVAL}
+                    decelerationRate="fast"
+                    snapToAlignment="start"
+                />
+            </View>
         </View>
     );
 };
+
+const ItemSeparator = () => <View style={{ width: ITEM_SEPARATOR_WIDTH }} />;
+const keyExtractor = (item: any, index: number) => `trakt-rec-${item.id}-${index}`;
 
 const styles = StyleSheet.create({
     container: {
         paddingVertical: 8,
     },
+    header: {
+        paddingHorizontal: 24
+    },
     scrollContent: {
         paddingHorizontal: 24,
-        gap: 16,
     },
 });

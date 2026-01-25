@@ -3,9 +3,7 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
-import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
-import { HeroCarousel } from '@/src/features/home/components/HeroCarousel';
-import { TraktRecommendationsRow } from '@/src/features/home/components/TraktRecommendationsRow';
+import { HomeHeader } from '@/src/features/home/components/HomeHeader';
 import { getCatalogKey, useCatalogPreferences } from '@/src/hooks/useCatalogPreferences';
 import { useRouter } from 'expo-router';
 import { CircleUser } from 'lucide-react-native';
@@ -146,28 +144,14 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         keyExtractor={(item) => getCatalogKey(item)}
-        ListHeaderComponent={() => (
-          <>
-            <HeroCarousel items={carouselItems} />
-            {preferences.continueWatching && <ContinueWatchingRow />}
-            {preferences.traktTopPicks && <TraktRecommendationsRow />}
-            {homeCatalogs.length === 0 && (
-              <View style={styles.emptyPrompt}>
-                <CatalogRow
-                  title="Trending Movies"
-                  catalogType="movie"
-                  catalogId="tmdb_trending"
-                />
-                <View style={{ height: 32 }} />
-                <CatalogRow
-                  title="Popular Shows"
-                  catalogType="series"
-                  catalogId="tmdb_popular"
-                />
-              </View>
-            )}
-          </>
-        )}
+        ListHeaderComponent={
+          <HomeHeader
+            carouselItems={carouselItems}
+            showContinueWatching={preferences.continueWatching}
+            showTraktRecommendations={preferences.traktTopPicks}
+            isEmpty={homeCatalogs.length === 0}
+          />
+        }
         renderItem={({ item: catalog, index }) => (
           <CatalogRow
             key={`${catalog.id}-${catalog.type}-${index}`}

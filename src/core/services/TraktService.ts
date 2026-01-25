@@ -528,7 +528,7 @@ export class TraktService {
     }
 
     public async getRecommendations(type: 'movies' | 'shows', limit = 10) {
-        return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=full`);
+        return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=full,images`);
     }
 
     public async getMixedRecommendations(limit = 10) {

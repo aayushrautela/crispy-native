@@ -7,6 +7,7 @@ import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
+import { useTraktEnrichment } from '@/src/hooks/useTraktEnrichment';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Check, Eye, EyeOff, Info, Plus, Star } from 'lucide-react-native';
@@ -16,26 +17,25 @@ import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated'
 
 const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
 
-interface CatalogCardProps {
+interface ContinueWatchingCardProps {
     item: MetaPreview;
     width?: number;
 }
 
-const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
+const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const settings = useUserStore(s => s.settings);
     const [focused, setFocused] = useState(false);
 
-    // Pure Component: No enrichment hook. 
-    // We display exactly what is passed in 'item'.
-    const displayItem = item;
+    // Always enrich Continue Watching items
+    const displayItem = useTraktEnrichment(item);
 
     // Stable IDs for selectors
     const id = displayItem.id;
     const type = displayItem.type === 'movie' ? 'movie' : 'series';
 
-    // Atomic State Selectors 
+    // Atomic State Selectors
     const inList = useTraktStore(state => state.isInWatchlist(id));
     const isWatched = useTraktStore(state => state.isWatched(id));
     const userRating = useTraktStore(state => {
@@ -48,15 +48,16 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
         return itemRating ? Math.round(itemRating.rating / 2) : null;
     });
 
+    // Interactive State
     const [showActionSheet, setShowActionSheet] = useState(false);
     const [showRatingModal, setShowRatingModal] = useState(false);
 
     const {
         isAuthenticated,
         addToWatchlist,
+        removeFromWatchlist,
         markMovieAsWatched,
         removeMovieFromHistory,
-        removeFromWatchlist,
         rateContent,
         removeContentRating
     } = useTraktContext();
@@ -90,6 +91,7 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
             }
         ];
 
+        // Watchlist
         actions.push({
             id: 'watchlist',
             label: inList ? 'Remove from My List' : 'Add to My List',
@@ -135,13 +137,18 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
             <ExpressiveSurface
                 variant="filled"
                 rounding="lg"
-                style={[styles.surface, { height }]}
+                style={[
+                    styles.surface,
+                    {
+                        height,
+                    }
+                ]}
                 onPress={handlePress}
                 onLongPress={handleLongPress}
                 onFocusChange={setFocused}
             >
                 <View style={[styles.imageContainer, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>
-                    {/* Placeholder / Fallback: Always rendered behind image */}
+                    {/* Placeholder / Fallback */}
                     <View style={styles.absolutePlaceholder}>
                         <Typography
                             variant="label-small"
@@ -161,8 +168,8 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         if (imageSrc) {
                             return (
                                 <AnimatedExpoImage
-                                    key={id} // React Key for clean remounts
-                                    recyclingKey={imageSrc} // Native recycling key
+                                    key={id}
+                                    recyclingKey={imageSrc}
                                     source={{ uri: imageSrc }}
                                     style={[styles.image, animatedImageStyle]}
                                     contentFit="cover"
@@ -195,9 +202,29 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         </View>
                     )}
                 </View>
-                {/* No Progress Bar in CatalogCard anymore */}
+
+                {/* Progress Bar - Exclusive to Continue Watching */}
+                {
+                    item.progressPercent !== undefined && item.progressPercent > 0 && (
+                        <View style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: 4,
+                            backgroundColor: 'rgba(255,255,255,0.3)'
+                        }}>
+                            <View style={{
+                                height: '100%',
+                                width: `${item.progressPercent}%`,
+                                backgroundColor: theme.colors.primary
+                            }} />
+                        </View>
+                    )
+                }
             </ExpressiveSurface >
 
+            {/* Metadata */}
             < View style={styles.metadata} >
                 <Typography
                     variant="body-small"
@@ -205,7 +232,12 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                     numberOfLines={1}
                     style={{ color: theme.colors.onSurface }}
                 >
-                    {displayItem.name}
+                    {(() => {
+                        if (displayItem.season !== undefined && displayItem.episodeNumber !== undefined) {
+                            return `S${displayItem.season}E${displayItem.episodeNumber}: ${displayItem.episodeTitle || displayItem.name}`;
+                        }
+                        return displayItem.name;
+                    })()}
                 </Typography>
                 <View style={styles.badgeRow}>
                     <Typography
@@ -215,9 +247,21 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         style={{ color: theme.colors.onSurfaceVariant, opacity: 0.7 }}
                     >
                         {(() => {
-                            // Simple Year Fallback
-                            const year = displayItem.year || displayItem.meta?.year || displayItem.releaseInfo?.split('-')[0] || '';
-                            return year;
+                            const isEpisode = displayItem.season !== undefined && displayItem.episodeNumber !== undefined;
+                            let dateStr = displayItem.airDate || displayItem.meta?.year || displayItem.releaseInfo || displayItem.year;
+
+                            if (isEpisode && displayItem.airDate) {
+                                try {
+                                    const date = new Date(displayItem.airDate);
+                                    dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                                } catch (e) {
+                                    dateStr = displayItem.airDate.split('-')[0];
+                                }
+                            } else if (dateStr && dateStr.includes('-')) {
+                                dateStr = dateStr.split('-')[0];
+                            }
+
+                            return dateStr;
                         })()}
                     </Typography>
                     {(displayItem.genres?.[0] || displayItem.meta?.genres?.[0]) && (
@@ -253,11 +297,12 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     );
 };
 
-export const CatalogCard = React.memo(CatalogCardComponent, (prev, next) => {
+export const ContinueWatchingCard = React.memo(ContinueWatchingCardComponent, (prev, next) => {
     return (
         prev.item.id === next.item.id &&
         prev.item.type === next.item.type &&
-        prev.width === next.width
+        prev.width === next.width &&
+        prev.item.progressPercent === next.item.progressPercent
     );
 });
 
@@ -275,14 +320,14 @@ const styles = StyleSheet.create({
     image: {
         width: '100%',
         height: '100%',
-        zIndex: 1, // Image sits on top
+        zIndex: 1,
     },
     absolutePlaceholder: {
         ...StyleSheet.absoluteFillObject,
         alignItems: 'center',
         justifyContent: 'center',
         padding: 8,
-        zIndex: 0, // Placeholder sits behind
+        zIndex: 0,
     },
     ratingOverlay: {
         position: 'absolute',

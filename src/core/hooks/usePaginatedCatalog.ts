@@ -21,7 +21,7 @@ export const usePaginatedCatalog = (
 ): PaginatedCatalogResult => {
     const { manifests } = useUserStore();
     const [items, setItems] = useState<MetaPreview[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [isFetchingMore, setIsFetchingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const skipRef = useRef(0);
@@ -63,6 +63,7 @@ export const usePaginatedCatalog = (
 
         return {
             metas: uniqueMetas,
+            rawCount: metas.length,
             hasMore: metas.length >= PAGE_SIZE
         };
     }, [getTargetUrls, type, id, extra]);
@@ -79,7 +80,7 @@ export const usePaginatedCatalog = (
             if (isMountedRef.current) {
                 setItems(result.metas);
                 setHasMore(result.hasMore);
-                skipRef.current = result.metas.length;
+                skipRef.current = result.rawCount;
             }
         } finally {
             if (isMountedRef.current) {
@@ -98,7 +99,7 @@ export const usePaginatedCatalog = (
             if (isMountedRef.current) {
                 setItems(prev => [...prev, ...result.metas]);
                 setHasMore(result.hasMore);
-                skipRef.current += result.metas.length;
+                skipRef.current += result.rawCount;
             }
         } finally {
             if (isMountedRef.current) {
@@ -112,6 +113,8 @@ export const usePaginatedCatalog = (
         const targetUrls = getTargetUrls();
         if (type && id && targetUrls.length > 0) {
             loadInitial();
+        } else {
+            setIsLoading(false);
         }
         return () => {
             isMountedRef.current = false;

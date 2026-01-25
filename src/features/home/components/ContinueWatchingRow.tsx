@@ -1,13 +1,13 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
 import { TraktService } from '@/src/core/services/TraktService';
-import { useTheme } from '@/src/core/ThemeContext';
-import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
-import { SectionHeader } from '@/src/core/ui/SectionHeader';
-import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { useTheme } from '@/src/core/ThemeContext';
+import { SectionHeader } from '@/src/core/ui/SectionHeader';
+import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { ContinueWatchingCard } from './ContinueWatchingCard';
 
 const CARD_WIDTH = 280; // Larger cards for immersive Continue Watching
 // WebUI Continue Watching uses 'landscape' shape for episodes usually?
@@ -24,19 +24,20 @@ const CARD_WIDTH = 280; // Larger cards for immersive Continue Watching
 
 const SNAP_INTERVAL = CARD_WIDTH + 16;
 
+
 export const ContinueWatchingRow = () => {
     const { theme } = useTheme();
     const traktAuth = useUserStore(s => s.traktAuth);
     const [items, setItems] = useState<MetaPreview[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const fetchItems = useCallback(async () => {
         if (!traktAuth?.accessToken) {
             setItems([]);
+            setLoading(false);
             return;
         }
 
-        setLoading(true);
         try {
             const data = await TraktService.getContinueWatching();
             setItems(data);
@@ -53,7 +54,21 @@ export const ContinueWatchingRow = () => {
         }, [fetchItems])
     );
 
-    if (!traktAuth?.accessToken || (items.length === 0 && !loading)) {
+    const renderSkeleton = useCallback(() => (
+        <View
+            style={[
+                styles.skeleton,
+                {
+                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                    width: CARD_WIDTH,
+                    height: CARD_WIDTH / 1.77,
+                    borderRadius: 12
+                }
+            ]}
+        />
+    ), [theme.colors.surfaceContainerHighest, theme.colors.surfaceVariant]);
+
+    if (!traktAuth?.accessToken || (!loading && items.length === 0)) {
         return null;
     }
 
@@ -64,28 +79,29 @@ export const ContinueWatchingRow = () => {
                 style={{ paddingHorizontal: 24 }}
             />
 
-            {loading && items.length === 0 ? (
-                <View style={[styles.scrollContent, { height: (CARD_WIDTH / 1.77) + 30, justifyContent: 'center' }]}>
-                    <LoadingIndicator color={theme.colors.primary} />
-                </View>
-            ) : (
-                <FlatList
-                    data={items}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    keyExtractor={(item, index) => `${item.id}-${index}`}
-                    contentContainerStyle={styles.scrollContent}
-                    renderItem={({ item }) => (
-                        <CatalogCard item={item} width={CARD_WIDTH} />
-                    )}
-                    snapToInterval={SNAP_INTERVAL}
-                    decelerationRate="fast"
-                    snapToAlignment="start"
-                />
-            )}
+            <FlashList
+                data={loading ? SKELETON_DATA : items}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `${item.id}-${index}`}
+                contentContainerStyle={styles.scrollContent}
+                renderItem={loading ? renderSkeleton : ({ item }) => (
+                    <ContinueWatchingCard item={item} width={CARD_WIDTH} />
+                )}
+                estimatedItemSize={CARD_WIDTH}
+                drawDistance={CARD_WIDTH * 2.5}
+                snapToInterval={SNAP_INTERVAL}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+            />
         </View>
     );
 };
+
+
+
+const SKELETON_DATA = [...Array(4)];
 
 const styles = StyleSheet.create({
     container: {
@@ -95,4 +111,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         gap: 16,
     },
+    skeleton: {
+        opacity: 0.5,
+    }
 });

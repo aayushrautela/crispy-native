@@ -42,7 +42,7 @@ export interface Addon {
 
 export interface CatalogPreferences {
     disabled: string[];
-    order: string[];
+    disabled: string[];
     hero: string[];
     traktTopPicks: boolean;
     continueWatching: boolean;
@@ -111,7 +111,6 @@ function getDefaultAddons(): Addon[] {
 
 const DEFAULT_CATALOG_PREFS: CatalogPreferences = {
     disabled: [],
-    order: [],
     hero: [
         'pw.ers.netflix-catalog-movie-nfx',
         'pw.ers.netflix-catalog-series-nfx',

@@ -104,7 +104,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         if (!isAuthenticated) return;
         setIsLoading(true);
         try {
-            const [w, c, p, r, watchedShowsRaw] = await Promise.all([
+            const [w, c, p, r, watchedShowsRaw, rec] = await Promise.all([
                 TraktService.getWatchlist(),
                 TraktService.getCollection(),
                 TraktService.getContinueWatching(),
