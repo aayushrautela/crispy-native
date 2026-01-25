@@ -1,3 +1,4 @@
+import { LAYOUT } from '@/src/constants/layout';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
@@ -118,7 +119,7 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
 
 const styles = StyleSheet.create({
     container: {
-        width: 88, // Slightly wider for premium feel
+        width: LAYOUT.RAIL_WIDTH, // Slightly wider for premium feel
         height: '100%',
         paddingVertical: 32,
         alignItems: 'center',

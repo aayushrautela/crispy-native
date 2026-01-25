@@ -1,3 +1,4 @@
+import { LAYOUT } from '@/src/constants/layout';
 import { useTheme } from '@/src/core/ThemeContext';
 import { MaterialNavigationRail } from '@/src/core/ui/layout/MaterialNavigationRail';
 import { SplitTabBar } from '@/src/core/ui/layout/SplitTabBar';
@@ -27,10 +28,13 @@ export default function TabLayout() {
           left: 0,
           top: 0,
           bottom: 0,
-          width: 80,
+          width: LAYOUT.RAIL_WIDTH,
           borderRightWidth: 1,
           borderRightColor: theme.colors.outlineVariant,
           backgroundColor: theme.colors.surface,
+        } : undefined,
+        sceneContainerStyle: isTablet ? {
+          marginLeft: LAYOUT.RAIL_WIDTH,
         } : undefined,
       }}
     >
