@@ -61,4 +61,11 @@
 - [x] Implement bottom fade for Hero.
 - [x] Make Header transparent and overlay on Hero.
 
+## Phase 17: Auth UI Redesign 🎨 [ ]
+- [ ] Implement `Screen` with gradient background in `login.tsx`.
+- [ ] Replace `Text` usages with `Typography` (MD3 variants).
+- [ ] redesign `TextInput` containers using `ExpressiveSurface` (tonal variant).
+- [ ] Enhance "Guest Mode" entry visual prominence.
+- [ ] Add smooth reanimated transitions between Auth modes.
+
 

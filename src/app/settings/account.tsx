@@ -1,82 +1,97 @@
 import { useRouter } from 'expo-router';
-import { LogIn, User, UserCircle } from 'lucide-react-native';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { CheckCircle2, LogIn, LogOut, RefreshCw } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../core/AuthContext';
 import { useTheme } from '../../core/ThemeContext';
+import { supabase } from '../../core/services/supabase';
+import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
 import { SettingsGroup } from '../../core/ui/SettingsGroup';
 import { SettingsItem } from '../../core/ui/SettingsItem';
 import { Typography } from '../../core/ui/Typography';
 import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
-import { useUserStore } from '../../features/trakt/stores/userStore';
 
 export default function AccountScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const auth = useAuth();
     const user = auth?.user;
-    const traktAuth = useUserStore(s => s.traktAuth);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const isTraktAuthenticated = !!traktAuth?.accessToken;
     const isSupabaseAuthenticated = !!user;
+
+    const handleLogout = async () => {
+        Alert.alert(
+            'Sign Out',
+            'Are you sure you want to sign out?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setIsLoading(true);
+                        try {
+                            const { error } = await supabase.auth.signOut();
+                            if (error) throw error;
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message);
+                        } finally {
+                            setIsLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     return (
         <SettingsSubpage title="Account">
             <View>
-                <View style={styles.profileHeader}>
-                    <View style={[styles.avatarContainer, { backgroundColor: theme.colors.primaryContainer }]}>
-                        <UserCircle size={48} color={theme.colors.primary} />
+                <SettingsGroup title="Status">
+                    <View style={styles.statusCard}>
+                        <View style={styles.statusInfo}>
+                            <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSurface }}>
+                                {isSupabaseAuthenticated ? (user?.user_metadata?.name || 'Crispy User') : 'Guest Account'}
+                            </Typography>
+                            <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
+                                {isSupabaseAuthenticated
+                                    ? (user?.email || 'Signed in via Email')
+                                    : 'Sign in to sync your library'}
+                            </Typography>
+                        </View>
+                        <ExpressiveButton
+                            title={isSupabaseAuthenticated ? "Logout" : "Sign In"}
+                            icon={isSupabaseAuthenticated ? LogOut : LogIn}
+                            onPress={isSupabaseAuthenticated ? handleLogout : () => router.push('/(auth)/login')}
+                            variant={isSupabaseAuthenticated ? "tonal" : "primary"}
+                            isLoading={isLoading}
+                        />
                     </View>
-                    <View style={styles.profileInfo}>
-                        <Typography variant="title-large" weight="bold" style={{ color: theme.colors.onSurface }}>
-                            {user?.user_metadata?.name || user?.email || 'Guest User'}
-                        </Typography>
-                        <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {isSupabaseAuthenticated ? 'Cloud Sync Active' : 'Sign in to sync your library'}
-                        </Typography>
-                    </View>
-                </View>
-
-                <SettingsGroup title="Integrations">
-                    <SettingsItem
-                        icon={User}
-                        label="Trakt.tv"
-                        description={isTraktAuthenticated ? "Account synced & active" : "Sync watch history across devices"}
-                        onPress={() => router.push('/settings/trakt')}
-                    />
                 </SettingsGroup>
 
-                {!isSupabaseAuthenticated && (
-                    <SettingsGroup title="Cloud Sync">
-                        <SettingsItem
-                            icon={LogIn}
-                            label="Sign In"
-                            description="Access your profile and favorites"
-                            onPress={() => router.replace('/(auth)/login')}
-                        />
-                    </SettingsGroup>
-                )}
+                <SettingsGroup title="Features">
+                    <SettingsItem
+                        icon={RefreshCw}
+                        label="Cloud Sync"
+                        description="Sync addons, catalogs and settings across multiple devices"
+                        showChevron={false}
+                        rightElement={<CheckCircle2 size={20} color={isSupabaseAuthenticated ? theme.colors.primary : theme.colors.onSurfaceVariant + '40'} />}
+                    />
+                </SettingsGroup>
             </View>
         </SettingsSubpage>
     );
 }
 
 const styles = StyleSheet.create({
-    profileHeader: {
+    statusCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 24,
-        gap: 20,
+        padding: 20,
+        gap: 12,
     },
-    avatarContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    profileInfo: {
+    statusInfo: {
         flex: 1,
-    }
+    },
 });

@@ -1,11 +1,15 @@
+import { useTheme } from '@/src/core/ThemeContext';
 import { supabase } from '@/src/core/services/supabase';
 import { StorageService } from '@/src/core/storage';
-import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
-import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Lock, LogIn, Mail, User as UserIcon, UserPlus } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -33,7 +37,7 @@ export default function LoginScreen() {
                 if (error) throw error;
                 if (!data.session) {
                     alert('Please check your email for the confirmation link!');
-                    return; // Don't redirect if email confirmation is required
+                    return;
                 }
             } else {
                 const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -52,97 +56,109 @@ export default function LoginScreen() {
         router.replace('/(tabs)');
     };
 
-    return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.container, { backgroundColor: theme.colors.background }]}
-        >
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                <View style={styles.content}>
-                    <View style={styles.header}>
-                        <Text style={[styles.title, { color: theme.colors.primary }]}>
-                            {isSignUp ? 'Create Account' : 'Welcome Back'}
-                        </Text>
-                        <Text style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
-                            {isSignUp ? 'Enter your details to get started' : 'Sign in to continue to Crispy'}
-                        </Text>
-                    </View>
+    const toggleMode = () => {
+        setIsSignUp(!isSignUp);
+    };
 
-                    <ExpressiveSurface style={styles.form} variant="elevated" rounding="2xl">
+    return (
+        <SettingsSubpage title={isSignUp ? "Create Account" : "Sign In"}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.container}
+            >
+                <View style={styles.formContainer}>
+
+
+                    <SettingsGroup title="Credentials">
                         {isSignUp && (
-                            <View style={styles.inputGroup}>
-                                <Text style={[styles.label, { color: theme.colors.onSurface }]}>Full Name</Text>
-                                <TextInput
-                                    style={[styles.input, {
-                                        backgroundColor: theme.colors.surfaceVariant,
-                                        color: theme.colors.onSurface,
-                                        borderRadius: 12
-                                    }]}
-                                    value={name}
-                                    onChangeText={setName}
-                                    placeholder="Enter your name"
-                                    placeholderTextColor={theme.colors.outline}
+                            <>
+                                <SettingsItem
+                                    icon={UserIcon}
+                                    label="Full Name"
+                                    showChevron={false}
                                 />
-                            </View>
+                                <View style={styles.inputWrapper}>
+                                    <TextInput
+                                        value={name}
+                                        onChangeText={setName}
+                                        placeholder="Your Name"
+                                        placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
+                                        style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
+                                    />
+                                </View>
+                            </>
                         )}
 
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: theme.colors.onSurface }]}>Email</Text>
+                        <SettingsItem
+                            icon={Mail}
+                            label="Email Address"
+                            showChevron={false}
+                        />
+                        <View style={styles.inputWrapper}>
                             <TextInput
-                                style={[styles.input, {
-                                    backgroundColor: theme.colors.surfaceVariant,
-                                    color: theme.colors.onSurface,
-                                    borderRadius: 12
-                                }]}
                                 value={email}
                                 onChangeText={setEmail}
-                                placeholder="Enter your email"
-                                placeholderTextColor={theme.colors.outline}
+                                placeholder="email@example.com"
+                                placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
                                 autoCapitalize="none"
                                 keyboardType="email-address"
+                                style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
                             />
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={[styles.label, { color: theme.colors.onSurface }]}>Password</Text>
+                        <SettingsItem
+                            icon={Lock}
+                            label="Password"
+                            showChevron={false}
+                        />
+                        <View style={styles.inputWrapper}>
                             <TextInput
-                                style={[styles.input, {
-                                    backgroundColor: theme.colors.surfaceVariant,
-                                    color: theme.colors.onSurface,
-                                    borderRadius: 12
-                                }]}
                                 value={password}
                                 onChangeText={setPassword}
-                                placeholder="Enter your password"
-                                placeholderTextColor={theme.colors.outline}
+                                placeholder="••••••••"
+                                placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
                                 secureTextEntry
+                                style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
                             />
+                        </View>
+                    </SettingsGroup>
+
+                    <View style={styles.actionContainer}>
+                        <ExpressiveButton
+                            title={isSignUp ? "Sign Up" : "Sign In"}
+                            onPress={handleAuth}
+                            isLoading={loading}
+                            icon={isSignUp ? UserPlus : LogIn}
+                            style={styles.submitBtn}
+                            size="lg"
+                        />
+
+                        <ExpressiveButton
+                            title={isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+                            variant="text"
+                            onPress={toggleMode}
+                            style={styles.toggleBtn}
+                        />
+
+                        <View style={styles.divider}>
+                            <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
+                            <Typography variant="label-small" style={{ color: theme.colors.outline, marginHorizontal: 16 }}>
+                                OR
+                            </Typography>
+                            <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
                         </View>
 
                         <ExpressiveButton
-                            title={loading ? (isSignUp ? "Creating account..." : "Logging in...") : (isSignUp ? "Sign Up" : "Login")}
-                            onPress={handleAuth}
-                            style={styles.loginBtn}
-                            disabled={loading}
-                        />
-
-                        <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)} style={styles.switchButton}>
-                            <Text style={[styles.switchText, { color: theme.colors.primary }]}>
-                                {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-                            </Text>
-                        </TouchableOpacity>
-                    </ExpressiveSurface>
-
-                    <View style={styles.footer}>
-                        <ExpressiveButton
                             title="Continue as Guest"
-                            variant="text"
+                            variant="tonal"
                             onPress={handleGuest}
+                            size="md"
+                            style={styles.guestBtn}
                         />
                     </View>
                 </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
+        </SettingsSubpage>
     );
 }
 
@@ -150,63 +166,40 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
+    formContainer: {
+        paddingTop: 8,
     },
-    content: {
-        padding: 24,
-        justifyContent: 'center',
-        maxWidth: 500,
-        alignSelf: 'center',
-        width: '100%',
-    },
-    header: {
-        marginBottom: 32,
-        alignItems: 'center',
-    },
-    title: {
-        fontSize: 32, // Adjusted for better mobile fit
-        fontWeight: '800',
-        letterSpacing: -1,
-        textAlign: 'center',
-    },
-    subtitle: {
-        fontSize: 16,
-        marginTop: 8,
-        textAlign: 'center',
-    },
-    form: {
-        padding: 24,
-        gap: 16,
-    },
-    inputGroup: {
-        gap: 8,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '600',
-        marginLeft: 4,
+    inputWrapper: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
     },
     input: {
-        height: 56,
+        borderRadius: 16,
         paddingHorizontal: 16,
+        paddingVertical: 12,
         fontSize: 16,
     },
-    loginBtn: {
+    actionContainer: {
+        paddingHorizontal: 20,
         marginTop: 8,
     },
-    switchButton: {
-        alignItems: 'center',
-        marginTop: 8,
-        padding: 8,
+    submitBtn: {
+        width: '100%',
     },
-    switchText: {
-        fontSize: 14,
-        fontWeight: '600',
+    toggleBtn: {
+        marginTop: 12,
+        width: '100%',
     },
-    footer: {
-        marginTop: 24,
+    divider: {
+        flexDirection: 'row',
         alignItems: 'center',
-    }
+        marginVertical: 32,
+    },
+    line: {
+        flex: 1,
+        height: 1,
+    },
+    guestBtn: {
+        width: '100%',
+    },
 });

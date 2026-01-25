@@ -50,3 +50,14 @@ Implement comprehensive Trakt user interactions (Library management, Rating, Wat
 - **Auto-PiP**: App must enter PiP mode automatically on home swipe (backgrounding while playing).
 - **PiP Visuals**: PiP window must respect video aspect ratio (16:9) and hide all UI controls/overlays.
 - **Screen Management**: Device must not sleep while video is playing (Keep Screen On).
+
+## 6. Auth UI Redesign (Phase 17)
+- **Visual Style**: Follow Material 3 Expressive design system.
+- **Components**:
+    - Use `Screen` with `gradient` background.
+    - Use `ExpressiveSurface` with high rounding (`3xl`) for the form.
+    - Use `Typography` for all text (MD3 variants).
+    - Use `ExpressiveButton` for all actions.
+- **Layout**: Center aligned, edge-to-edge padding on mobile, maximum width on tablets.
+- **Interactions**: Smooth transitions between Login and Sign Up states using `react-native-reanimated`.
+
