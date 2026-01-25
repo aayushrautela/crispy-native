@@ -3,7 +3,7 @@
     "name": "crispy-native",
     "slug": "crispy-native",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "crispynative",
     "userInterfaceStyle": "automatic",
