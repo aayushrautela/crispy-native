@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
     interpolate,
@@ -9,19 +9,36 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EdgeInsets, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../ThemeContext';
 import { Typography } from '../Typography';
 import { Screen } from './Screen';
 
+interface SettingsSubpageContextType {
+    onScroll: any;
+    scrollY: Animated.SharedValue<number>;
+    insets: EdgeInsets;
+}
+
+const SettingsSubpageContext = createContext<SettingsSubpageContextType | null>(null);
+
+export const useSettingsSubpage = () => {
+    const context = useContext(SettingsSubpageContext);
+    if (!context) {
+        throw new Error('useSettingsSubpage must be used within a SettingsSubpage');
+    }
+    return context;
+};
+
 interface SettingsSubpageProps {
     title: string;
     children: React.ReactNode;
+    noScroll?: boolean;
 }
 
 const HEADER_HEIGHT = 100;
 
-export function SettingsSubpage({ title, children }: SettingsSubpageProps) {
+export function SettingsSubpage({ title, children, noScroll = false }: SettingsSubpageProps) {
     const { theme } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -53,7 +70,6 @@ export function SettingsSubpage({ title, children }: SettingsSubpageProps) {
         opacity: interpolate(headerTranslateY.value, [-HEADER_HEIGHT, 0], [0, 1]),
     }));
 
-    // Background opacity driven by scroll - use interpolateColor for smoother transition
     const headerBgStyle = useAnimatedStyle(() => ({
         backgroundColor: interpolateColor(
             scrollY.value,
@@ -63,28 +79,36 @@ export function SettingsSubpage({ title, children }: SettingsSubpageProps) {
     }));
 
     return (
-        <Screen safeArea={false} style={{ backgroundColor: theme.colors.surface }}>
-            <Animated.View style={[styles.header, headerStyle, headerBgStyle, { paddingTop: insets.top + 16 }]}>
-                <View style={styles.headerRow}>
-                    <Pressable onPress={() => router.back()} style={styles.backBtn}>
-                        <ArrowLeft color={theme.colors.onSurface} size={24} />
-                    </Pressable>
-                    <Typography variant="display-small" weight="black" rounded style={{ color: theme.colors.onSurface }}>
-                        {title}
-                    </Typography>
-                </View>
-            </Animated.View>
+        <SettingsSubpageContext.Provider value={{ onScroll, scrollY, insets }}>
+            <Screen safeArea={false} style={{ backgroundColor: theme.colors.surface }}>
+                <Animated.View style={[styles.header, headerStyle, headerBgStyle, { paddingTop: insets.top + 16 }]}>
+                    <View style={styles.headerRow}>
+                        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+                            <ArrowLeft color={theme.colors.onSurface} size={24} />
+                        </Pressable>
+                        <Typography variant="display-small" weight="black" rounded style={{ color: theme.colors.onSurface }}>
+                            {title}
+                        </Typography>
+                    </View>
+                </Animated.View>
 
-            <Animated.ScrollView
-                onScroll={onScroll}
-                scrollEventThrottle={16}
-                contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 80 }]}
-                showsVerticalScrollIndicator={false}
-                style={{ backgroundColor: theme.colors.surface }}
-            >
-                {children}
-            </Animated.ScrollView>
-        </Screen>
+                {noScroll ? (
+                    <View style={{ flex: 1 }}>
+                        {children}
+                    </View>
+                ) : (
+                    <Animated.ScrollView
+                        onScroll={onScroll}
+                        scrollEventThrottle={16}
+                        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 80 }]}
+                        showsVerticalScrollIndicator={false}
+                        style={{ backgroundColor: theme.colors.surface }}
+                    >
+                        {children}
+                    </Animated.ScrollView>
+                )}
+            </Screen>
+        </SettingsSubpageContext.Provider>
     );
 }
 

@@ -254,3 +254,10 @@ export interface TraktRatingPayload {
         rated_at?: string;
     }>;
 }
+export interface TraktRecommendation {
+    rank: number;
+    id: number;
+    type: 'movie' | 'show';
+    movie?: TraktMediaItem;
+    show?: TraktMediaItem;
+}

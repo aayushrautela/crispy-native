@@ -80,3 +80,9 @@
 - [x] Create Zustand store for Trakt state management.
 - [x] Refactor `CatalogCard` and `details.tsx` to use Zenstand selectors.
 - [x] Implement concurrency-controlled queue for remaining enrichment.
+
+## Phase 20: Home Screen Settings & Catalog Management 🛠️ [DONE]
+- [x] Enable persistence for `catalogPrefs` in `UserStore.ts`.
+- [x] Create `useCatalogPreferences` hook for cross-platform logic.
+- [x] Implement catalog rearrangement UI (Move Up/Down) in Settings.
+- [x] Update Home Screen to respect ordering, visibility, and hero selection.

@@ -5,6 +5,8 @@ import { Typography } from '@/src/core/ui/Typography';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
 import { HeroCarousel } from '@/src/features/home/components/HeroCarousel';
+import { TraktRecommendationsRow } from '@/src/features/home/components/TraktRecommendationsRow';
+import { getCatalogKey, useCatalogPreferences } from '@/src/hooks/useCatalogPreferences';
 import { useRouter } from 'expo-router';
 import { CircleUser } from 'lucide-react-native';
 import React, { useMemo } from 'react';
@@ -21,6 +23,7 @@ const HEADER_HEIGHT = 96;
 export default function HomeScreen() {
   const { theme } = useTheme();
   const { manifests } = useUserStore();
+  const { preferences, sortCatalogsByPreferences } = useCatalogPreferences();
   const router = useRouter();
 
   const scrollY = useSharedValue(0);
@@ -56,45 +59,41 @@ export default function HomeScreen() {
 
   const homeCatalogs = useMemo(() => {
     if (!manifests) return [];
+
+    // 1. Flatten all catalogs from manifests
     const catalogs = Object.entries(manifests).flatMap(([url, m]) =>
       (m?.catalogs || []).map(c => ({ ...c, addonName: m.name, addonUrl: url }))
     );
+
+    // 2. Filter by visibility and deduplicate
     const seen = new Set();
-    return catalogs.filter(c => {
-      if (seen.has(c.id)) return false;
-      seen.add(c.id);
+    const filtered = catalogs.filter(c => {
+      const key = getCatalogKey(c);
+      if (preferences.disabled.has(key)) return false;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
-    }).slice(0, 5);
-  }, [manifests]);
+    });
 
-  /*
-  console.log('[Home] manifests count:', Object.keys(manifests || {}).length);
-  console.log('[Home] homeCatalogs count:', homeCatalogs.length);
-  if (homeCatalogs.length > 0) {
-      console.log('[Home] firstCatalog:', {
-          type: homeCatalogs[0].type,
-          id: homeCatalogs[0].id,
-          addonUrl: homeCatalogs[0].addonUrl
-      });
-  }
-  */
+    // 3. Sort by preferences
+    return sortCatalogsByPreferences(filtered);
+  }, [manifests, preferences.disabled, sortCatalogsByPreferences]);
 
-  const firstCatalog = homeCatalogs[0];
-  const { data: heroData, isLoading: heroLoading, error: heroError } = useCatalog(
-    firstCatalog?.type || '',
-    firstCatalog?.id || '',
-    firstCatalog?.extra ? { ...firstCatalog.extra } : undefined,
-    firstCatalog?.addonUrl
+  // Determine Hero Catalog
+  const heroCatalog = useMemo(() => {
+    if (homeCatalogs.length === 0) return null;
+
+    // Find first catalog that is marked as hero
+    const hero = homeCatalogs.find(c => preferences.hero.has(getCatalogKey(c)));
+    return hero || homeCatalogs[0];
+  }, [homeCatalogs, preferences.hero]);
+
+  const { data: heroData, isLoading: heroLoading } = useCatalog(
+    heroCatalog?.type || '',
+    heroCatalog?.id || '',
+    heroCatalog?.extra ? { ...heroCatalog.extra } : undefined,
+    heroCatalog?.addonUrl
   );
-
-  /*
-  console.log('[Home] heroData:', {
-      hasMetas: !!heroData?.metas,
-      count: heroData?.metas?.length,
-      loading: heroLoading,
-      error: heroError
-  });
-  */
 
   const carouselItems = useMemo(() => {
     if (heroData?.metas && heroData.metas.length > 0) {
@@ -146,11 +145,12 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={(item) => getCatalogKey(item)}
         ListHeaderComponent={() => (
           <>
             <HeroCarousel items={carouselItems} />
-            <ContinueWatchingRow />
+            {preferences.continueWatching && <ContinueWatchingRow />}
+            {preferences.traktTopPicks && <TraktRecommendationsRow />}
             {homeCatalogs.length === 0 && (
               <View style={styles.emptyPrompt}>
                 <CatalogRow

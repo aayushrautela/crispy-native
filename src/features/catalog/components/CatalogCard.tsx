@@ -1,5 +1,6 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
 import { useTraktStore } from '@/src/core/stores/traktStore';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ActionItem, ActionSheet } from '@/src/core/ui/ActionSheet';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
@@ -24,6 +25,7 @@ interface CatalogCardProps {
 export const CatalogCard = React.memo(({ item, width = 144 }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
+    const settings = useUserStore(s => s.settings);
     const [focused, setFocused] = useState(false);
 
     // Lazy Enrichment Hook
@@ -189,7 +191,7 @@ export const CatalogCard = React.memo(({ item, width = 144 }: CatalogCardProps) 
                     )}
 
                     {/* Rating Overlay */}
-                    {(displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating) && (
+                    {(settings.showRatingBadges && (displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating)) && (
                         <View style={styles.ratingOverlay}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
                             <Typography variant="label-small" weight="black" style={{ color: 'white', marginLeft: 4 }}>

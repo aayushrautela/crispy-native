@@ -27,6 +27,7 @@ interface TraktContextProps {
     collectionShows: TraktCollectionItem[];
     continueWatching: TraktPlaybackItem[];
     ratedContent: TraktRatingItem[];
+    recommendations: any[];
 
     // Actions
     checkAuthStatus: () => Promise<void>;
@@ -74,6 +75,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         setRatedContent,
         setWatchedShowsRaw,
         setWatchedHistory,
+        recommendations,
+        setRecommendations,
         hydrate,
         isInWatchlist: storeIsInWatchlist,
         isInCollection: storeIsInCollection,
@@ -106,7 +109,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
                 TraktService.getCollection(),
                 TraktService.getContinueWatching(),
                 TraktService.getRated(),
-                TraktService.getWatchedShows()
+                TraktService.getWatchedShows(),
+                TraktService.getMixedRecommendations(20)
             ]);
 
             const h = await TraktService.getWatched();
@@ -118,6 +122,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             setRatedContent(r || []);
             setWatchedShowsRaw(watchedShowsRaw || []);
             setWatchedHistory(h || []);
+            setRecommendations(rec || []);
 
         } catch (e) {
             console.error('Failed to load Trakt collections', e);
@@ -380,7 +385,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         addToCollection,
         removeFromCollection,
         rateContent,
-        removeContentRating
+        removeContentRating,
+        recommendations
     }), [
         isAuthenticated,
         isLoading,
@@ -409,7 +415,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         addToCollection,
         removeFromCollection,
         rateContent,
-        removeContentRating
+        removeContentRating,
+        recommendations
     ]);
 
     return (

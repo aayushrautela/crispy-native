@@ -527,6 +527,28 @@ export class TraktService {
         return this.apiRequest('/users/me/stats');
     }
 
+    public async getRecommendations(type: 'movies' | 'shows', limit = 10) {
+        return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=full`);
+    }
+
+    public async getMixedRecommendations(limit = 10) {
+        // Fetch both in parallel
+        const [movieRecs, showRecs] = await Promise.all([
+            this.getRecommendations('movies', limit),
+            this.getRecommendations('shows', limit)
+        ]);
+
+        // Mix them
+        const mixed: any[] = [];
+        const maxLen = Math.max(movieRecs.length, showRecs.length);
+        for (let i = 0; i < maxLen; i++) {
+            if (i < movieRecs.length) mixed.push({ ...movieRecs[i], type: 'movie' });
+            if (i < showRecs.length) mixed.push({ ...showRecs[i], type: 'series' });
+        }
+
+        return mixed.slice(0, limit).map(i => this.normalize(i));
+    }
+
     // --- Comments & Social (Ported from WebUI) ---
 
     // Unified getComments to satisfy useTraktComments hook expectation
@@ -607,6 +629,14 @@ export class TraktService {
 
     public static async getWatchlist() {
         return this.getInstance().getWatchlist();
+    }
+
+    public static async getRecommendations(type: 'movies' | 'shows', limit?: number) {
+        return this.getInstance().getRecommendations(type, limit);
+    }
+
+    public static async getMixedRecommendations(limit?: number) {
+        return this.getInstance().getMixedRecommendations(limit);
     }
 
     public static async oauthDeviceCode() {

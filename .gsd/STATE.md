@@ -1,15 +1,15 @@
 ### Current Position
-- **Phase**: DONE
-- **Task**: Production-Grade Performance Optimization
-- **Status**: COMPLETED
+- **Phase**: Phase 20: Home Screen Settings & Catalog Management
+- **Task**: Resolved Nesting conflict & UI Refinement
+- **Status**: DONE
 
 ### What was just accomplished
-- Implemented Service-Level Hydration in `TraktService.ts`.
-- Optimized `useTraktEnrichment` hook with an early-exit guard.
-- Created `traktStore.ts` for atomic state management using Zustand.
-- Refactored `TraktContext.tsx` to utilize the new Zustand store.
-- Optimized `CatalogCard.tsx` with `React.memo` and atomic store selectors.
-- Verified that Library scrolling now performs 0 network calls for enriched metadata.
+- **Trakt Recommendations**: Ported "Trakt Top Picks" logic and UI from Web UI, including a mixed recommendations service and horizontal row component.
+- **VirtualizedList Fix**: Refactored `SettingsSubpage` to support `noScroll` mode via context, resolving the `VirtualizedList` nesting error.
+- **Drag-and-Drop**: Implemented using `react-native-draggable-flatlist` in `home.tsx`.
+- **UI Refinement**: Upgraded all toggles to the premium `ExpressiveSwitch` style.
+- **Rating Badge Fix**: Integrated `showRatingBadges` setting into `CatalogCard.tsx`.
 
 ### Next Steps
-- Continue with Phase 15: Architecture Refactor or Phase 17: Auth UI Redesign.
+- Implementation of Trakt Ratings modal and Catalog card interaction (Phase 5-7).
+- Auth UI Redesign (Phase 17).

@@ -8,6 +8,7 @@ export interface TraktStoreState {
     continueWatching: any[];
     ratedContent: any[];
     watchedShowsRaw: any[];
+    recommendations: any[];
 
     // Optimized Lookups (not persisted directly, hydrated from raw)
     watchlistIds: Set<string>;
@@ -24,6 +25,7 @@ export interface TraktStoreState {
     setRatedContent: (items: any[]) => void;
     setWatchedShowsRaw: (items: any[]) => void;
     setWatchedHistory: (items: any[]) => void;
+    setRecommendations: (items: any[]) => void;
     setIsLoading: (loading: boolean) => void;
 
     // Selectors
@@ -74,6 +76,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
     collectionIds: new Set(),
     watchedIds: new Set(),
     watchedEpisodeIds: new Set(),
+    recommendations: [],
     isLoading: false,
 
     setWatchlist: (items) => {
@@ -100,6 +103,10 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
         set({ watchedIds: buildIds(items) });
         StorageService.setUser('trakt-watched-history', items);
     },
+    setRecommendations: (items) => {
+        set({ recommendations: items });
+        StorageService.setUser('trakt-recommendations', items);
+    },
     setIsLoading: (isLoading) => set({ isLoading }),
 
     isInWatchlist: (id) => id ? get().watchlistIds.has(id) : false,
@@ -114,6 +121,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
         const ratedContent = StorageService.getUser<any[]>('trakt-rated-content') || [];
         const watchedShowsRaw = StorageService.getUser<any[]>('trakt-watched-shows-raw') || [];
         const watchedHistory = StorageService.getUser<any[]>('trakt-watched-history') || [];
+        const recommendations = StorageService.getUser<any[]>('trakt-recommendations') || [];
 
         set({
             watchlist,
@@ -121,6 +129,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
             continueWatching,
             ratedContent,
             watchedShowsRaw,
+            recommendations,
             watchlistIds: buildIds(watchlist),
             collectionIds: buildIds(collection),
             watchedIds: buildIds(watchedHistory),

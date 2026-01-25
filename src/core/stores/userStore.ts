@@ -221,7 +221,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         settings: getDefaultSettings(),
         addons: initialAddons,
         manifests: {}, // Start empty, hydrate later via effect/action
-        catalogPrefs: DEFAULT_CATALOG_PREFS,
+        catalogPrefs: StorageService.getUser<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
         traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
 
         loading: true,
@@ -320,6 +320,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             const current = get().catalogPrefs;
             const next = { ...current, ...prefs, updatedAt: Date.now() };
             set({ catalogPrefs: next });
+            StorageService.setUser('crispy-catalog-prefs', next);
         },
 
         updateTraktAuth: (auth) => {
