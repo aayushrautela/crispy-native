@@ -197,12 +197,14 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
 
                     {/* Metadata Row */}
                     <View style={styles.metadataRow}>
-                        <View style={styles.metaItem}>
-                            <Star size={14} color="#FFD700" fill="#FFD700" />
-                            <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                                {enriched.rating ? Number(enriched.rating).toFixed(1) : '5.1'}
-                            </Typography>
-                        </View>
+                        {enriched.rating && (
+                            <View style={styles.metaItem}>
+                                <Star size={14} color="#FFD700" fill="#FFD700" />
+                                <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
+                                    {Number(enriched.rating).toFixed(1)}
+                                </Typography>
+                            </View>
+                        )}
                         {enriched.maturityRating && (
                             <View style={styles.metaBadge}>
                                 <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 10 }}>
@@ -210,7 +212,9 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                                 </Typography>
                             </View>
                         )}
-                        <Typography variant="label" style={styles.metaText}>{enriched.year || '2025'}</Typography>
+                        {enriched.year && (
+                            <Typography variant="label" style={styles.metaText}>{enriched.year}</Typography>
+                        )}
                         {enriched.runtime && (
                             <Typography variant="label" style={styles.metaText}>{enriched.runtime}</Typography>
                         )}

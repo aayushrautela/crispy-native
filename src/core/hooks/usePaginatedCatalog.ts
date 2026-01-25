@@ -1,5 +1,6 @@
 import { useUserStore } from '@/src/core/stores/userStore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { AddonService, MetaPreview } from '../services/AddonService';
 
 const PAGE_SIZE = 20;
@@ -20,16 +21,9 @@ export const usePaginatedCatalog = (
     addonUrl?: string
 ): PaginatedCatalogResult => {
     const { manifests } = useUserStore();
-    const [items, setItems] = useState<MetaPreview[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isFetchingMore, setIsFetchingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(true);
-    const skipRef = useRef(0);
-    const seenIdsRef = useRef(new Set<string>());
-    const isMountedRef = useRef(true);
 
-    // Find target addon URLs
-    const getTargetUrls = useCallback(() => {
+    // Determine target URLs
+    const targetUrls = useMemo(() => {
         if (!manifests || typeof manifests !== 'object') return [];
         if (addonUrl) return [addonUrl];
 
@@ -38,95 +32,67 @@ export const usePaginatedCatalog = (
         );
     }, [manifests, type, id, addonUrl]);
 
-    const fetchPage = useCallback(async (skip: number, isInitial: boolean) => {
-        const targetUrls = getTargetUrls();
-        if (targetUrls.length === 0) return { metas: [], hasMore: false };
+    const {
+        data,
+        isLoading,
+        isFetchingNextPage,
+        hasNextPage,
+        fetchNextPage,
+        refetch
+    } = useInfiniteQuery({
+        queryKey: ['catalog', 'paginated', type, id, extra, targetUrls],
+        queryFn: async ({ pageParam = 0 }) => {
+            const currentExtra = { ...extra, skip: pageParam };
 
-        const currentExtra = { ...extra, skip };
+            if (targetUrls.length === 0) {
+                return { metas: [], nextSkip: undefined };
+            }
 
-        const results = await Promise.allSettled(
-            targetUrls.map(url => AddonService.getCatalog(url, type, id, currentExtra))
-        );
+            const results = await Promise.allSettled(
+                targetUrls.map(url => AddonService.getCatalog(url, type, id, currentExtra))
+            );
 
-        const metas = results.flatMap((r, idx) => {
-            if (r.status === 'fulfilled') return r.value.metas || [];
-            console.error(`[usePaginatedCatalog] Failed to fetch (skip=${skip}) from ${targetUrls[idx]}:`, r.reason);
-            return [];
-        });
+            const metas = results.flatMap((r, idx) => {
+                if (r.status === 'fulfilled') return r.value.metas || [];
+                console.error(`[usePaginatedCatalog] Failed to fetch (skip=${pageParam}) from ${targetUrls[idx]}:`, r.reason);
+                return [];
+            });
 
-        // Deduplicate
-        const uniqueMetas = metas.filter(m => {
-            if (!m?.id || seenIdsRef.current.has(m.id)) return false;
-            seenIdsRef.current.add(m.id);
+            // If we got fewer items than requested, we likely reached the end
+            // However, with multiple addons, it's safer to rely on returned count
+            const hasMore = metas.length >= Math.max(PAGE_SIZE, 1);
+
+            return {
+                metas,
+                nextSkip: hasMore ? pageParam + metas.length : undefined
+            };
+        },
+        getNextPageParam: (lastPage) => lastPage.nextSkip,
+        initialPageParam: 0,
+        enabled: !!type && !!id && targetUrls.length > 0,
+        staleTime: 1000 * 60 * 30, // 30 minutes
+        gcTime: 1000 * 60 * 60, // 1 hour (formerly cacheTime)
+    });
+
+    const items = useMemo(() => {
+        if (!data?.pages) return [];
+
+        // Flatten and dedupe across all pages
+        const allMetas = data.pages.flatMap(page => page.metas);
+        const seen = new Set<string>();
+        return allMetas.filter(m => {
+            if (!m?.id || seen.has(m.id)) return false;
+            seen.add(m.id);
             return true;
         });
-
-        return {
-            metas: uniqueMetas,
-            rawCount: metas.length,
-            hasMore: metas.length >= PAGE_SIZE
-        };
-    }, [getTargetUrls, type, id, extra]);
-
-    const loadInitial = useCallback(async () => {
-        if (!type || !id) return;
-
-        setIsLoading(true);
-        seenIdsRef.current.clear();
-        skipRef.current = 0;
-
-        try {
-            const result = await fetchPage(0, true);
-            if (isMountedRef.current) {
-                setItems(result.metas);
-                setHasMore(result.hasMore);
-                skipRef.current = result.rawCount;
-            }
-        } finally {
-            if (isMountedRef.current) {
-                setIsLoading(false);
-            }
-        }
-    }, [type, id, fetchPage]);
-
-    const fetchMore = useCallback(async () => {
-        if (!hasMore || isFetchingMore || isLoading) return;
-
-        setIsFetchingMore(true);
-
-        try {
-            const result = await fetchPage(skipRef.current, false);
-            if (isMountedRef.current) {
-                setItems(prev => [...prev, ...result.metas]);
-                setHasMore(result.hasMore);
-                skipRef.current += result.rawCount;
-            }
-        } finally {
-            if (isMountedRef.current) {
-                setIsFetchingMore(false);
-            }
-        }
-    }, [hasMore, isFetchingMore, isLoading, fetchPage]);
-
-    useEffect(() => {
-        isMountedRef.current = true;
-        const targetUrls = getTargetUrls();
-        if (type && id && targetUrls.length > 0) {
-            loadInitial();
-        } else {
-            setIsLoading(false);
-        }
-        return () => {
-            isMountedRef.current = false;
-        };
-    }, [type, id, loadInitial, getTargetUrls]);
+    }, [data?.pages]);
 
     return {
         items,
         isLoading,
-        isFetchingMore,
-        hasMore,
-        fetchMore,
-        refetch: loadInitial,
+        isFetchingMore: isFetchingNextPage,
+        hasMore: !!hasNextPage,
+        fetchMore: fetchNextPage,
+        refetch,
     };
 };

@@ -35,7 +35,7 @@ export default function MetaDetailsScreen() {
     const [isMuted, setIsMuted] = useState(true);
 
     // Core Data Aggregator
-    const { meta, enriched, seasonEpisodes, colors, isLoading } = useMetaAggregator(id as string, type as string, activeSeason);
+    const { meta, enriched, seasonEpisodes, colors, isLoading, error } = useMetaAggregator(id as string, type as string, activeSeason);
 
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
     const scrollY = useSharedValue(0);
@@ -203,6 +203,29 @@ export default function MetaDetailsScreen() {
     }, [enriched]);
 
     if (isLoading) return <MetaDetailsSkeleton />;
+
+    if (error) {
+        return (
+            <View style={[styles.container, { backgroundColor: DARK_BASE, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                <Typography variant="h3" style={{ color: 'white', textAlign: 'center', marginBottom: 16 }}>
+                    Failed to load content
+                </Typography>
+                <Pressable
+                    onPress={() => router.back()}
+                    style={{
+                        backgroundColor: 'white',
+                        paddingHorizontal: 24,
+                        paddingVertical: 12,
+                        borderRadius: 24,
+                    }}
+                >
+                    <Typography variant="label" weight="bold" style={{ color: 'black' }}>
+                        Go Back
+                    </Typography>
+                </Pressable>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: DARK_BASE }]}>

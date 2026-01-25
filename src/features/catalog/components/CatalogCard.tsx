@@ -43,7 +43,7 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
         const itemRating = state.ratedContent.find(r => {
             const media = type === 'movie' ? r.movie : r.show;
             if (!media) return false;
-            return media.ids.imdb === id || String(media.ids.tmdb) === id.replace('tmdb:', '');
+            return media.ids.imdb === id || String(media.ids.tmdb) === String(id).replace('tmdb:', '');
         });
         return itemRating ? Math.round(itemRating.rating / 2) : null;
     });

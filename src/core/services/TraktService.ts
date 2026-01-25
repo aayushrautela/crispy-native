@@ -439,63 +439,81 @@ export class TraktService {
         return this.apiRequest('/scrobble/stop', 'POST', item);
     }
 
+    private getIdsObject(id: string) {
+        if (id.startsWith('tmdb:')) return { tmdb: parseInt(id.replace('tmdb:', ''), 10) };
+        if (id.startsWith('trakt:')) return { trakt: parseInt(id.replace('trakt:', ''), 10) };
+        if (id.startsWith('tt')) return { imdb: id.replace('imdb:', '') }; // Handle both raw tt or imdb:tt
+        // Fallback for numeric strings that might be raw TMDB IDs (common in our app)
+        if (!isNaN(Number(id))) return { tmdb: parseInt(id, 10) };
+        // Fallback for everything else
+        return { imdb: id.replace('imdb:', '') };
+    }
+
     public async addToWatchlist(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/watchlist', 'POST', body);
     }
 
     public async removeFromWatchlist(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/watchlist/remove', 'POST', body);
     }
 
     public async addToCollection(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/collection', 'POST', body);
     }
 
     public async removeFromCollection(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/collection/remove', 'POST', body);
     }
 
     public async addRating(id: string, type: 'movie' | 'show' | 'episode', rating: number) {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ rating, ids: { imdb: id.replace('imdb:', '') } }] }
+            ? { movies: [{ rating, ids }] }
             : type === 'show'
-                ? { shows: [{ rating, ids: { imdb: id.replace('imdb:', '') } }] }
-                : { episodes: [{ rating, ids: { imdb: id.replace('imdb:', '') } }] };
+                ? { shows: [{ rating, ids }] }
+                : { episodes: [{ rating, ids }] };
         return this.apiRequest('/sync/ratings', 'POST', body);
     }
 
     public async removeRating(id: string, type: 'movie' | 'show' | 'episode') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
+            ? { movies: [{ ids }] }
             : type === 'show'
-                ? { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-                : { episodes: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+                ? { shows: [{ ids }] }
+                : { episodes: [{ ids }] };
         return this.apiRequest('/sync/ratings/remove', 'POST', body);
     }
 
     public async addToHistory(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/history', 'POST', body);
     }
 
     public async removeFromHistory(id: string, type: 'movie' | 'show') {
+        const ids = this.getIdsObject(id);
         const body = type === 'movie'
-            ? { movies: [{ ids: { imdb: id.replace('imdb:', '') } }] }
-            : { shows: [{ ids: { imdb: id.replace('imdb:', '') } }] };
+            ? { movies: [{ ids }] }
+            : { shows: [{ ids }] };
         return this.apiRequest('/sync/history/remove', 'POST', body);
     }
 

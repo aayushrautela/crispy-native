@@ -8,6 +8,7 @@ export interface TraktStoreState {
     continueWatching: any[];
     ratedContent: any[];
     watchedShowsRaw: any[];
+    watchedHistory: any[]; // Expose raw movie history for optimistic updates
     recommendations: any[];
 
     // Optimized Lookups (not persisted directly, hydrated from raw)
@@ -76,6 +77,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
     collectionIds: new Set(),
     watchedIds: new Set(),
     watchedEpisodeIds: new Set(),
+    watchedHistory: [],
     recommendations: [],
     isLoading: false,
 
@@ -100,7 +102,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
         StorageService.setUser('trakt-watched-shows-raw', items);
     },
     setWatchedHistory: (items) => {
-        set({ watchedIds: buildIds(items) });
+        set({ watchedHistory: items, watchedIds: buildIds(items) });
         StorageService.setUser('trakt-watched-history', items);
     },
     setRecommendations: (items) => {
@@ -132,6 +134,7 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
             recommendations,
             watchlistIds: buildIds(watchlist),
             collectionIds: buildIds(collection),
+            watchedHistory,
             watchedIds: buildIds(watchedHistory),
             watchedEpisodeIds: buildEpisodeIds(watchedShowsRaw),
         });
