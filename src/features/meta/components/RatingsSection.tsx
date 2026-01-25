@@ -79,7 +79,10 @@ export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) =
         )
     } : null;
 
-    const displayRatings = ratings.length > 0 ? ratings : (fallbackRating ? [fallbackRating] : []);
+    const displayRatings = [
+        ...(fallbackRating ? [fallbackRating] : []),
+        ...ratings
+    ];
 
     if (displayRatings.length === 0 && !isLoadingOmdb) return null;
 
