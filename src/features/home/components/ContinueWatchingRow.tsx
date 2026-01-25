@@ -55,17 +55,23 @@ export const ContinueWatchingRow = () => {
     );
 
     const renderSkeleton = useCallback(() => (
-        <View
-            style={[
-                styles.skeleton,
-                {
-                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
-                    width: CARD_WIDTH,
-                    height: CARD_WIDTH / 1.77,
-                    borderRadius: 12
-                }
-            ]}
-        />
+        <View style={{ width: CARD_WIDTH, gap: 8 }}>
+            <View
+                style={[
+                    styles.skeleton,
+                    {
+                        backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                        width: CARD_WIDTH,
+                        height: CARD_WIDTH / 1.77,
+                        borderRadius: 12
+                    }
+                ]}
+            />
+            <View style={{ gap: 6 }}>
+                <View style={[styles.skeleton, { width: '80%', height: 20, borderRadius: 4, backgroundColor: theme.colors.surfaceVariant }]} />
+                <View style={[styles.skeleton, { width: '40%', height: 16, borderRadius: 4, backgroundColor: theme.colors.surfaceVariant }]} />
+            </View>
+        </View>
     ), [theme.colors.surfaceContainerHighest, theme.colors.surfaceVariant]);
 
     if (!traktAuth?.accessToken || (!loading && items.length === 0)) {
@@ -79,22 +85,24 @@ export const ContinueWatchingRow = () => {
                 style={{ paddingHorizontal: 24 }}
             />
 
-            <FlashList
-                data={loading ? SKELETON_DATA : items}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item, index) => loading ? `skeleton-${index}` : `${item.id}-${index}`}
-                contentContainerStyle={styles.scrollContent}
-                renderItem={loading ? renderSkeleton : ({ item }) => (
-                    <ContinueWatchingCard item={item} width={CARD_WIDTH} />
-                )}
-                estimatedItemSize={CARD_WIDTH}
-                drawDistance={CARD_WIDTH * 2.5}
-                snapToInterval={SNAP_INTERVAL}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-            />
+            <View style={{ minHeight: CARD_WIDTH / 1.77 + 50 }}>
+                <FlashList
+                    data={loading ? SKELETON_DATA : items}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyExtractor={(item, index) => loading ? `skeleton-${index}` : `${item.id}-${index}`}
+                    contentContainerStyle={styles.scrollContent}
+                    renderItem={loading ? renderSkeleton : ({ item }) => (
+                        <ContinueWatchingCard item={item} width={CARD_WIDTH} />
+                    )}
+                    estimatedItemSize={CARD_WIDTH}
+                    drawDistance={CARD_WIDTH * 2.5}
+                    snapToInterval={SNAP_INTERVAL}
+                    decelerationRate="fast"
+                    snapToAlignment="start"
+                    ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+                />
+            </View>
         </View>
     );
 };
@@ -109,7 +117,6 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 24,
-        gap: 16,
     },
     skeleton: {
         opacity: 0.5,

@@ -162,8 +162,6 @@ export default function HomeScreen() {
           />
         )}
         ListFooterComponent={() => <View style={{ height: 120 }} />}
-        // Performance optimizations
-        removeClippedSubviews={true}
         maxToRenderPerBatch={3}
         windowSize={5}
         initialNumToRender={2}
