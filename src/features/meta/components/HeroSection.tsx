@@ -10,11 +10,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Play, RotateCcw, Star } from 'lucide-react-native';
 import React, { memo, useMemo, useState } from 'react';
 import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const HERO_HEIGHT = 750;
-const BACKDROP_HEIGHT = 480;
+const HERO_HEIGHT = 600;
+const BACKDROP_HEIGHT = 420;
 const DARK_BASE = '#121212';
 
 interface HeroSectionProps {
@@ -23,34 +23,64 @@ interface HeroSectionProps {
     colors: any;
     scrollY: Animated.SharedValue<number>;
     onWatchPress: () => void;
+    isMuted?: boolean;
 }
 
-export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress }: HeroSectionProps) => {
+export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress, isMuted = true }: HeroSectionProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
-    const [showTrailer, setShowTrailer] = useState(false);
+    const [showTrailer, setShowTrailer] = useState(false); // Controls mounting
+    const [revealTrailer, setRevealTrailer] = useState(false); // Controls visibility (opacity)
+    const [isPlaying, setIsPlaying] = useState(true);
+
+    // Play/Pause based on visibility
+    useAnimatedReaction(
+        () => scrollY.value > HERO_HEIGHT,
+        (isOut, prevIsOut) => {
+            if (isOut !== prevIsOut) {
+                runOnJS(setIsPlaying)(!isOut);
+            }
+        },
+        [HERO_HEIGHT]
+    );
 
     // Trailer Autoplay Logic
     React.useEffect(() => {
         const key = TrailerService.getFirstTrailerKey(enriched.videos || []);
         setTrailerKey(key);
 
-        let timer: NodeJS.Timeout;
+        let mountTimer: NodeJS.Timeout;
+        let revealTimer: NodeJS.Timeout;
+
         if (key) {
-            // Wait 2 seconds before showing for autoplay
-            timer = setTimeout(() => {
+            // 1. Mount after 2s (allows initial UI render/animations to settle)
+            mountTimer = setTimeout(() => {
                 setShowTrailer(true);
             }, 2000);
+
+            // 2. Reveal after 4s (gives 2s for YouTube to buffer/load)
+            revealTimer = setTimeout(() => {
+                setRevealTrailer(true);
+            }, 4000);
         }
 
         return () => {
-            clearTimeout(timer);
+            clearTimeout(mountTimer);
+            clearTimeout(revealTimer);
         };
     }, [enriched.videos]);
 
     const toggleTrailer = () => {
         if (trailerKey) {
-            setShowTrailer(!showTrailer);
+            if (revealTrailer) {
+                // If visible, hide it (manual toggle)
+                setRevealTrailer(false);
+                setShowTrailer(false); // Also unmount to stop audio
+            } else {
+                // If hidden, show immediately
+                setShowTrailer(true);
+                setRevealTrailer(true);
+            }
         }
     };
 
@@ -119,7 +149,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
 
                 {showTrailer && trailerKey && (
                     <View style={StyleSheet.absoluteFill}>
-                        <YouTubeTrailer videoId={trailerKey} />
+                        <YouTubeTrailer videoId={trailerKey} isMuted={isMuted} isPlaying={isPlaying} isVisible={revealTrailer} />
                     </View>
                 )}
 

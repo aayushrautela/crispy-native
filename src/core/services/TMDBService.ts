@@ -141,6 +141,9 @@ export class TMDBService {
             const detailRes = await axios.get(detailUrl);
             const data = detailRes.data;
 
+            console.log(`[TMDBService] Fetch URL: ${detailUrl}`);
+            console.log(`[TMDBService] Has videos?`, !!data.videos, 'Count:', data.videos?.results?.length);
+
             // Fallback metadata if overview is missing (WebUI parity)
             if (!data.overview) {
                 const fallbackRes = await axios.get(`${BASE_URL}/${findPath}/${foundTmdbId}?api_key=${API_KEY}&language=en`);

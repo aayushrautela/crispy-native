@@ -61,7 +61,12 @@ export class TrailerService {
      * @returns string | null - The best YouTube trailer key or null
      */
     static getFirstTrailerKey(videos: any[]): string | null {
-        if (!videos || !Array.isArray(videos)) return null;
+        if (!videos || !Array.isArray(videos)) {
+            console.log('[TrailerService] No videos array');
+            return null;
+        }
+
+        console.log('[TrailerService] Processing videos:', videos.length);
 
         // Filter for YouTube videos
         const youtubeVideos = videos.filter(v => v.site === 'YouTube');

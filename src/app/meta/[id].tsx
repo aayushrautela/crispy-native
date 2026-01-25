@@ -14,7 +14,7 @@ import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Bookmark, Check, Circle, LayoutGrid, Share2, Star } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, Check, Circle, LayoutGrid, Share2, Star, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -32,6 +32,7 @@ export default function MetaDetailsScreen() {
     const [activeSeason, setActiveSeason] = useState(1);
     const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
     const [availableStreams, setAvailableStreams] = useState<any[]>([]);
+    const [isMuted, setIsMuted] = useState(true);
 
     // Core Data Aggregator
     const { meta, enriched, seasonEpisodes, colors, isLoading } = useMetaAggregator(id as string, type as string, activeSeason);
@@ -210,6 +211,9 @@ export default function MetaDetailsScreen() {
                     <ArrowLeft color="white" size={24} />
                 </Pressable>
                 <View style={styles.topRightActions}>
+                    <Pressable onPress={() => setIsMuted(!isMuted)} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                        {isMuted ? <VolumeX color="white" size={20} /> : <Volume2 color="white" size={20} />}
+                    </Pressable>
                     <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                         <Share2 color="white" size={20} />
                     </Pressable>
@@ -229,6 +233,7 @@ export default function MetaDetailsScreen() {
                     colors={colors}
                     scrollY={scrollY}
                     onWatchPress={handleWatchPress}
+                    isMuted={isMuted}
                 />
 
                 <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
