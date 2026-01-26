@@ -1,5 +1,5 @@
-import { Typography } from '@/src/core/ui/Typography';
 import { useTheme } from '@/src/core/ThemeContext';
+import { Typography } from '@/src/core/ui/Typography';
 import { Check } from 'lucide-react-native';
 import React from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
@@ -38,7 +38,7 @@ export function StreamsTab({
     return (
         <FlatList
             data={streams}
-            keyExtractor={(item, index) => item.url + index}
+            keyExtractor={(item, index) => `${item.url || 'stream'}-${index}`}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
                 const isSelected = item.url === currentStreamUrl;

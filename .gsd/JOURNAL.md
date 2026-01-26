@@ -112,3 +112,8 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
     - **CrispyServer**: Logged incoming HTTP requests and detailed status of the 30s header-wait loop.
     - **Bridge**: Logged `resolveStream` and `handleSeek` calls from JavaScript.
 - **Goal**: Identify if failures are due to peer connectivity, metadata timeouts, or bridge communication errors.
+
+## Session: 2026-01-26 22:30
+- Fixed duplicate key error in `StreamsTab.tsx` by improving `keyExtractor`.
+- Fixed stream selection failure in `player.tsx` by calling `setActiveStream`.
+- Verified logic handles missing/NaN URLs gracefully.

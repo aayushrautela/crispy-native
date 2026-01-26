@@ -727,6 +727,9 @@ export default function PlayerScreen() {
                                     setHeaders(undefined);
                                 }
 
+                                // Switch stream and close tab
+                                setActiveStream(stream);
+                                setActiveTab('none');
                             }}
                         />
                     )}

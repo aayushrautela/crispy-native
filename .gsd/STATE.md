@@ -1,14 +1,12 @@
 ### Current Position
-- **Phase**: Debugging Torrent Issues
-- **Task**: Added verbose logging to native stack
-- **Status**: IN_PROGRESS
+- **Phase**: Debugging Player Issues
+- **Task**: Fixed Stream Tab duplicate keys and selection
+- **Status**: COMPLETED
 
 ### What was just accomplished
-- **Native Logging**: Added detailed alert and session logging to `TorrentService.kt`.
-- **Server Logging**: Added request and timeout-loop logging to `CrispyServer.kt`.
-- **Bridge Logging**: Added call-level logging to `CrispyNativeCoreModule.kt`.
-- **Goal**: Enable precise tracing via `adb logcat` to identify why torrenting is failing.
+- **FlatList Fix**: Updated `keyExtractor` in `StreamsTab.tsx` to handle missing/NaN URLs.
+- **Selection Fix**: Added `setActiveStream` and `setActiveTab('none')` to `player.tsx` to enable stream switching.
+- **Goal**: Resolve player interaction blockers.
 
 ### Next Steps
-- Capture and analyze `adb logcat` output during failure.
-- Fix issues identified by the logs.
+- Verify with user if performance is improved.
