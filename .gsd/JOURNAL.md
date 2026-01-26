@@ -117,3 +117,10 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
 - Fixed duplicate key error in `StreamsTab.tsx` by improving `keyExtractor`.
 - Fixed stream selection failure in `player.tsx` by calling `setActiveStream`.
 - Verified logic handles missing/NaN URLs gracefully.
+
+## 2026-01-26 - Bug Fix: Rule of Hooks Violation
+
+- **Issue**: `MetaDetailsScreen` crashed with "Rendered more hooks than during the previous render" after the recent tablet redesign.
+- **Cause**: `useResponsive()` was called conditionally inside the JSX after an early return for `isLoading`.
+- **Resolution**: Moved the hook call to the top level of the component and used destructured variables.
+- **Impact**: Restored stability to the movie/series detail screens.

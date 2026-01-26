@@ -7,8 +7,8 @@
 - **SplitHeroLayout.tsx**: Created the core side-by-side layout component.
 - **MetaActionRow.tsx**: Extracted Trakt actions for reuse.
 - **HeroSection.tsx**: Refactored to support SplitHeroLayout via composition.
-- **[id].tsx**: Integrated the new components and responsive logic.
+- **[id].tsx**: Fixed Rule of Hooks violation by moving `useResponsive` to top level.
 
 ### Next Steps
-- Verify visual state with screenshots (if possible/needed by user).
-- Run build/lint check.
+- Verify visual state in tablet landscape mode.
+- Monitor for any further hook order warnings.

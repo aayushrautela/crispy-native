@@ -30,6 +30,7 @@ export default function MetaDetailsScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { isTablet, isLandscape } = useResponsive();
 
     const [activeSeason, setActiveSeason] = useState(1);
     const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
@@ -273,7 +274,7 @@ export default function MetaDetailsScreen() {
                 />
 
                 <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
-                    {!(useResponsive().isTablet && useResponsive().isLandscape) && (
+                    {!(isTablet && isLandscape) && (
                         <MetaActionRow
                             isAuthenticated={isAuthenticated}
                             isListed={isListed}
