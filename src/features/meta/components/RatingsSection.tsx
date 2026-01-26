@@ -1,3 +1,4 @@
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { OmdbData, OmdbService } from '@/src/core/services/OmdbService';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { Shimmer } from '@/src/core/ui/Shimmer';
@@ -28,6 +29,7 @@ interface RatingsSectionProps {
 export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) => {
     const [omdb, setOmdb] = useState<OmdbData | null>(null);
     const [isLoadingOmdb, setIsLoadingOmdb] = useState(false);
+    const { isTablet } = useResponsive();
 
     useEffect(() => {
         const fetchOmdb = async () => {
@@ -86,6 +88,26 @@ export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) =
 
     if (displayRatings.length === 0 && !isLoadingOmdb) return null;
 
+    const renderContent = () => (
+        <>
+            {displayRatings.map((r, i) => (
+                <RatingCard
+                    key={i}
+                    score={r.score}
+                    label={r.label}
+                    palette={colors}
+                    icon={r.icon}
+                />
+            ))}
+            {isLoadingOmdb && ratings.length === 0 && (
+                <>
+                    <Shimmer width={160} height={64} borderRadius={32} style={{ marginRight: 16 }} />
+                    <Shimmer width={160} height={64} borderRadius={32} />
+                </>
+            )}
+        </>
+    );
+
     return (
         <View style={styles.ratingsSection}>
             <SectionHeader
@@ -94,27 +116,19 @@ export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) =
                 textColor="white"
                 style={{ paddingHorizontal: 20 }}
             />
-            <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.ratingsScrollContent}
-            >
-                {displayRatings.map((r, i) => (
-                    <RatingCard
-                        key={i}
-                        score={r.score}
-                        label={r.label}
-                        palette={colors}
-                        icon={r.icon}
-                    />
-                ))}
-                {isLoadingOmdb && ratings.length === 0 && (
-                    <>
-                        <Shimmer width={160} height={64} borderRadius={32} style={{ marginRight: 16 }} />
-                        <Shimmer width={160} height={64} borderRadius={32} />
-                    </>
-                )}
-            </ScrollView>
+            {isTablet ? (
+                <View style={styles.ratingsGrid}>
+                    {renderContent()}
+                </View>
+            ) : (
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.ratingsScrollContent}
+                >
+                    {renderContent()}
+                </ScrollView>
+            )}
         </View>
     );
 });
@@ -126,6 +140,12 @@ const styles = StyleSheet.create({
     },
 
     ratingsScrollContent: {
+        gap: 16,
+        paddingHorizontal: 20,
+    },
+    ratingsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: 16,
         paddingHorizontal: 20,
     },

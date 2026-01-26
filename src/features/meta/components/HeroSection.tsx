@@ -9,10 +9,11 @@ import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronDown, Play, RotateCcw, Star } from 'lucide-react-native';
 import React, { memo, useMemo, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { useResponsive } from '@/src/core/hooks/useResponsive';
+
 const HERO_HEIGHT = 600;
 const BACKDROP_HEIGHT = 420;
 const DARK_BASE = '#121212';
@@ -32,6 +33,8 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
     const [showTrailer, setShowTrailer] = useState(false); // Controls mounting
     const [revealTrailer, setRevealTrailer] = useState(false); // Controls visibility (opacity)
     const [isPlaying, setIsPlaying] = useState(true);
+
+    const { width, isTablet } = useResponsive();
 
     // Play/Pause based on visibility
     useAnimatedReaction(
@@ -142,9 +145,9 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
     }, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { width }]}>
             {/* Static Background Layer */}
-            <View style={styles.staticBackdrop}>
+            <View style={[styles.staticBackdrop, { width }]}>
                 <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
 
                 {showTrailer && trailerKey && (
@@ -169,7 +172,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                     pointerEvents="none"
                 />
 
-                <View style={styles.heroContent}>
+                <View style={[styles.heroContent, isTablet && { maxWidth: 600, alignSelf: 'center', width: '100%' }]}>
                     {/* Trailer Button */}
                     <Pressable
                         style={[styles.trailerBtn, !trailerKey && { opacity: 0.5 }]}
@@ -290,7 +293,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
 
 const styles = StyleSheet.create({
     container: {
-        width: SCREEN_WIDTH,
+        // width set dynamically
     },
     staticBackdrop: {
         position: 'absolute',
@@ -298,7 +301,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         height: BACKDROP_HEIGHT,
-        width: SCREEN_WIDTH,
+        // width set dynamically
         zIndex: 0,
     },
     heroImage: {
