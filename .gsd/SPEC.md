@@ -66,3 +66,11 @@ Implement comprehensive Trakt user interactions (Library management, Rating, Wat
 - **Dumb Card Pattern**: `CatalogCard` must be passive in list views, skipping enrichment hooks if a poster already exists.
 - **State Atomicity**: Migrate monolithic Trakt context to **Zustand** with selectors to prevent global re-renders.
 - **Concurrency Gates**: Implement a request queue for enrichment to protect the React Native bridge from congestion.
+
+## 8. Torrent Workflow Optimization (Production Grade)
+- **Goal**: Resolve "infinite loading" and seeking instability in native torrent playback.
+- **Trackers**: Add HTTP/HTTPS fallback trackers for UDP-restricted networks.
+- **Buffering**: Implement tiered piece prioritization (Instant vs Buffer tiers).
+- **Seek Management**: Implement priority windows and piece deadline resetting to stop downloading irrelevant data after a seek.
+- **Player Resilience**: Configure standard User-Agents, disable SSL verification for trackers, and tune demuxer cache (100MB buffer).
+- **Persistence**: Ensure ephemeral playback by wiping the download directory on app startup and after playback.

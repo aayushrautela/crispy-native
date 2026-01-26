@@ -1,14 +1,13 @@
 ### Current Position
-- **Phase**: Phase 20: Home Screen Settings & Catalog Management
-- **Task**: Resolved Nesting conflict & UI Refinement
+- **Phase**: Phase 21: Torrent Workflow Optimization
+- **Task**: Production-Grade Torrent Fix
 - **Status**: DONE
 
 ### What was just accomplished
-- **Trakt Recommendations**: Ported "Trakt Top Picks" logic and UI from Web UI, including a mixed recommendations service and horizontal row component.
-- **VirtualizedList Fix**: Refactored `SettingsSubpage` to support `noScroll` mode via context, resolving the `VirtualizedList` nesting error.
-- **Drag-and-Drop**: Implemented using `react-native-draggable-flatlist` in `home.tsx`.
-- **UI Refinement**: Upgraded all toggles to the premium `ExpressiveSwitch` style.
-- **Rating Badge Fix**: Integrated `showRatingBadges` setting into `CatalogCard.tsx`.
+- **Torrent Optimization**: Implemented production-grade fixes in `TorrentService.kt`, `CrispyVideoView.kt`, and `CrispyNativeCoreModule.kt`.
+- **Buffering & Seek**: Added `priorityWindows`, tiered deadlines, and piece-deadline resetting on seek.
+- **Resilience**: Added HTTP fallback trackers and tuned MPV demuxer cache (100MB) and connection settings.
+- **Hygiene**: Implemented `performStartupCleanup` to prevent storage corruption.
 
 ### Next Steps
 - Implementation of Trakt Ratings modal and Catalog card interaction (Phase 5-7).

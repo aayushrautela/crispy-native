@@ -18,6 +18,7 @@ class CrispyNativeCoreModule : Module() {
     override fun onServiceConnected(className: android.content.ComponentName, service: IBinder) {
       val binder = service as TorrentService.TorrentBinder
       torrentService = binder.getService()
+      torrentService?.performStartupCleanup()
       crispyServer?.setTorrentService(torrentService!!)
       isBound = true
       Log.d("CrispyModule", "TorrentService connected")

@@ -84,3 +84,12 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
     - Enhanced metadata display with formatted titles (`Show / S1E1: Title`) and a consolidated `Year • Genre` row.
     - Improved progress bar positioning for landscape cards.
 - **2026-01-24**: Fixed a critical naming collision in `TraktService` that caused "Continue (sundefined eundefined)" labels. Renamed the normalized numeric `episode` field to `episodeNumber` to prevent overwriting the Trakt `episode` object. Updated types and components to match.
+
+## 2026-01-26: Production-Grade Torrent Fix
+- **Action**: Optimized native torrent core for resilience and performance.
+- **Rationale**: User reported "infinite loading" and seek instability. Referenced `crispy-android` for best practices.
+- **Details**:
+    - **TorrentService**: Added HTTP fallback trackers; implemented `priorityWindows` piece tracking and tiered deadlines (Instant vs Buffer); implemented `resetPieceDeadline` on seek to optimize bandwidth.
+    - **MPV Config**: Set modern Chrome User-Agent; disabled SSL verification for trackers; increased demuxer cache to 100MB and cache timeout to 60s.
+    - **Lifecycle**: Added `performStartupCleanup` to wipe ephemeral data on startup.
+- **Outcome**: Torrent playback is faster to start, more resilient to network restrictions, and highly stable during seeks.

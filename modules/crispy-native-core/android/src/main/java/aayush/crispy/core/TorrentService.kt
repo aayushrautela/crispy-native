@@ -28,8 +28,16 @@ class TorrentService : Service() {
             "udp://open.demonii.com:1337/announce",
             "udp://tracker.torrent.eu.org:451/announce",
             "udp://explodie.org:6969/announce",
-            "udp://open.stealth.si:80/announce"
+            "udp://open.stealth.si:80/announce",
+            "http://tracker.opentrackr.org:1337/announce",
+            "http://open.tracker.cl:1337/announce",
+            "https://tracker.bt4g.com:443/announce"
         )
+        
+        // Piece prioritization constants
+        private const val PIECES_TO_BUFFER = 20
+        private const val INSTANT_TIER_PIECES = 3
+        private const val DEADLINE_INCREMENT_MS = 100
         
         private const val IDLE_TIMEOUT_MS = 10 * 60 * 1000L
     }
@@ -37,6 +45,9 @@ class TorrentService : Service() {
     private val binder = TorrentBinder()
     private var sessionManager: SessionManager? = null
     private val activeTorrents = ConcurrentHashMap<String, Boolean>()
+    
+    // Track pieces with active deadlines for efficient clearing on seek
+    private val priorityWindows = ConcurrentHashMap<String, MutableSet<Int>>()
     
     @Volatile
     private var isSessionActive = false
@@ -154,6 +165,7 @@ class TorrentService : Service() {
     
     private fun stopSession() {
         isSessionActive = false
+        priorityWindows.clear()
         val sm = sessionManager ?: return
         activeTorrents.keys.forEach { hash ->
             try { sm.find(Sha1Hash(hash))?.let { sm.remove(it) } } catch (e: Exception) {}
@@ -185,24 +197,48 @@ class TorrentService : Service() {
     }
 
     fun stopTorrent(infoHash: String) {
-        activeTorrents.remove(infoHash)
+        val hash = infoHash.lowercase()
+        activeTorrents.remove(hash)
+        
+        // Clear priority window for this torrent
+        priorityWindows.keys.filter { it.startsWith("$hash:") }.forEach { priorityWindows.remove(it) }
+        
         updateServiceState()
-        getHandle(infoHash)?.let { sessionManager?.remove(it) }
+        getHandle(hash)?.let { sessionManager?.remove(it) }
     }
 
     fun deleteTorrentData(infoHash: String) {
-        val handle = getHandle(infoHash)
+        val hash = infoHash.lowercase()
+        val handle = getHandle(hash)
         var torrentName: String? = null
         if (handle != null && handle.status().hasMetadata()) {
             torrentName = handle.torrentFile()?.name()
         }
-        stopTorrent(infoHash)
+        stopTorrent(hash)
         Thread {
             try {
                 if (!torrentName.isNullOrEmpty()) {
                     File(getDownloadDir(), torrentName).deleteRecursively()
                 }
             } catch (e: Exception) {}
+        }.start()
+    }
+    
+    /**
+     * Delete all files in the download directory on startup.
+     */
+    fun performStartupCleanup() {
+        Thread {
+            try {
+                val dir = getDownloadDir()
+                if (dir.exists()) {
+                    dir.deleteRecursively()
+                    dir.mkdirs()
+                    Log.d(TAG, "Startup Cleanup: Wiped data at ${dir.absolutePath}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Startup Cleanup Failed", e)
+            }
         }.start()
     }
 
@@ -277,8 +313,15 @@ class TorrentService : Service() {
     fun prioritizeHeader(infoHash: String, fileIdx: Int) {
         val handle = getHandle(infoHash) ?: return
         if (!handle.isValid || !handle.status().hasMetadata()) return
-        val startPiece = (handle.torrentFile()!!.files().fileOffset(fileIdx) / handle.torrentFile()!!.pieceLength()).toInt()
-        for (i in 0 until 5) handle.setPieceDeadline(startPiece + i, 0)
+        val torrentInfo = handle.torrentFile() ?: return
+        
+        val startPiece = (torrentInfo.files().fileOffset(fileIdx) / torrentInfo.pieceLength()).toInt()
+        
+        // Tiered priority for header
+        for (i in 0 until 5) {
+            val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
+            handle.setPieceDeadline(startPiece + i, deadline)
+        }
     }
 
     fun startStreaming(infoHash: String, fileIdx: Int) {
@@ -291,8 +334,35 @@ class TorrentService : Service() {
     fun handleSeek(infoHash: String, fileIdx: Int, position: Long) {
         val handle = getHandle(infoHash) ?: return
         if (!handle.isValid || !handle.status().hasMetadata()) return
-        val pieceLen = handle.torrentFile()!!.pieceLength()
-        val startPiece = ((handle.torrentFile()!!.files().fileOffset(fileIdx) + position) / pieceLen).toInt()
-        for (i in 0 until 5) handle.setPieceDeadline(startPiece + i, 0)
+        val torrentInfo = handle.torrentFile() ?: return
+        
+        val pieceLen = torrentInfo.pieceLength()
+        val fileOffset = torrentInfo.files().fileOffset(fileIdx)
+        val fileSize = torrentInfo.files().fileSize(fileIdx)
+        
+        val seekPiece = ((fileOffset + position) / pieceLen).toInt()
+        val endPiece = ((fileOffset + fileSize - 1) / pieceLen).toInt()
+        
+        val windowKey = "$infoHash:$fileIdx"
+        val window = priorityWindows.getOrPut(windowKey) { ConcurrentHashMap.newKeySet() }
+        
+        // 1. Clear old deadlines
+        val it = window.iterator()
+        while (it.hasNext()) {
+            val p = it.next()
+            try { handle.resetPieceDeadline(p) } catch (_: Exception) {}
+            it.remove()
+        }
+        
+        // 2. Set new tiered deadlines
+        val toBuffer = minOf(PIECES_TO_BUFFER, endPiece - seekPiece + 1)
+        for (i in 0 until toBuffer) {
+            val p = seekPiece + i
+            val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
+            handle.setPieceDeadline(p, deadline)
+            window.add(p)
+        }
+        
+        Log.d(TAG, "handleSeek: Prioritized pieces $seekPiece to ${seekPiece + toBuffer - 1}")
     }
 }

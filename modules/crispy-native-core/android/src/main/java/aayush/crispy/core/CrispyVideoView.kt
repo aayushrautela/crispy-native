@@ -192,15 +192,17 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         MPVLib.setOptionString("ao", "audiotrack,opensles")
         
-        val cacheMegs = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) 64 else 32
+        val cacheMegs = 100
         MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
-        MPVLib.setOptionString("demuxer-max-back-bytes", "${cacheMegs * 1024 * 1024}")
+        MPVLib.setOptionString("demuxer-max-back-bytes", "${(cacheMegs / 2) * 1024 * 1024}")
         MPVLib.setOptionString("cache", "yes")
-        MPVLib.setOptionString("cache-secs", "30")
+        MPVLib.setOptionString("cache-secs", "60")
         
         MPVLib.setOptionString("network-timeout", "60")
         MPVLib.setOptionString("http-reconnect", "yes")
         MPVLib.setOptionString("stream-reconnect", "yes")
+        MPVLib.setOptionString("tls-verify", "no")
+        MPVLib.setOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         
         applyHttpHeadersAsOptions()
         

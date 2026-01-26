@@ -86,3 +86,10 @@
 - [x] Create `useCatalogPreferences` hook for cross-platform logic.
 - [x] Implement catalog rearrangement UI (Move Up/Down) in Settings.
 - [x] Update Home Screen to respect ordering, visibility, and hero selection.
+
+## Phase 21: Torrent Workflow Optimization ⚡ [DONE]
+- [x] Implement `priorityWindows` and tiered buffering in `TorrentService`.
+- [x] Add HTTP trackers and SSL tuning.
+- [x] Optimize MPV demuxer cache and User-Agent.
+- [x] Implement Startup Cleanup logic.
+- [x] Verify production-grade stability and seek performance.
