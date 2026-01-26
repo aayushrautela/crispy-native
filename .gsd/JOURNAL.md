@@ -103,3 +103,12 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
     - **Layout Constraint**: Constrained content `maxWidth` to 600px on tablets to preserve readability on ultra-wide screens.
     - **Stability**: Synchronized the `HeroCarousel` skeleton calculations with the new responsive hook to eliminate layout shifts.
 - **Outcome**: Improved "above the fold" visibility for "Continue Watching" and results rows on tablets, creating a more balanced and professional layout across all device types.
+
+## 2026-01-26: Torrent Debugging (Logging)
+- **Action**: Injected verbose logging across the entire native torrent stack.
+- **Rationale**: Torrenting still reported as failing. Need granular visibility into libtorrent alerts and HTTP server flow.
+- **Details**:
+    - **TorrentService**: Logged `ADD_TORRENT`, `METADATA_RECEIVED`, `TRACKER_REPLY`, `PEER_CONNECT`, and errors.
+    - **CrispyServer**: Logged incoming HTTP requests and detailed status of the 30s header-wait loop.
+    - **Bridge**: Logged `resolveStream` and `handleSeek` calls from JavaScript.
+- **Goal**: Identify if failures are due to peer connectivity, metadata timeouts, or bridge communication errors.

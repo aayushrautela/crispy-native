@@ -1,13 +1,14 @@
 ### Current Position
-- **Phase**: Phase 22: Responsive Hero Height
-- **Task**: Implement clamped hero metrics
-- **Status**: DONE
+- **Phase**: Debugging Torrent Issues
+- **Task**: Added verbose logging to native stack
+- **Status**: IN_PROGRESS
 
 ### What was just accomplished
-- **Responsive Hook**: Updated `useResponsive` to calculate `heroHeight` and `heroAspectRatio` dynamically.
-- **Clamping Logic**: Implemented vertical constraints (max 55% screen height on tablets) to prevent hero sections from pushing content off-screen.
-- **UI Integration**: Refactored `HeroSlide` and `HeroCarousel` (skeleton) to consume dynamic height metrics and constrained content width for readability on ultra-wide screens.
+- **Native Logging**: Added detailed alert and session logging to `TorrentService.kt`.
+- **Server Logging**: Added request and timeout-loop logging to `CrispyServer.kt`.
+- **Bridge Logging**: Added call-level logging to `CrispyNativeCoreModule.kt`.
+- **Goal**: Enable precise tracing via `adb logcat` to identify why torrenting is failing.
 
 ### Next Steps
-- Implementation of Trakt Ratings modal and Catalog card interaction (Phase 5-7).
-- Auth UI Redesign (Phase 17).
+- Capture and analyze `adb logcat` output during failure.
+- Fix issues identified by the logs.

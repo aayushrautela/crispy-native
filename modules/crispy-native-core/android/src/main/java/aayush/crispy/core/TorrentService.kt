@@ -147,15 +147,48 @@ class TorrentService : Service() {
                     when (alert.type()) {
                         AlertType.ADD_TORRENT -> {
                             val handle = (alert as AddTorrentAlert).handle()
-                            activeTorrents[handle.infoHash().toHex()] = true
+                            val infoHash = handle.infoHash().toHex()
+                            Log.d(TAG, "[ALERT] ADD_TORRENT: $infoHash")
+                            activeTorrents[infoHash] = true
                             try { handle.setFlags(handle.flags().or_(TorrentFlags.SEQUENTIAL_DOWNLOAD)) } catch (e: Exception) {}
                             updateServiceState()
                         }
+                        AlertType.METADATA_RECEIVED -> {
+                            val handle = (alert as MetadataReceivedAlert).handle()
+                            Log.d(TAG, "[ALERT] METADATA_RECEIVED: ${handle.infoHash().toHex()} (${handle.torrentFile()?.name()})")
+                        }
+                        AlertType.METADATA_FAILED -> {
+                            val handle = (alert as MetadataFailedAlert).handle()
+                            Log.w(TAG, "[ALERT] METADATA_FAILED: ${handle.infoHash().toHex()}")
+                        }
+                        AlertType.TORRENT_ERROR -> {
+                            val handle = (alert as TorrentErrorAlert).handle()
+                            Log.e(TAG, "[ALERT] TORRENT_ERROR: ${handle.infoHash().toHex()} -> ${alert.errorMessage()}")
+                        }
                         AlertType.TORRENT_FINISHED -> {
                             val infoHash = (alert as TorrentFinishedAlert).handle().infoHash().toHex()
-                            Log.d(TAG, "Torrent finished: $infoHash")
+                            Log.d(TAG, "[ALERT] TORRENT_FINISHED: $infoHash")
                         }
-                        else -> {}
+                        AlertType.TRACKER_REPLY -> {
+                            val alertTracker = alert as TrackerReplyAlert
+                            Log.d(TAG, "[ALERT] TRACKER_REPLY: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (${alertTracker.numPeers} peers)")
+                        }
+                        AlertType.TRACKER_ERROR -> {
+                            val alertTracker = alert as TrackerErrorAlert
+                            Log.w(TAG, "[ALERT] TRACKER_ERROR: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (${alertTracker.errorMessage()})")
+                        }
+                        AlertType.PEER_CONNECT -> {
+                            val alertPeer = alert as PeerConnectAlert
+                            Log.d(TAG, "[ALERT] PEER_CONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.ip()}")
+                        }
+                        AlertType.PEER_DISCONNECTED -> {
+                            val alertPeer = alert as PeerDisconnectedAlert
+                            Log.d(TAG, "[ALERT] PEER_DISCONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.errorMessage()}")
+                        }
+                        else -> {
+                            // Optionally log type for untracked alerts
+                            // Log.v(TAG, "[ALERT] Other: ${alert.type()} - ${alert.message()}")
+                        }
                     }
                 }
             })

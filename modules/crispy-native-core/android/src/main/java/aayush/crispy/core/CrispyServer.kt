@@ -61,6 +61,7 @@ class CrispyServer(
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
         
+        Log.d(TAG, "[REQUEST] ${session.method} $uri -> ${response.status}")
         return response.withCorsHeaders()
     }
 
@@ -152,17 +153,23 @@ class CrispyServer(
         var elapsed = 0L
         while (elapsed < 30000L) {
             if (service.isHeaderReady(infoHash, fileIdx)) break
+            Log.d(TAG, "Waiting for header: $infoHash/$fileIdx (elapsed: ${elapsed}ms)")
             service.prioritizeHeader(infoHash, fileIdx)
-            Thread.sleep(500)
-            elapsed += 500
+            Thread.sleep(1000) // Increased sleep to 1s for clearer logs
+            elapsed += 1000
         }
         
         if (!service.isHeaderReady(infoHash, fileIdx)) {
+            Log.w(TAG, "Header NOT READY after 30s: $infoHash/$fileIdx")
             return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "Downloading header...").apply { addHeader("Retry-After", "2") }
         }
         
-        if (!videoFile.exists()) return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "File missing")
+        if (!videoFile.exists()) {
+            Log.e(TAG, "File missing on disk: ${videoFile.absolutePath}")
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "File missing")
+        }
         
+        Log.d(TAG, "Serving file: ${videoFile.name} (${videoFile.length()} bytes)")
         return serveFile(session, videoFile)
     }
     

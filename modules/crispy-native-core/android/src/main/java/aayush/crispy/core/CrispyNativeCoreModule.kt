@@ -57,13 +57,16 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("resolveStream") { infoHash: String, fileIdx: Int ->
+      Log.d("CrispyModule", "[JS] resolveStream: $infoHash, index: $fileIdx")
       val service = torrentService ?: return@AsyncFunction null
       
       // Auto-start torrent if not active
       service.startInfoHash(infoHash)
       
       val idx = if (fileIdx >= 0) fileIdx else service.getLargestFileIndex(infoHash)
-      return@AsyncFunction service.getStreamUrl(infoHash, idx)
+      val url = service.getStreamUrl(infoHash, idx)
+      Log.d("CrispyModule", "[JS] -> resolved URL: $url")
+      return@AsyncFunction url
     }
 
     AsyncFunction("stopTorrent") { infoHash: String ->
@@ -71,6 +74,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("handleSeek") { infoHash: String, fileIdx: Int, position: Long ->
+      Log.d("CrispyModule", "[JS] handleSeek: $infoHash, index: $fileIdx, pos: $position")
       torrentService?.handleSeek(infoHash, fileIdx, position)
     }
 
