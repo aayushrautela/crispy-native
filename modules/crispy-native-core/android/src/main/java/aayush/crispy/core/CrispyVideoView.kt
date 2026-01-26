@@ -46,6 +46,12 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     val onError by EventDispatcher<Map<String, String>>()
     val onTracksChanged by EventDispatcher<Map<String, Any>>()
 
+    private var playInBackground: Boolean = false
+
+    fun setPlayInBackground(playInBackground: Boolean) {
+        this.playInBackground = playInBackground
+    }
+
     private var resumeOnForeground = false
     private val lifeCycleListener = object : LifecycleEventListener {
         override fun onHostPause() {
@@ -59,6 +65,12 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             if (isInPip) {
                 Log.d(TAG, "App backgrounded but in PiP — keeping MPV playing")
                 return
+            }
+
+            // If background play is enabled, don't pause
+            if (playInBackground) {
+                 Log.d(TAG, "App backgrounded but playInBackground is true — keeping MPV playing")
+                 return
             }
 
             resumeOnForeground = !isPaused

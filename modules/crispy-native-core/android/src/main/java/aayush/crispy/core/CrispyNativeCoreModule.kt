@@ -177,6 +177,10 @@ class CrispyNativeCoreModule : Module() {
         }
       }
 
+      Prop("playInBackground") { view: CrispyVideoView, playInBackground: Boolean ->
+        view.setPlayInBackground(playInBackground)
+      }
+
       AsyncFunction("setMetadata") { view: CrispyVideoView, title: String, artist: String, artworkUrl: String? ->
         view.setMetadata(title, artist, artworkUrl)
       }
