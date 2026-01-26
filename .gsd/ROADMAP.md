@@ -93,3 +93,10 @@
 - [x] Optimize MPV demuxer cache and User-Agent.
 - [x] Implement Startup Cleanup logic.
 - [x] Verify production-grade stability and seek performance.
+
+---
+
+## Phase 22: Responsive Hero Height 📱 [DONE]
+- [x] Update `useResponsive` hook with clamped hero metrics.
+- [x] Integrate dynamic height into `HeroSlide` and `HeroCarousel`.
+- [x] Verify vertical balance on mobile and tablet.

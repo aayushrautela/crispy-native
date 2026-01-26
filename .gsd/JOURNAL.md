@@ -93,3 +93,13 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
     - **MPV Config**: Set modern Chrome User-Agent; disabled SSL verification for trackers; increased demuxer cache to 100MB and cache timeout to 60s.
     - **Lifecycle**: Added `performStartupCleanup` to wipe ephemeral data on startup.
 - **Outcome**: Torrent playback is faster to start, more resilient to network restrictions, and highly stable during seeks.
+
+## 2026-01-26: Responsive Hero Section
+- **Action**: Implemented production-grade responsive height and layout logic for the Home screen hero.
+- **Rationale**: The hero section was too tall on tablets/landscape, pushing content off-screen.
+- **Details**:
+    - **Calculated Height**: Moved from fixed `0.7` aspect ratio to a conditional system (`0.7` mobile, `1.2` tablet portrait, `2.2` tablet landscape).
+    - **Safety Clamping**: Enforced a `maxHeight` of 55% of the viewport on tablets.
+    - **Layout Constraint**: Constrained content `maxWidth` to 600px on tablets to preserve readability on ultra-wide screens.
+    - **Stability**: Synchronized the `HeroCarousel` skeleton calculations with the new responsive hook to eliminate layout shifts.
+- **Outcome**: Improved "above the fold" visibility for "Continue Watching" and results rows on tablets, creating a more balanced and professional layout across all device types.

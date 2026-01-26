@@ -1,4 +1,5 @@
 import { Meta } from '@/src/core/hooks/useHeroItems';
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -14,6 +15,7 @@ interface HeroCarouselProps {
 
 export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
     const { theme } = useTheme();
+    const { heroHeight } = useResponsive();
     const router = useRouter();
     // const { data: items, isLoading } = useHeroItems();
     const items = propItems || [];
@@ -42,7 +44,7 @@ export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
     if (isLoading || !items || items.length === 0) {
         return (
             <View style={styles.skeletonContainer}>
-                <View style={[styles.skeleton, { backgroundColor: theme.colors.surfaceVariant }]} />
+                <View style={[styles.skeleton, { backgroundColor: theme.colors.surfaceVariant, height: heroHeight }]} />
             </View>
         );
     }
@@ -103,7 +105,6 @@ const styles = StyleSheet.create({
     },
     skeleton: {
         width: SCREEN_WIDTH,
-        height: SCREEN_WIDTH * 1.5,
         opacity: 0.5,
     },
     dotsContainer: {

@@ -1,4 +1,5 @@
 import { Meta } from '@/src/core/hooks/useHeroItems';
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { Typography } from '@/src/core/ui/Typography';
@@ -8,10 +9,7 @@ import React from 'react';
 import { Dimensions, Image, ImageBackground, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_WIDTH = SCREEN_WIDTH;
-const ASPECT_RATIO = 0.7; // Taller for edge-to-edge
-const HERO_HEIGHT = SCREEN_WIDTH / ASPECT_RATIO;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface HeroSlideProps {
     item: Meta;
@@ -23,6 +21,7 @@ interface HeroSlideProps {
 
 export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlideProps) => {
     const { theme } = useTheme();
+    const { heroHeight, isTablet } = useResponsive();
 
     // Animated Parallax Style
     const animatedStyle = useAnimatedStyle(() => {
@@ -42,7 +41,11 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
 
     return (
         <View style={styles.itemContainer}>
-            <Animated.View style={[styles.heroCard, { backgroundColor: theme.colors.surfaceVariant }, animatedStyle]}>
+            <Animated.View style={[
+                styles.heroCard,
+                { backgroundColor: theme.colors.surfaceVariant, height: heroHeight },
+                animatedStyle
+            ]}>
                 <ImageBackground
                     source={{ uri: item.background }}
                     style={styles.backgroundImage}
@@ -134,8 +137,7 @@ const styles = StyleSheet.create({
         width: SCREEN_WIDTH,
     },
     heroCard: {
-        width: HERO_WIDTH,
-        height: HERO_HEIGHT,
+        width: SCREEN_WIDTH,
         overflow: 'hidden',
     },
     backgroundImage: {
@@ -148,6 +150,7 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     content: {
+        maxWidth: 600, // Keeps text readable on wide tablets
     },
     brandingSection: {
         marginBottom: 8,
@@ -155,8 +158,8 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     logo: {
-        width: 250,
-        height: 100, // Slightly taller logo area for better impact
+        width: 300,
+        height: 120,
         marginBottom: 8,
         alignSelf: 'flex-start',
     },

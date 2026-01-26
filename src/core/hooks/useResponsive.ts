@@ -18,5 +18,8 @@ export const useResponsive = () => {
         isLandscape,
         // Common max widths for content
         contentWidth: isTablet ? Math.min(width, 800) : width,
+        // Hero section metrics
+        heroAspectRatio: isTablet ? (isLandscape ? 2.2 : 1.2) : 0.7,
+        heroHeight: Math.min(width / (isTablet ? (isLandscape ? 2.2 : 1.2) : 0.7), height * (isTablet ? 0.55 : 0.8)),
     };
 };
