@@ -261,6 +261,28 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
+    private var currentAspectRatio = android.util.Rational(16, 9)
+
+    private fun updatePipParams() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val activity = appContext.currentActivity ?: return
+            val builder = android.app.PictureInPictureParams.Builder()
+            
+            try {
+                builder.setAspectRatio(currentAspectRatio)
+                
+                // Enable Auto-PiP for Android 12+ (S)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    builder.setAutoEnterEnabled(!isPaused)
+                }
+                
+                activity.setPictureInPictureParams(builder.build())
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to update PiP params", e)
+            }
+        }
+    }
+
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
         // Log.d(TAG, "Updating metadata: $title by $artist (artwork: $artworkUrl)")
         mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
@@ -271,6 +293,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         if (isMpvInitialized) {
             MPVLib.setPropertyBoolean("pause", paused)
             mediaSessionHandler?.updatePlaybackState(!paused)
+            updatePipParams()
         }
     }
 
@@ -391,13 +414,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                         onLoad(mapOf("duration" to value, "width" to width, "height" to height))
 
                         // Update Activity PiP params proactively for auto-PiP
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            val activity = appContext.currentActivity
-                            val builder = android.app.PictureInPictureParams.Builder()
-                            try {
-                                builder.setAspectRatio(android.util.Rational(width, height))
-                                activity?.setPictureInPictureParams(builder.build())
-                            } catch (e: Exception) {}
+                        if (width > 0 && height > 0) {
+                             currentAspectRatio = android.util.Rational(width, height)
+                             updatePipParams()
                         }
                     }
                 }
@@ -412,6 +431,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         if (eventId == MPV_EVENT_FILE_LOADED && !isPaused) {
              MPVLib.setPropertyBoolean("pause", false)
+             updatePipParams()
         }
     }
 
