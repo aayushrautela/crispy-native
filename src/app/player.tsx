@@ -184,7 +184,8 @@ export default function PlayerScreen() {
 
                 if (hash) {
                     console.log("Resolving torrent module...", hash, idx);
-                    const localUrl = await CrispyNativeCore.resolveStream(hash, idx);
+                    console.log("Resolving torrent module...", hash, idx);
+                    const localUrl = await CrispyNativeCore.startStream(hash, idx);
                     if (isMounted && localUrl) {
                         console.log("Resolved to local URL:", localUrl);
                         setFinalUrl(localUrl);

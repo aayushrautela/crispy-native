@@ -8,11 +8,14 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class CrispyNativeCoreModule : Module() {
   private var crispyServer: CrispyServer? = null
   private var torrentService: TorrentService? = null
   private var isBound = false
+  private var serviceLatch = CountDownLatch(1)
 
   private val connection = object : ServiceConnection {
     override fun onServiceConnected(className: android.content.ComponentName, service: IBinder) {
@@ -21,12 +24,14 @@ class CrispyNativeCoreModule : Module() {
       torrentService?.performStartupCleanup()
       crispyServer?.setTorrentService(torrentService!!)
       isBound = true
+      serviceLatch.countDown()
       Log.d("CrispyModule", "TorrentService connected")
     }
 
     override fun onServiceDisconnected(arg0: android.content.ComponentName) {
       isBound = false
       torrentService = null
+      serviceLatch = CountDownLatch(1)
     }
   }
 
@@ -56,9 +61,14 @@ class CrispyNativeCoreModule : Module() {
       crispyServer?.stop()
     }
 
-    AsyncFunction("resolveStream") { infoHash: String, fileIdx: Int ->
-      Log.d("CrispyModule", "[JS] resolveStream: $infoHash, index: $fileIdx")
-      val service = torrentService ?: return@AsyncFunction null
+    AsyncFunction("startStream") { infoHash: String, fileIdx: Int ->
+      Log.d("CrispyModule", "[JS] startStream: $infoHash, index: $fileIdx")
+      
+      val service = if (waitForService()) torrentService else null
+      if (service == null) {
+          Log.e("CrispyModule", "Failed to start stream: Service not bound (timeout)")
+          return@AsyncFunction null
+      }
       
       // Auto-start torrent if not active
       service.startInfoHash(infoHash)
@@ -70,7 +80,15 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("stopTorrent") { infoHash: String ->
+      torrentService?.stopTorrent(infoHash)
+    }
+
+    AsyncFunction("destroyTorrent") { infoHash: String ->
       torrentService?.deleteTorrentData(infoHash)
+    }
+
+    AsyncFunction("clearCache") {
+      torrentService?.performStartupCleanup()
     }
 
     AsyncFunction("handleSeek") { infoHash: String, fileIdx: Int, position: Long ->
@@ -190,5 +208,25 @@ class CrispyNativeCoreModule : Module() {
         view.setMetadata(title, artist, artworkUrl)
       }
     }
+  }
+
+
+  private fun waitForService(): Boolean {
+      if (torrentService != null) return true
+      
+      Log.d("CrispyModule", "Waiting for TorrentService...")
+      try {
+          // Wait up to 5 seconds for the service to bind
+          val connected = serviceLatch.await(5, TimeUnit.SECONDS)
+          if (connected) {
+              Log.d("CrispyModule", "Service connected after wait")
+          } else {
+              Log.w("CrispyModule", "Service connection timed out")
+          }
+          return connected
+      } catch (e: InterruptedException) {
+          Log.e("CrispyModule", "Interrupted while waiting for service", e)
+          return false
+      }
   }
 }

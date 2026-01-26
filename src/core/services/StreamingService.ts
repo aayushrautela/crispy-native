@@ -12,7 +12,8 @@ export class StreamingService {
 
         if (stream.infoHash) {
             console.log('[StreamingService] Resolving infoHash:', stream.infoHash);
-            return await CrispyNativeCore.resolveStream(stream.infoHash, stream.fileIdx ?? -1);
+            console.log('[StreamingService] Resolving infoHash:', stream.infoHash);
+            return await CrispyNativeCore.startStream(stream.infoHash, stream.fileIdx ?? -1);
         }
 
         return null;

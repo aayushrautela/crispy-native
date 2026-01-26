@@ -39,26 +39,56 @@ export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requir
 
 export default {
     /**
-     * Resolves a stream (e.g. infoHash) into a localhost URL.
+     * Resolve a stream (e.g. infoHash) into a localhost URL.
      * Auto-starts the torrent engine if needed.
+     * @deprecated Use startStream instead
      */
     async resolveStream(infoHash: string, fileIdx: number = -1): Promise<string | null> {
+        return this.startStream(infoHash, fileIdx);
+    },
+
+    /**
+     * Starts a torrent stream (e.g. infoHash) and resolves it to a localhost URL.
+     */
+    async startStream(infoHash: string, fileIdx: number = -1): Promise<string | null> {
         try {
-            return await CrispyNativeCore.resolveStream(infoHash, fileIdx);
+            return await CrispyNativeCore.startStream(infoHash, fileIdx);
         } catch (e) {
-            console.error('[CrispyNativeCore] resolveStream failed:', e);
+            console.error('[CrispyNativeCore] startStream failed:', e);
             return null;
         }
     },
 
     /**
-     * Stops a torrent and deletes its ephemeral data.
+     * Stops a torrent but keeps the data.
      */
     async stopTorrent(infoHash: string): Promise<void> {
         try {
             await CrispyNativeCore.stopTorrent(infoHash);
         } catch (e) {
             console.error('[CrispyNativeCore] stopTorrent failed:', e);
+        }
+    },
+
+    /**
+     * Stops a torrent and deletes its data from disk.
+     */
+    async destroyTorrent(infoHash: string): Promise<void> {
+        try {
+            await CrispyNativeCore.destroyTorrent(infoHash);
+        } catch (e) {
+            console.error('[CrispyNativeCore] destroyTorrent failed:', e);
+        }
+    },
+
+    /**
+     * Clears all torrent data from the download directory.
+     */
+    async clearCache(): Promise<void> {
+        try {
+            await CrispyNativeCore.clearCache();
+        } catch (e) {
+            console.error('[CrispyNativeCore] clearCache failed:', e);
         }
     },
 
