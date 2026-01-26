@@ -1,6 +1,7 @@
 import { LAYOUT } from '@/src/constants/layout';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { CircleUser, Clapperboard } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
@@ -92,7 +93,7 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
             }
         ]}>
             <View style={styles.topSection}>
-                <Typography variant="h3" weight="black" style={{ color: theme.colors.primary }}>C</Typography>
+                <Clapperboard variant="h3" weight="black" style={{ color: theme.colors.primary }} size={32} />
             </View>
 
             <View style={styles.itemsSection}>
@@ -111,7 +112,7 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
 
             <View style={styles.bottomSection}>
                 {/* Profile placeholder */}
-                <View style={[styles.profileCircle, { backgroundColor: theme.colors.surfaceVariant }]} />
+                <CircleUser size={32} color={theme.colors.onSurfaceVariant} strokeWidth={1.5} />
             </View>
         </View>
     );
@@ -119,12 +120,17 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
 
 const styles = StyleSheet.create({
     container: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        bottom: 0,
         width: LAYOUT.RAIL_WIDTH, // Slightly wider for premium feel
         height: '100%',
         paddingVertical: 32,
         alignItems: 'center',
         justifyContent: 'space-between',
         borderRightWidth: StyleSheet.hairlineWidth,
+        zIndex: 1000,
     },
     topSection: {
         height: 56,

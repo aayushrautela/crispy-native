@@ -35,6 +35,7 @@ export default function TabLayout() {
         } : undefined,
         sceneContainerStyle: isTablet ? {
           marginLeft: LAYOUT.RAIL_WIDTH,
+          flex: 1,
         } : undefined,
       }}
     >
