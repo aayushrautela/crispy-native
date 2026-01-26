@@ -102,9 +102,14 @@
 - [x] Verify vertical balance on mobile and tablet.
 ---
 
-## Phase 23: Tablet Landscape Redesign 🎭 [/]
-- [ ] Create `SplitHeroLayout` component in `features/meta/components`.
-- [ ] Refactor `HeroSection.tsx` to use the composition pattern.
-- [ ] Implement Horizontal "Feathered" Gradient for split-view.
-- [ ] Relocate `ActionRow` (Watchlist, Rate, etc.) into the Hero panel for landscape.
-- [ ] Verify layout stability and transitions on tablet simulators/devices.
+## Phase 23: Tablet Landscape Redesign 🎭 [x]
+- [x] Create `SplitHeroLayout` component in `features/meta/components`.
+- [x] Refactor `HeroSection.tsx` to use the composition pattern.
+- [x] Implement Horizontal "Feathered" Gradient for split-view.
+- [x] Relocate `ActionRow` (Watchlist, Rate, etc.) into the Hero panel for landscape.
+- [x] Verify layout stability and transitions on tablet simulators/devices.
+
+## Phase 24: Addon Persistence & Store hardening 🛡️ [/]
+- [ ] Refactor `UserStore` to distinguish between `reset` (factory wipe) and `reload` (context switch).
+- [ ] Fix race condition in `_layout.tsx` triggering data wipe.
+- [ ] Ensure `AddonService` correctly hydrates from disk on session change.

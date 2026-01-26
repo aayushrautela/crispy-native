@@ -145,7 +145,8 @@ export interface UserStoreState extends UserState {
     hydrate: (data: Partial<UserState>) => void;
 
     // Lifecycle
-    reset: () => void;
+    reloadFromStorage: () => void;
+    resetToDefaults: () => void;
 }
 
 // Helper to persist standard settings to StorageService (Side effects)
@@ -353,7 +354,25 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             set({ ...nextState as any, loading: false });
         },
 
-        reset: () => {
+        reloadFromStorage: () => {
+            console.log('[UserStore] 🔄 Reloading from storage (Context Switch)...');
+            const addons = loadInitialAddons();
+
+            set({
+                settings: getDefaultSettings(),
+                addons: addons,
+                manifests: {},
+                catalogPrefs: StorageService.getUser<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
+                traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+                loading: false // Data is ready
+            });
+
+            // Re-sync manifests for the loaded addons
+            setTimeout(() => get().syncManifests(), 100);
+        },
+
+        resetToDefaults: () => {
+            console.log('[UserStore] ⚠️ Factory Reset / Logout Wipe');
             const defaults = getDefaultAddons();
             set({
                 settings: getDefaultSettings(),
@@ -363,7 +382,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
                 traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
                 loading: true
             });
-            // Ensure defaults are persisted if reset implies "wiping"
+            // Ensure defaults are persisted (Wipe custom data)
             StorageService.setUser('crispy-addons', defaults);
         }
     };

@@ -76,7 +76,7 @@ function RootLayoutNav() {
     const unsub = SessionManager.subscribe(() => {
       // When accounts change (login/logout/switch), reload the store
       // This ensures the store reads data for the *new* active user
-      useUserStore.getState().reset(); // Reset to defaults/load from storage
+      useUserStore.getState().reloadFromStorage(); // Reloads from disk (safe context switch)
       TraktService.getInstance().reset(); // Reset Trakt service to load new user tokens
     });
     return unsub;

@@ -1,13 +1,12 @@
 ### Current Position
-- **Phase**: Phase 23: Tablet Landscape Redesign
+- **Phase**: Phase 24: Addon Persistence Fix
 - **Task**: Implementation
 - **Status**: COMPLETED
 
 ### What was just accomplished
-- **SplitHeroLayout.tsx**: Created the core side-by-side layout component.
-- **MetaActionRow.tsx**: Extracted Trakt actions for reuse.
-- **HeroSection.tsx**: Refactored to support SplitHeroLayout via composition.
-- **[id].tsx**: Fixed Rule of Hooks violation by moving `useResponsive` to top level.
+- **UserStore.ts**: Split destructive `reset()` from safe `reloadFromStorage()`.
+- **_layout.tsx**: Switched session init to use `reloadFromStorage()`.
+- **Bug Fix**: Custom addons will no longer be wiped on app restart.
 
 ### Next Steps
 - Verify visual state in tablet landscape mode.
