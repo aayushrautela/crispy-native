@@ -1,3 +1,4 @@
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { RatingModal } from '@/src/core/ui/RatingModal';
@@ -7,6 +8,7 @@ import { CastSection } from '@/src/features/meta/components/CastSection';
 import { CommentsSection } from '@/src/features/meta/components/CommentsSection';
 import { EpisodesSection } from '@/src/features/meta/components/EpisodesSection';
 import { HeroSection } from '@/src/features/meta/components/HeroSection';
+import { MetaActionRow } from '@/src/features/meta/components/MetaActionRow';
 import { MetaDetailsSkeleton } from '@/src/features/meta/components/MetaDetailsSkeleton';
 import { RatingsSection } from '@/src/features/meta/components/RatingsSection';
 import { useAiInsights } from '@/src/features/meta/hooks/useAiInsights';
@@ -14,7 +16,7 @@ import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Bookmark, Check, Circle, LayoutGrid, Share2, Star, Volume2, VolumeX } from 'lucide-react-native';
+import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -257,72 +259,35 @@ export default function MetaDetailsScreen() {
                     scrollY={scrollY}
                     onWatchPress={handleWatchPress}
                     isMuted={isMuted}
+                    // Pass Trakt props for split layout
+                    isAuthenticated={isAuthenticated}
+                    isListed={isListed}
+                    isCollected={isCollected}
+                    isWatched={isWatched}
+                    isSeries={isSeries}
+                    userRating={userRating}
+                    onWatchlistToggle={handleWatchlistToggle}
+                    onCollectionToggle={handleCollectionToggle}
+                    onWatchedToggle={handleWatchedToggle}
+                    onRatePress={() => setShowRatingModal(true)}
                 />
 
                 <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
-                    <View style={styles.iconActionRow}>
-                        <Pressable
-                            style={styles.iconActionItem}
-                            onPress={handleWatchlistToggle}
-                            disabled={!isAuthenticated}
-                        >
-                            <Bookmark
-                                size={24}
-                                color="white"
-                                fill={isListed ? 'white' : 'transparent'}
-                            />
-                            <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
-                                Watchlist
-                            </Typography>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.iconActionItem}
-                            onPress={handleCollectionToggle}
-                            disabled={!isAuthenticated}
-                        >
-                            <LayoutGrid
-                                size={24}
-                                color="white"
-                                fill={isCollected ? 'white' : 'transparent'}
-                            />
-                            <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
-                                Collection
-                            </Typography>
-                        </Pressable>
-
-                        {!isSeries && (
-                            <Pressable
-                                style={styles.iconActionItem}
-                                onPress={handleWatchedToggle}
-                                disabled={!isAuthenticated}
-                            >
-                                {isWatched ? (
-                                    <Check size={24} color={'white'} />
-                                ) : (
-                                    <Circle size={24} color="white" />
-                                )}
-                                <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
-                                    Watched
-                                </Typography>
-                            </Pressable>
-                        )}
-
-                        <Pressable
-                            style={styles.iconActionItem}
-                            onPress={() => isAuthenticated && setShowRatingModal(true)}
-                            disabled={!isAuthenticated}
-                        >
-                            <Star
-                                size={24}
-                                color={userRating ? '#FFD700' : 'white'}
-                                fill={userRating ? '#FFD700' : 'transparent'}
-                            />
-                            <Typography variant="label" style={[styles.iconActionLabel, userRating && { color: '#FFD700' }]}>
-                                {userRating ? `Rated ${userRating * 2}` : 'Rate'}
-                            </Typography>
-                        </Pressable>
-                    </View>
+                    {!(useResponsive().isTablet && useResponsive().isLandscape) && (
+                        <MetaActionRow
+                            isAuthenticated={isAuthenticated}
+                            isListed={isListed}
+                            isCollected={isCollected}
+                            isWatched={isWatched}
+                            isSeries={isSeries}
+                            userRating={userRating}
+                            onWatchlistToggle={handleWatchlistToggle}
+                            onCollectionToggle={handleCollectionToggle}
+                            onWatchedToggle={handleWatchedToggle}
+                            onRatePress={() => setShowRatingModal(true)}
+                            style={{ marginTop: 24 }}
+                        />
+                    )}
 
                     <RatingModal
                         visible={showRatingModal}
@@ -412,9 +377,6 @@ const styles = StyleSheet.create({
     topRightActions: { flexDirection: 'row', gap: 12 },
     backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     body: { flex: 1 },
-    iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 32, marginTop: 24 },
-    iconActionItem: { alignItems: 'center', gap: 8 },
-    iconActionLabel: { color: 'white', opacity: 0.6, fontSize: 10 },
     subLabel: { color: 'white', opacity: 0.4, fontSize: 10 },
     sectionTitle: { color: 'white', marginBottom: 16 },
 });

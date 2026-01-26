@@ -74,3 +74,23 @@ Implement comprehensive Trakt user interactions (Library management, Rating, Wat
 - **Seek Management**: Implement priority windows and piece deadline resetting to stop downloading irrelevant data after a seek.
 - **Player Resilience**: Configure standard User-Agents, disable SSL verification for trackers, and tune demuxer cache (100MB buffer).
 - **Persistence**: Ensure ephemeral playback by wiping the download directory on app startup and after playback.
+## 9. Tablet Landscape Redesign (Production Grade)
+- **Goal**: Optimize the Movie/Show details screen for tablet landscape orientation using a split-pane cinematic layout.
+- **Layout Logic**:
+    - Trigger: `isTablet && isLandscape` from `useResponsive`.
+    - Component: `SplitHeroLayout`.
+    - **Left Pane (60%)**: Media Visuals.
+        - Contains `HeroBackdrop` (Image/YouTubeTrailer).
+        - Contains `TrailerButton` (positioned within visual context).
+        - Transition: Horizontal `LinearGradient` on the right edge (Right edge fade).
+    - **Right Pane (40%)**: Meta & Actions.
+        - Contains Logo/Title (Top-Left aligned).
+        - Contains Metadata (Rating, Year, Runtime).
+        - Contains Description (Plot summary, non-centered).
+        - Contains `ActionStack` (Watch Button + Trakt Action Row: Watchlist, Collection, Watched, Rate).
+- **Body Content**:
+    - Remains full-width starting from `RatingsSection`.
+    - Optional: `maxWidth` constraint for readability.
+- **Performance**:
+    - Use `Composition Pattern` to avoid massive if/else in render blocks.
+    - Leverage `memo` for split-pane sub-components.

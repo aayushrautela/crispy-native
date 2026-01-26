@@ -100,3 +100,11 @@
 - [x] Update `useResponsive` hook with clamped hero metrics.
 - [x] Integrate dynamic height into `HeroSlide` and `HeroCarousel`.
 - [x] Verify vertical balance on mobile and tablet.
+---
+
+## Phase 23: Tablet Landscape Redesign 🎭 [/]
+- [ ] Create `SplitHeroLayout` component in `features/meta/components`.
+- [ ] Refactor `HeroSection.tsx` to use the composition pattern.
+- [ ] Implement Horizontal "Feathered" Gradient for split-view.
+- [ ] Relocate `ActionRow` (Watchlist, Rate, etc.) into the Hero panel for landscape.
+- [ ] Verify layout stability and transitions on tablet simulators/devices.

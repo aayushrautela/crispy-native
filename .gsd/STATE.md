@@ -1,12 +1,14 @@
 ### Current Position
-- **Phase**: Debugging Player Issues
-- **Task**: Fixed Stream Tab duplicate keys and selection
+- **Phase**: Phase 23: Tablet Landscape Redesign
+- **Task**: Implementation
 - **Status**: COMPLETED
 
 ### What was just accomplished
-- **FlatList Fix**: Updated `keyExtractor` in `StreamsTab.tsx` to handle missing/NaN URLs.
-- **Selection Fix**: Added `setActiveStream` and `setActiveTab('none')` to `player.tsx` to enable stream switching.
-- **Goal**: Resolve player interaction blockers.
+- **SplitHeroLayout.tsx**: Created the core side-by-side layout component.
+- **MetaActionRow.tsx**: Extracted Trakt actions for reuse.
+- **HeroSection.tsx**: Refactored to support SplitHeroLayout via composition.
+- **[id].tsx**: Integrated the new components and responsive logic.
 
 ### Next Steps
-- Verify with user if performance is improved.
+- Verify visual state with screenshots (if possible/needed by user).
+- Run build/lint check.
