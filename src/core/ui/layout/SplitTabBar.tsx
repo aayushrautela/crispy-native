@@ -1,12 +1,11 @@
 import React from 'react';
 import { Platform } from 'react-native';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { MaterialTabBar } from './MaterialTabBar';
 import { GlassTabBar } from './GlassTabBar';
+import { MaterialTabBar } from './MaterialTabBar';
 
-export const SplitTabBar = (props: BottomTabBarProps) => {
+export const SplitTabBar = () => {
     if (Platform.OS === 'android') {
-        return <MaterialTabBar {...props} />;
+        return <MaterialTabBar />;
     }
-    return <GlassTabBar {...props} />;
+    return <GlassTabBar />;
 };

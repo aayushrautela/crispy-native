@@ -1,5 +1,6 @@
 import { useTheme } from '@/src/core/ThemeContext';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { usePathname, useRouter } from 'expo-router';
+import { Compass, Home, Library, Search, Settings } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
@@ -7,50 +8,34 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Touchable } from '../Touchable';
 import { Typography } from '../Typography';
 
+const ROUTES = [
+    { name: 'index', path: '/', title: 'Home', icon: Home },
+    { name: 'search', path: '/search', title: 'Search', icon: Search },
+    { name: 'discover', path: '/discover', title: 'Discover', icon: Compass },
+    { name: 'library', path: '/library', title: 'Library', icon: Library },
+    { name: 'settings', path: '/settings', title: 'Settings', icon: Settings },
+];
+
 const MaterialTabItem = ({
     route,
-    index,
-    state,
-    descriptors,
-    navigation,
+    isActive,
+    onPress,
     theme
 }: {
-    route: any,
-    index: number,
-    state: any,
-    descriptors: any,
-    navigation: any,
+    route: typeof ROUTES[0],
+    isActive: boolean,
+    onPress: () => void,
     theme: any
 }) => {
-    const { options } = descriptors[route.key];
-    const isFocused = state.index === index;
-
-    const label = options.title !== undefined
-        ? options.title
-        : options.tabBarLabel !== undefined
-            ? options.tabBarLabel
-            : route.name;
-
-    const onPress = () => {
-        const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-        });
-
-        if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
-        }
-    };
-
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            width: withTiming(isFocused ? 64 : 0, { duration: 250 }),
-            opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
+            width: withTiming(isActive ? 64 : 0, { duration: 250 }),
+            opacity: withTiming(isActive ? 1 : 0, { duration: 200 }),
         };
     });
 
     const indicatorBgColor = theme.colors.secondaryContainer;
+    const Icon = route.icon;
 
     return (
         <Touchable
@@ -60,29 +45,30 @@ const MaterialTabItem = ({
         >
             <View style={styles.iconContainer}>
                 <Animated.View style={[styles.indicator, indicatorStyle, { backgroundColor: indicatorBgColor }]} />
-                {options.tabBarIcon && options.tabBarIcon({
-                    focused: isFocused,
-                    color: isFocused ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
-                    size: 24
-                })}
+                <Icon
+                    color={isActive ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant}
+                    size={24}
+                />
             </View>
             <Typography
                 variant="label-medium"
-                weight={isFocused ? 'bold' : 'medium'}
+                weight={isActive ? 'bold' : 'medium'}
                 style={{
-                    color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+                    color: isActive ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
                     marginTop: 4
                 }}
             >
-                {label as string}
+                {route.title}
             </Typography>
         </Touchable>
     );
 };
 
-export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+export const MaterialTabBar = () => {
     const { theme } = useTheme();
     const insets = useSafeAreaInsets();
+    const pathname = usePathname();
+    const router = useRouter();
 
     return (
         <View style={[
@@ -99,17 +85,21 @@ export const MaterialTabBar = ({ state, descriptors, navigation }: BottomTabBarP
                     paddingBottom: insets.bottom + 16,
                 }
             ]}>
-                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
-                    <MaterialTabItem
-                        key={route.key}
-                        route={route}
-                        index={index}
-                        state={state}
-                        descriptors={descriptors}
-                        navigation={navigation}
-                        theme={theme}
-                    />
-                ))}
+                {ROUTES.map((route) => {
+                    const isActive = route.name === 'index'
+                        ? pathname === '/'
+                        : pathname.startsWith(route.path);
+
+                    return (
+                        <MaterialTabItem
+                            key={route.name}
+                            route={route}
+                            isActive={isActive}
+                            onPress={() => router.push(route.path as any)}
+                            theme={theme}
+                        />
+                    );
+                })}
             </View>
         </View>
     );

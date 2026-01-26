@@ -5,7 +5,7 @@ import { SplitTabBar } from '@/src/core/ui/layout/SplitTabBar';
 import { Tabs } from 'expo-router';
 import { Compass, Home, Library, Search, Settings as SettingsIcon } from 'lucide-react-native';
 import React from 'react';
-import { useWindowDimensions } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -16,65 +16,58 @@ export default function TabLayout() {
   const { theme } = useTheme();
   const isTablet = width >= 768;
 
-  return (
-    <Tabs
-      tabBar={(props) => isTablet ? <MaterialNavigationRail {...props} /> : <SplitTabBar {...props} />}
-      backBehavior="firstRoute"
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade',
-        tabBarStyle: isTablet ? {
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: LAYOUT.RAIL_WIDTH,
-          borderRightWidth: 1,
-          borderRightColor: theme.colors.outlineVariant,
-          backgroundColor: theme.colors.surface,
-        } : undefined,
-        sceneContainerStyle: isTablet ? {
-          marginLeft: LAYOUT.RAIL_WIDTH,
-          flex: 1,
-        } : undefined,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+
+  <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column' }}>
+    {/* Tablet: Side Rail */}
+    {isTablet && <MaterialNavigationRail />}
+
+    <View style={{ flex: 1 }}>
+      <Tabs
+        tabBar={() => null}
+        backBehavior="firstRoute"
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+          // No sceneContainerStyle needed anymore! Flex layout handles it.
         }}
-      />
-      <Tabs.Screen
-        name="search"
-        options={{
-          title: 'Search',
-          tabBarIcon: ({ color, size }) => <Search color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="discover"
-        options={{
-          title: 'Discover',
-          tabBarIcon: ({ color, size }) => <Compass color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: 'Library',
-          tabBarIcon: ({ color, size }) => <Library color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            // We still define options for the router, even if we don't use them for rendering standard tabs
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: 'Search',
+          }}
+        />
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: 'Discover',
+          }}
+        />
+        <Tabs.Screen
+          name="library"
+          options={{
+            title: 'Library',
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: 'Settings',
+          }}
+        />
+      </Tabs>
+    </View>
+
+    {/* Mobile: Bottom Bar */}
+    {!isTablet && <SplitTabBar />}
+  </View>
   );
 }
 

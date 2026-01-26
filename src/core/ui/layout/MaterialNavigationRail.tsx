@@ -1,57 +1,42 @@
 import { LAYOUT } from '@/src/constants/layout';
 import { useTheme } from '@/src/core/ThemeContext';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { CircleUser, Clapperboard } from 'lucide-react-native';
+import { usePathname, useRouter } from 'expo-router';
+import { CircleUser, Clapperboard, Compass, Home, Library, Search, Settings } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Touchable } from '../Touchable';
 import { Typography } from '../Typography';
 
+// Define the routes statically since we are decoupling from the navigator
+const ROUTES = [
+    { name: 'index', path: '/', title: 'Home', icon: Home },
+    { name: 'search', path: '/search', title: 'Search', icon: Search },
+    { name: 'discover', path: '/discover', title: 'Discover', icon: Compass },
+    { name: 'library', path: '/library', title: 'Library', icon: Library },
+    { name: 'settings', path: '/settings', title: 'Settings', icon: Settings },
+];
+
 const NavigationRailItem = ({
     route,
-    index,
-    state,
-    descriptors,
-    navigation,
+    isActive,
+    onPress,
     theme
 }: {
-    route: any,
-    index: number,
-    state: any,
-    descriptors: any,
-    navigation: any,
+    route: typeof ROUTES[0],
+    isActive: boolean,
+    onPress: () => void,
     theme: any
 }) => {
-    const { options } = descriptors[route.key];
-    const isFocused = state.index === index;
-
-    const label = options.title !== undefined
-        ? options.title
-        : options.tabBarLabel !== undefined
-            ? options.tabBarLabel
-            : route.name;
-
-    const onPress = () => {
-        const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-        });
-
-        if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
-        }
-    };
-
     const indicatorStyle = useAnimatedStyle(() => {
         return {
-            height: withSpring(isFocused ? 32 : 0, { damping: 15, stiffness: 150 }),
-            opacity: withTiming(isFocused ? 1 : 0, { duration: 200 }),
+            height: withSpring(isActive ? 32 : 0, { damping: 15, stiffness: 150 }),
+            opacity: withTiming(isActive ? 1 : 0, { duration: 200 }),
         };
     });
 
     const indicatorBgColor = theme.colors.secondaryContainer;
+    const Icon = route.icon;
 
     return (
         <Touchable
@@ -61,28 +46,29 @@ const NavigationRailItem = ({
         >
             <View style={styles.iconContainer}>
                 <Animated.View style={[styles.indicator, indicatorStyle, { backgroundColor: indicatorBgColor }]} />
-                {options.tabBarIcon && options.tabBarIcon({
-                    focused: isFocused,
-                    color: isFocused ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
-                    size: 26
-                })}
+                <Icon
+                    color={isActive ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant}
+                    size={26}
+                />
             </View>
             <Typography
                 variant="label-medium"
-                weight={isFocused ? 'bold' : 'medium'}
+                weight={isActive ? 'bold' : 'medium'}
                 style={{
-                    color: isFocused ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+                    color: isActive ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
                     marginTop: 4
                 }}
             >
-                {label as string}
+                {route.title}
             </Typography>
         </Touchable>
     );
 };
 
-export const MaterialNavigationRail = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+export const MaterialNavigationRail = () => {
     const { theme } = useTheme();
+    const pathname = usePathname();
+    const router = useRouter();
 
     return (
         <View style={[
@@ -97,17 +83,25 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
             </View>
 
             <View style={styles.itemsSection}>
-                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
-                    <NavigationRailItem
-                        key={route.key}
-                        route={route}
-                        index={index}
-                        state={state}
-                        descriptors={descriptors}
-                        navigation={navigation}
-                        theme={theme}
-                    />
-                ))}
+                {ROUTES.map((route) => {
+                    // Check if current pathname matches route
+                    // Simplified active logic: 
+                    // - index matches '/' 
+                    // - others match specific path
+                    const isActive = route.name === 'index'
+                        ? pathname === '/'
+                        : pathname.startsWith(route.path);
+
+                    return (
+                        <NavigationRailItem
+                            key={route.name}
+                            route={route}
+                            isActive={isActive}
+                            onPress={() => router.push(route.path as any)}
+                            theme={theme}
+                        />
+                    );
+                })}
             </View>
 
             <View style={styles.bottomSection}>
@@ -120,10 +114,6 @@ export const MaterialNavigationRail = ({ state, descriptors, navigation }: Botto
 
 const styles = StyleSheet.create({
     container: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        bottom: 0,
         width: LAYOUT.RAIL_WIDTH, // Slightly wider for premium feel
         height: '100%',
         paddingVertical: 32,

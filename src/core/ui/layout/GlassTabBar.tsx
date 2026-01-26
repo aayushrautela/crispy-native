@@ -1,5 +1,6 @@
 import { useTheme } from '@/src/core/ThemeContext';
-import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { usePathname, useRouter } from 'expo-router';
+import { Compass, Home, Library, Search, Settings } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
@@ -7,42 +8,33 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Surface } from '../Surface';
 import { Touchable } from '../Touchable';
 
+const ROUTES = [
+    { name: 'index', path: '/', title: 'Home', icon: Home },
+    { name: 'search', path: '/search', title: 'Search', icon: Search },
+    { name: 'discover', path: '/discover', title: 'Discover', icon: Compass },
+    { name: 'library', path: '/library', title: 'Library', icon: Library },
+    { name: 'settings', path: '/settings', title: 'Settings', icon: Settings },
+];
+
 const GlassTabItem = ({
     route,
-    index,
-    state,
-    descriptors,
-    navigation,
+    isActive,
+    onPress,
     theme
 }: {
-    route: any,
-    index: number,
-    state: any,
-    descriptors: any,
-    navigation: any,
+    route: typeof ROUTES[0],
+    isActive: boolean,
+    onPress: () => void,
     theme: any
 }) => {
-    const { options } = descriptors[route.key];
-    const isFocused = state.index === index;
-
-    const onPress = () => {
-        const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-        });
-
-        if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
-        }
-    };
-
     const animatedStyle = useAnimatedStyle(() => {
         return {
-            transform: [{ scale: withSpring(isFocused ? 1.15 : 1) }],
-            opacity: withSpring(isFocused ? 1 : 0.5)
+            transform: [{ scale: withSpring(isActive ? 1.15 : 1) }],
+            opacity: withSpring(isActive ? 1 : 0.5)
         };
     });
+
+    const Icon = route.icon;
 
     return (
         <Touchable
@@ -51,23 +43,24 @@ const GlassTabItem = ({
             style={styles.tab}
         >
             <Animated.View style={animatedStyle}>
-                {options.tabBarIcon && options.tabBarIcon({
-                    focused: isFocused,
-                    color: '#FFFFFF',
-                    size: 24
-                })}
+                <Icon
+                    color='#FFFFFF'
+                    size={24}
+                />
             </Animated.View>
 
-            {isFocused && (
+            {isActive && (
                 <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
             )}
         </Touchable>
     );
 };
 
-export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
+export const GlassTabBar = () => {
     const { theme } = useTheme();
     const insets = useSafeAreaInsets();
+    const pathname = usePathname();
+    const router = useRouter();
 
     return (
         <View style={[styles.container, { bottom: 32 + insets.bottom }]}>
@@ -82,17 +75,21 @@ export const GlassTabBar = ({ state, descriptors, navigation }: BottomTabBarProp
                     }
                 ]}
             >
-                {state.routes && state.routes.length > 0 && state.routes.map((route, index) => (
-                    <GlassTabItem
-                        key={route.key}
-                        route={route}
-                        index={index}
-                        state={state}
-                        descriptors={descriptors}
-                        navigation={navigation}
-                        theme={theme}
-                    />
-                ))}
+                {ROUTES.map((route) => {
+                    const isActive = route.name === 'index'
+                        ? pathname === '/'
+                        : pathname.startsWith(route.path);
+
+                    return (
+                        <GlassTabItem
+                            key={route.name}
+                            route={route}
+                            isActive={isActive}
+                            onPress={() => router.push(route.path as any)}
+                            theme={theme}
+                        />
+                    );
+                })}
             </Surface>
         </View>
     );
