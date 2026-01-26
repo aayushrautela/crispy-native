@@ -172,7 +172,7 @@ export const HeroSection = memo(({ meta, enriched, colors, scrollY, onWatchPress
                     pointerEvents="none"
                 />
 
-                <View style={[styles.heroContent, isTablet && { maxWidth: 600, alignSelf: 'center', width: '100%' }]}>
+                <View style={[styles.heroContent, { width: '100%' }, isTablet && { maxWidth: 600, alignSelf: 'center' }]}>
                     {/* Trailer Button */}
                     <Pressable
                         style={[styles.trailerBtn, !trailerKey && { opacity: 0.5 }]}

@@ -117,7 +117,7 @@ export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) =
                 style={{ paddingHorizontal: 20 }}
             />
             {isTablet ? (
-                <View style={styles.ratingsGrid}>
+                <View style={[styles.ratingsGrid, { width: '100%' }]}>
                     {renderContent()}
                 </View>
             ) : (
