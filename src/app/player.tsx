@@ -65,6 +65,7 @@ export default function PlayerScreen() {
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
+    const [isPipMode, setIsPipMode] = useState(false);
 
     // Info Tab State (Meta Aggregator)
     const baseId = useMemo(() => {
@@ -308,6 +309,7 @@ export default function PlayerScreen() {
         // Listen for PiP mode changes (Android)
         const pipSubscription = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
             console.log('[Player] PiP Mode Changed:', isPip);
+            setIsPipMode(isPip);
             if (isPip) {
                 setShowControls(false);
                 setActiveTab('none');
@@ -330,6 +332,7 @@ export default function PlayerScreen() {
     }, []);
 
     const resetControlsTimer = () => {
+        if (isPipMode) return;
         if (controlsTimer.current) clearTimeout(controlsTimer.current);
         setShowControls(true);
         // Only auto-hide if no tab is active
@@ -340,13 +343,14 @@ export default function PlayerScreen() {
 
     // Keep controls visible when tab is active
     useEffect(() => {
+        if (isPipMode) return;
         if (activeTab !== 'none') {
             if (controlsTimer.current) clearTimeout(controlsTimer.current);
             setShowControls(true);
         } else {
             resetControlsTimer();
         }
-    }, [activeTab]);
+    }, [activeTab, isPipMode]);
 
     const togglePlay = () => {
         const nextPaused = !paused;
@@ -533,7 +537,7 @@ export default function PlayerScreen() {
 
             {/* Gesture Layer & Main UI Wrapper */}
             <Pressable style={StyleSheet.absoluteFill} onPress={handleTouchEnd}>
-                {showControls && (
+                {showControls && !isPipMode && (
                     <Animated.View
                         entering={FadeIn.duration(300)}
                         exiting={FadeOut.duration(300)}
