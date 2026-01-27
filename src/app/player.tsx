@@ -149,11 +149,43 @@ export default function PlayerScreen() {
     const [isIconAnimating, setIsIconAnimating] = useState(false);
 
     // Media Metadata for Notification
-    const mediaMetadata = useMemo(() => ({
-        title: (type === 'movie' ? title : (episodeTitle || title)) as string,
-        artist: (type === 'movie' ? 'Movie' : title) as string,
-        artworkUrl: poster as string,
-    }), [title, episodeTitle, type, poster]);
+    const mediaMetadata = useMemo(() => {
+        let displayTitle = ((episodeTitle || title) as string) || 'Unknown Title';
+        let displayArtist = ((type === 'movie' ? 'Movie' : title) as string) || 'Crispy Player';
+        let displayArtwork = (poster as string) || '';
+
+        // Try to upgrade metadata from MetaAggregator
+        if (type === 'show') {
+            // Upgrade Show Name (Artist)
+            if (enriched?.title) displayArtist = enriched.title;
+            else if (meta?.title) displayArtist = meta.title;
+
+            // Upgrade Episode Name (Title) & Artwork
+            const episodeId = String(id).split(':')[2];
+            if (episodeId && seasonEpisodes?.length > 0) {
+                const ep = seasonEpisodes.find((e: any) => String(e.number) === episodeId || String(e.id) === episodeId);
+                if (ep) {
+                    if (ep.title) displayTitle = ep.title;
+                    if (ep.image) displayArtwork = ep.image; // Use episode specific image if available
+                }
+            }
+        } else {
+            // For movies, upgrade from enriched/meta
+            if (enriched?.title) displayTitle = enriched.title;
+            else if (meta?.title) displayTitle = meta.title;
+
+            if (enriched?.images?.poster?.[0]) displayArtwork = enriched.images.poster[0];
+            else if (meta?.image) displayArtwork = meta.image;
+        }
+
+        const metaObj = {
+            title: displayTitle,
+            artist: displayArtist,
+            artworkUrl: displayArtwork,
+        };
+        console.log('[Player] Generating mediaMetadata:', metaObj);
+        return metaObj;
+    }, [title, episodeTitle, type, poster, enriched, meta, seasonEpisodes, id]);
 
 
     // Dual-engine state

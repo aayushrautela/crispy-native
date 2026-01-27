@@ -44,6 +44,7 @@ class MediaSessionHandler(
     companion object {
         const val CHANNEL_ID = "media_channel"
         private const val NOTIFICATION_ID = 1002
+        private const val TAG = "MediaSessionHandler"
     }
 
     init {
@@ -95,21 +96,32 @@ class MediaSessionHandler(
     }
 
     fun updateMetadata(title: String, artist: String, artworkUrl: String?) {
+        android.util.Log.d(TAG, "updateMetadata called with: title='$title', artist='$artist', artworkUrl='$artworkUrl'")
         currentTitle = title
         currentArtist = artist
 
         if (!artworkUrl.isNullOrEmpty()) {
+            android.util.Log.d(TAG, "Starting image load for: $artworkUrl")
             val loader = ImageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(artworkUrl)
                 .allowHardware(false) 
                 .target(
                     onSuccess = { result ->
-                        currentArtwork = (result as BitmapDrawable).bitmap
+                        android.util.Log.d(TAG, "Image load successful")
+                        if (result is BitmapDrawable) {
+                            currentArtwork = result.bitmap
+                        } else {
+                            android.util.Log.w(TAG, "Image is not a BitmapDrawable, cannot use as largeIcon")
+                             // detailed handling or conversion could be added here
+                             // For now, simple fallback
+                             currentArtwork = null
+                        }
                         updateNotification()
                         updateMediaSessionMetadata()
                     },
                     onError = {
+                        android.util.Log.e(TAG, "Image load failed")
                         currentArtwork = null
                         updateNotification()
                         updateMediaSessionMetadata()
@@ -118,6 +130,7 @@ class MediaSessionHandler(
                 .build()
             loader.enqueue(request)
         } else {
+            android.util.Log.d(TAG, "No artwork URL, clearing artwork")
             currentArtwork = null
             updateNotification()
             updateMediaSessionMetadata()
@@ -179,6 +192,7 @@ class MediaSessionHandler(
     }
 
     private fun updateNotification() {
+        android.util.Log.d(TAG, "updateNotification called. Title: $currentTitle, Artist: $currentArtist, Playing: $isPlaying, HasArtwork: ${currentArtwork != null}")
         // We don't need the controller to check for updates, we have our local state values
         
         // Use a generic intent if MainActivity class name is unknown at compile time,

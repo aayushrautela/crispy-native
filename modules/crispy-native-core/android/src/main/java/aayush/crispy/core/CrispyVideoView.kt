@@ -286,7 +286,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
-        // Log.d(TAG, "Updating metadata: $title by $artist (artwork: $artworkUrl)")
+        Log.d(TAG, "setMetadata called: $title by $artist (artwork: $artworkUrl)")
         mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
     }
 

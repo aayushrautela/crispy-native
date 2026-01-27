@@ -91,6 +91,11 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         onTracksChanged,
     } = props;
 
+    // Log metadata for debugging notifications
+    React.useEffect(() => {
+        console.log('[VideoSurface] Received metadata:', props.metadata);
+    }, [props.metadata]);
+
     const exoPlayerRef = useRef<VideoRef>(null);
     const mpvPlayerRef = useRef<MpvPlayerRef>(null);
 
