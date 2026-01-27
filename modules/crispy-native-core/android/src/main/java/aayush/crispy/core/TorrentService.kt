@@ -143,6 +143,7 @@ class TorrentService : Service() {
             activeSeeds(0)
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
+            listenInterfaces("0.0.0.0:0")
         }
         
         sessionManager = SessionManager().apply {
