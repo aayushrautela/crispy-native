@@ -67,33 +67,6 @@ export const ensureContrast = (color: string, background: string, minContrast: n
 };
 
 /**
- * Generates a Material 3 inspired dynamic palette from a seed color.
- * Focuses on dark theme roles.
- */
-export const generateMediaPalette = (seed: string) => {
-    const luma = getLuminance(seed);
-
-    // Base Primary: Ensure it's vibrant enough but not blinding
-    const primary = luma < 80 ? adjustBrightness(seed, 1.8) : seed;
-
-    return {
-        primary,
-        // High contrast text for the primary color
-        onPrimary: getLuminance(primary) > 160 ? '#000000' : '#FFFFFF',
-        // Tonal Surface: Deeply darkened seed, but visible (0.08 factor)
-        surface: luma < 20 ? adjustBrightness(seed, 3.0) : adjustBrightness(seed, 0.08),
-        // Surface Container: slightly lighter for sections
-        surfaceContainer: adjustBrightness(seed, 0.15),
-        // Primary Container: Mid-tone variant
-        primaryContainer: adjustBrightness(primary, 0.6),
-        // Secondary Container: Desaturated and dark for secondary actions
-        secondaryContainer: adjustBrightness(seed, 0.25),
-        // On Secondary Container: Subdued labels
-        onSecondaryContainer: adjustBrightness(seed, 2.0),
-    };
-};
-
-/**
  * Adjusts the brightness of a hex color by a factor.
  */
 export const adjustBrightness = (hex: string, factor: number): string => {
@@ -106,4 +79,111 @@ export const adjustBrightness = (hex: string, factor: number): string => {
     let b = Math.min(255, Math.max(0, Math.floor(((rgb >> 0) & 0xff) * factor)));
 
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+};
+
+/**
+ * Converts HEX to HSL
+ */
+export const hexToHsl = (hex: string): [number, number, number] => {
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16) / 255;
+        g = parseInt(hex[2] + hex[2], 16) / 255;
+        b = parseInt(hex[3] + hex[3], 16) / 255;
+    } else {
+        r = parseInt(hex.slice(1, 3), 16) / 255;
+        g = parseInt(hex.slice(3, 5), 16) / 255;
+        b = parseInt(hex.slice(5, 7), 16) / 255;
+    }
+
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s, l = (max + min) / 2;
+
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+};
+
+/**
+ * Converts HSL to HEX
+ */
+export const hslToHex = (h: number, s: number, l: number): string => {
+    h /= 360; s /= 100; l /= 100;
+    let r, g, b;
+    if (s === 0) {
+        r = g = b = l;
+    } else {
+        const hue2rgb = (p: number, q: number, t: number) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1 / 3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1 / 3);
+    }
+    const toHex = (x: number) => {
+        const out = Math.round(x * 255).toString(16);
+        return out.length === 1 ? '0' + out : out;
+    };
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+/**
+ * Generates a Material 3 inspired dynamic palette from a seed color.
+ * Focuses on dark theme roles with saturation normalization.
+ */
+export const generateMediaPalette = (seed: string) => {
+    // 1. Convert to HSL to check vibrancy
+    let [h, s, l] = hexToHsl(seed);
+
+    // 2. Saturation Normalization: If too low (gray/black), boost it to a "Richness Floor"
+    // This prevents the whole UI from falling apart into gray.
+    if (s < 12) {
+        s = 25; // Force a healthy tint
+        // If it's truly neutral, give it a sophisticated blue tint
+        if (s < 5) h = 210;
+    }
+
+    // 3. Normalize Seed for role generation (mid-vibrant baseline)
+    const normalizedSeed = hslToHex(h, s, Math.min(60, Math.max(30, l)));
+    const luma = getLuminance(normalizedSeed);
+
+    // Base Primary: Boosted for maximum pop (Action Button/Accents)
+    const primary = luma < 100 ? adjustBrightness(normalizedSeed, 2.2) : normalizedSeed;
+
+    return {
+        primary,
+        onPrimary: getLuminance(primary) > 160 ? '#000000' : '#FFFFFF',
+
+        // Tonal Surface: Slightly lifted for better visibility
+        surface: adjustBrightness(normalizedSeed, 0.10),
+
+        // Surface Container: slightly lighter for cards/sections
+        surfaceContainer: adjustBrightness(normalizedSeed, 0.20),
+
+        // Primary Container: Mid-tone variant
+        primaryContainer: adjustBrightness(primary, 0.6),
+
+        // Secondary Container: Lightened for "Bubbles" (Pills)
+        secondaryContainer: adjustBrightness(normalizedSeed, 0.45),
+
+        // onSecondaryContainer: Brightened for subtext and icons
+        onSecondaryContainer: adjustBrightness(normalizedSeed, 3.5),
+    };
 };

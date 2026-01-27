@@ -1,4 +1,4 @@
-
+import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import { Bookmark, Check, Circle, LayoutGrid, Star } from 'lucide-react-native';
 import React, { memo } from 'react';
@@ -33,11 +33,12 @@ export const MetaActionRow = memo(({
     palette,
     style
 }: MetaActionRowProps) => {
-    const iconColor = palette.onSecondaryContainer;
+    const { theme } = useTheme();
+    const iconColor = theme.colors.onSurface;
     const itemBg = palette.secondaryContainer;
 
     return (
-        <View style={[styles.iconActionRow, style]}>
+        <View style={[styles.iconActionRow, style]} >
             <Pressable
                 style={styles.iconActionItem}
                 onPress={onWatchlistToggle}
@@ -107,7 +108,7 @@ export const MetaActionRow = memo(({
                     {userRating ? `Rated ${userRating * 2}` : 'Rate'}
                 </Typography>
             </Pressable>
-        </View>
+        </View >
     );
 });
 

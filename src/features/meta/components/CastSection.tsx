@@ -52,9 +52,9 @@ export const CastSection = memo(({ cast, theme, colors, palette, onPersonPress }
                 style={{ paddingHorizontal: 20 }}
             />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.castScroll}>
-                {cast.map((person) => (
+                {cast.map((person, index) => (
                     <CastItem
-                        key={person.id}
+                        key={`${person.id}-${index}`}
                         person={person}
                         theme={theme}
                         palette={palette}

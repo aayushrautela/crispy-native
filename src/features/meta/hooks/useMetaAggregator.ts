@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import ImageColors from 'react-native-image-colors';
 import { TMDBMeta, TMDBService } from '../../../core/services/TMDBService';
 import { StorageService } from '../../../core/storage';
+import { getLuminance } from '../../../core/utils/colors';
 
 export interface MetaPalette {
     primary: string;
@@ -100,40 +101,67 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
                     episodes = await TMDBService.getSeasonEpisodes(enrichedData.tmdbId, activeSeason);
                 }
 
-                // 4. Extract Colors (Blocking for initial render)
-                const backdropUrl = enrichedData.backdrop || enrichedData.poster;
+                // 4. Extract Colors (Smart Logo-First with Backdrop Fallback)
+                const getLogoSource = () => {
+                    const { logo } = enrichedData;
+                    if (logo && !logo.toLowerCase().endsWith('.svg')) return logo;
+                    return null;
+                };
+
+                const logoUrl = getLogoSource();
+                const backdropUrl = enrichedData.backdrop;
                 let palette = defaultPalette;
 
-                if (backdropUrl) {
-                    const colorCacheKey = `palette_${backdropUrl}`;
-                    const cachedColors = StorageService.getGlobal<MetaPalette>(colorCacheKey as any);
+                const extractFromUrl = async (url: string) => {
+                    try {
+                        const result = await ImageColors.getColors(url, {
+                            fallback: '#121212',
+                            cache: true,
+                            key: url,
+                        });
 
-                    if (cachedColors) {
-                        palette = cachedColors;
-                    } else {
-                        try {
-                            const result = await ImageColors.getColors(backdropUrl, {
-                                fallback: '#121212',
-                                cache: true,
-                                key: backdropUrl,
-                            });
+                        if (result.platform === 'android') {
+                            return {
+                                primary: result.darkMuted || result.darkVibrant || '#121212',
+                                secondary: result.average || '#1E1E1E',
+                                vibrant: result.vibrant || result.dominant || '#90CAF9',
+                                dominant: result.dominant || '#121212',
+                                lightVibrant: result.lightVibrant || result.vibrant || '#90CAF9',
+                                darkMuted: result.darkMuted || result.darkVibrant || '#1E1E1E',
+                                lightMuted: result.lightMuted || result.lightVibrant || '#90CAF9',
+                            };
+                        }
+                    } catch (e) {
+                        console.warn('[useMetaAggregator] Extraction logic crash for:', url, e);
+                    }
+                    return null;
+                };
 
-                            if (result.platform === 'android') {
-                                palette = {
-                                    primary: result.darkMuted || result.darkVibrant || '#121212',
-                                    secondary: result.average || '#1E1E1E',
-                                    vibrant: result.vibrant || '#90CAF9',
-                                    dominant: result.dominant || '#121212',
-                                    lightVibrant: result.lightVibrant || result.vibrant || '#90CAF9',
-                                    darkMuted: result.darkMuted || result.darkVibrant || '#1E1E1E',
-                                    lightMuted: result.lightMuted || result.lightVibrant || '#90CAF9',
-                                };
-                                StorageService.setGlobal(colorCacheKey as any, palette);
-                            }
-                        } catch (e) {
-                            console.warn('[useMetaAggregator] Color extraction failed:', e);
+                let bestPalette: MetaPalette | null = null;
+
+                // Priority 1: Logo
+                if (logoUrl) {
+                    const logoPalette = await extractFromUrl(logoUrl);
+                    if (logoPalette) {
+                        const luma = getLuminance(logoPalette.vibrant);
+                        const isNeutral = luma < 25 || luma > 230;
+
+                        if (!isNeutral) {
+                            bestPalette = logoPalette;
                         }
                     }
+                }
+
+                // Priority 2: Backdrop (Fallback if logo is missing or too neutral)
+                if (!bestPalette && backdropUrl) {
+                    bestPalette = await extractFromUrl(backdropUrl);
+                }
+
+                if (bestPalette) {
+                    palette = bestPalette;
+                    // Cache the final picked palette for this specific content
+                    const colorCacheKey = `palette_${id}_${type}`;
+                    StorageService.setGlobal(colorCacheKey as any, palette);
                 }
 
                 if (isMounted.current) {

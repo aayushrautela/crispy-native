@@ -1,3 +1,4 @@
+import { useTheme } from '@/src/core/ThemeContext';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { OmdbData, OmdbService } from '@/src/core/services/OmdbService';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
@@ -8,17 +9,20 @@ import React, { memo, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { MetacriticIcon, RottenTomatoesIcon } from './RatingIcons';
 
-const RatingCard = memo(({ score, label, icon, palette }: { score: string; label: string; icon: React.ReactNode; palette: any }) => (
-    <View style={[styles.ratingCard, { backgroundColor: palette.secondaryContainer }]}>
-        <View style={styles.ratingIconContainer}>
-            {icon}
+const RatingCard = memo(({ score, label, icon, palette }: { score: string; label: string; icon: React.ReactNode; palette: any }) => {
+    const { theme } = useTheme();
+    return (
+        <View style={[styles.ratingCard, { backgroundColor: palette.secondaryContainer }]}>
+            <View style={styles.ratingIconContainer}>
+                {icon}
+            </View>
+            <View style={styles.ratingInfo}>
+                <Typography variant="label" weight="black" style={{ fontSize: 13, color: theme.colors.onSurface }}>{score}</Typography>
+                <Typography variant="label" weight="medium" style={{ opacity: 0.7, fontSize: 10, color: theme.colors.onSurfaceVariant, marginTop: -2 }}>{label}</Typography>
+            </View>
         </View>
-        <View style={styles.ratingInfo}>
-            <Typography variant="label" weight="black" style={{ fontSize: 13, color: palette.onSecondaryContainer }}>{score}</Typography>
-            <Typography variant="label" weight="medium" style={{ opacity: 0.7, fontSize: 10, color: palette.onSecondaryContainer, marginTop: -2 }}>{label}</Typography>
-        </View>
-    </View>
-));
+    );
+});
 
 interface RatingsSectionProps {
     enriched: any;
@@ -27,6 +31,7 @@ interface RatingsSectionProps {
 }
 
 export const RatingsSection = memo(({ enriched, colors, palette }: RatingsSectionProps) => {
+    const { theme } = useTheme();
     const [omdb, setOmdb] = useState<OmdbData | null>(null);
     const [isLoadingOmdb, setIsLoadingOmdb] = useState(false);
     const { isTablet } = useResponsive();
@@ -50,7 +55,7 @@ export const RatingsSection = memo(({ enriched, colors, palette }: RatingsSectio
     const ratings = React.useMemo(() => {
         if (!omdb?.Ratings) return [];
         return omdb.Ratings.map(r => {
-            let icon = <Star size={24} color={palette.onSecondaryContainer} fill={palette.onSecondaryContainer} />;
+            let icon = <Star size={24} color={theme.colors.onSurface} fill={theme.colors.onSurface} />;
             let label = r.Source;
 
             if (r.Source === 'Internet Movie Database') {
@@ -68,7 +73,7 @@ export const RatingsSection = memo(({ enriched, colors, palette }: RatingsSectio
 
             return { score: r.Value, label, icon };
         });
-    }, [omdb, palette.onSecondaryContainer]);
+    }, [omdb, theme.colors.onSurface]);
 
     // Fallback if no OMDB or no ratings
     const fallbackRating = enriched.rating ? {

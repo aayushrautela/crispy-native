@@ -95,9 +95,9 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
 
     const watchButtonIcon = useMemo(() => (
         state === 'rewatch'
-            ? <RotateCcw size={20} color={palette.onSecondaryContainer} />
-            : <Play size={20} color={palette.onSecondaryContainer} fill={palette.onSecondaryContainer} />
-    ), [state, palette.onSecondaryContainer]);
+            ? <RotateCcw size={20} color={palette.primary} />
+            : <Play size={20} color={palette.primary} fill={palette.primary} />
+    ), [state, palette.primary]);
 
     const watchButtonSubtext = useMemo(() => {
         if (state === 'rewatch') {
