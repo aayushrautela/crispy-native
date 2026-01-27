@@ -20,12 +20,21 @@ export const SplitHeroLayout = memo(({ leftNode, rightNode, style, DARK_BASE }: 
             <View style={styles.leftPane}>
                 {leftNode}
 
-                {/* Horizontal Feathered Gradient */}
+                {/* Right Edge Feathered Gradient */}
                 <LinearGradient
-                    colors={['transparent', DARK_BASE]}
-                    start={{ x: 0.7, y: 0 }}
+                    colors={[DARK_BASE + '00', DARK_BASE]}
+                    locations={[0, 1]}
+                    start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.horizontalFade}
+                    pointerEvents="none"
+                />
+
+                {/* Bottom Edge Feathered Gradient */}
+                <LinearGradient
+                    colors={[DARK_BASE + '00', DARK_BASE]}
+                    locations={[0, 1]}
+                    style={styles.verticalFade}
                     pointerEvents="none"
                 />
             </View>
@@ -67,6 +76,13 @@ const styles = StyleSheet.create({
         top: 0,
         right: 0,
         bottom: 0,
-        width: '30%',
+        width: '10%',
+    },
+    verticalFade: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: '10%',
     }
 });

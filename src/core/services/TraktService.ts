@@ -383,10 +383,12 @@ export class TraktService {
     // --- Public API Methods (WebUI Parity) ---
 
     public async getUserProfile() {
+        if (!this.isAuthenticated()) return null;
         return this.apiRequest('/users/me?extended=full');
     }
 
     public async getContinueWatching() {
+        if (!this.isAuthenticated()) return [];
         // Ported from WebUI worker/trakt.ts: getContinueWatching()
         // Single API call with images
         const playback = await this.apiRequest<any[]>('/sync/playback?extended=images');
@@ -414,6 +416,7 @@ export class TraktService {
     }
 
     public async getCollection() {
+        if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
             this.apiRequest<any[]>('/sync/collection/movies?extended=images,full'),
             this.apiRequest<any[]>('/sync/collection/shows?extended=images,full')
@@ -426,11 +429,13 @@ export class TraktService {
     }
 
     public async getWatchedShows() {
+        if (!this.isAuthenticated()) return [];
         const shows = await this.apiRequest<any[]>('/sync/watched/shows?extended=images,full');
         return (shows || []).map(i => ({ ...i, type: 'show' })).map(i => this.normalize(i));
     }
 
     public async getWatchedMovies() {
+        if (!this.isAuthenticated()) return [];
         const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=images,full');
         return (movies || []).map(i => ({ ...i, type: 'movie' })).map(i => this.normalize(i));
     }
@@ -518,6 +523,7 @@ export class TraktService {
     }
 
     public async getWatchlist() {
+        if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
             this.apiRequest<any[]>('/sync/watchlist/movies?extended=images,full'),
             this.apiRequest<any[]>('/sync/watchlist/shows?extended=images,full')
@@ -530,6 +536,7 @@ export class TraktService {
     }
 
     public async getRatings() {
+        if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
             this.apiRequest<any[]>('/sync/ratings/movies?extended=full'),
             this.apiRequest<any[]>('/sync/ratings/shows?extended=full')
@@ -542,10 +549,12 @@ export class TraktService {
     }
 
     public async getStats() {
+        if (!this.isAuthenticated()) return null;
         return this.apiRequest('/users/me/stats');
     }
 
     public async getRecommendations(type: 'movies' | 'shows', limit = 10) {
+        if (!this.isAuthenticated()) return [];
         return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=full,images`);
     }
 
@@ -571,6 +580,7 @@ export class TraktService {
 
     // Unified getComments to satisfy useTraktComments hook expectation
     public async getComments(type: 'movie' | 'show' | 'episode', id: string, options: { page?: number, limit?: number, season?: number, episode?: number } = {}) {
+        if (!this.isAuthenticated()) return [];
         const cleanId = id.replace('imdb:', '');
         const { page = 1, limit = 10 } = options;
 

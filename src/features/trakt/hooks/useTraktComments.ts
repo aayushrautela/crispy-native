@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TraktService } from '../../../core/services/TraktService';
 import { TraktContentComment } from '../../../core/services/trakt-types';
+import { useUserStore } from '../../../core/stores/userStore';
 
 interface UseTraktCommentsProps {
     id: string | undefined;
@@ -17,8 +18,11 @@ export function useTraktComments({ id, type, season, episode, enabled = true }: 
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
 
+    const traktAuth = useUserStore(s => s.traktAuth);
+    const isAuthenticated = !!traktAuth.accessToken;
+
     const loadComments = useCallback(async (pageNum: number = 1, append: boolean = false) => {
-        if (!enabled || !id) return;
+        if (!enabled || !id || !isAuthenticated) return;
 
         setIsLoading(true);
         setError(null);

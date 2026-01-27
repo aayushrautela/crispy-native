@@ -1,13 +1,12 @@
 ### Current Position
-- **Phase**: Phase 24: Addon Persistence Fix
-- **Task**: Implementation
+- **Phase**: Phase 24: Trakt Auth Hardening
+- **Task**: Implementation & Verification
 - **Status**: COMPLETED
 
 ### What was just accomplished
-- **UserStore.ts**: Split destructive `reset()` from safe `reloadFromStorage()`.
-- **_layout.tsx**: Switched session init to use `reloadFromStorage()`.
-- **Bug Fix**: Custom addons will no longer be wiped on app restart.
+- **TraktService.ts**: Added early returns for all public sync methods to handle unauthenticated state gracefully.
+- **useTraktComments.ts**: Added auth check to skip fetching comments when not logged in.
+- **Bug Fix**: Resolved "Not authenticated" error crash when using Trakt features while logged out.
 
 ### Next Steps
-- Verify visual state in tablet landscape mode.
-- Monitor for any further hook order warnings.
+- Continue with planned Phase 24 tasks (Addon Persistence verification).

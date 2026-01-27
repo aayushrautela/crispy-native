@@ -188,29 +188,34 @@ export const HeroSection = memo(({
                             isMuted={isMuted} isPlaying={isPlaying} revealTrailer={revealTrailer} width="100%" height="100%"
                             showBottomFade={false}
                         />
-                        <Pressable
-                            style={[styles.trailerBtn, { position: 'absolute', bottom: 20, left: 20 }, !trailerKey && { opacity: 0.5 }]}
-                            onPress={toggleTrailer}
-                            disabled={!trailerKey}
-                        >
-                            <Play size={14} color="white" fill={showTrailer ? "white" : "transparent"} />
-                            <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>
-                                {showTrailer ? 'Pause' : 'Trailer'}
-                            </Typography>
-                        </Pressable>
+                        <View style={styles.leftPaneOverlay}>
+                            <Pressable
+                                style={[styles.trailerBtn, !trailerKey && { opacity: 0.5 }]}
+                                onPress={toggleTrailer}
+                                disabled={!trailerKey}
+                            >
+                                <Play size={14} color="white" fill={showTrailer ? "white" : "transparent"} />
+                                <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>
+                                    {showTrailer ? 'Pause' : 'Trailer'}
+                                </Typography>
+                            </Pressable>
+                            {enriched.logo && (
+                                <ExpoImage source={{ uri: enriched.logo }} style={styles.leftPaneLogo} contentFit="contain" />
+                            )}
+                        </View>
                     </>
                 }
                 rightNode={
                     <>
-                        <HeroIdentity enriched={enriched} meta={meta} alignment="flex-start" />
-                        <HeroMetadata enriched={enriched} alignment="flex-start" />
+                        {/* Force text-only identity for the right pane */}
+                        <HeroIdentity enriched={{ ...enriched, logo: undefined }} meta={meta} />
+                        <HeroMetadata enriched={enriched} />
                         <HeroDescription
                             enriched={enriched} meta={meta}
                             isExpanded={isDescriptionExpanded}
                             onToggle={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                            alignment="flex-start"
                         />
-                        <View style={{ gap: 24, marginTop: 12 }}>
+                        <View style={{ gap: 24, marginTop: 12, width: '100%', alignItems: 'center' }}>
                             <HeroWatchButton
                                 onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                                 label={watchButtonLabel} subtext={watchButtonSubtext} icon={watchButtonIcon}
@@ -218,7 +223,7 @@ export const HeroSection = memo(({
                             />
                             {/* In Split mode, we move the action row here */}
                             <MetaActionRow
-                                style={{ justifyContent: 'flex-start', gap: 24 }}
+                                style={{ gap: 24 }}
                                 isAuthenticated={!!isAuthenticated}
                                 isListed={!!isListed}
                                 isCollected={!!isCollected}
@@ -308,4 +313,21 @@ const styles = StyleSheet.create({
     watchNowBtn: { width: '100%', height: 68, borderRadius: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
     watchIconPill: { width: 60, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     watchLabelContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginRight: 60 },
+    leftPaneOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: 12,
+        paddingBottom: 48,
+        maxWidth: '100%',
+        backgroundColor: 'rgba(0,0,0,0.15)', // Subtle darkening for logo readability
+    },
+    leftPaneLogo: {
+        width: 480,
+        height: 140,
+    },
 });
