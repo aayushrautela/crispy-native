@@ -5,9 +5,10 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SideSheet } from '@/src/core/ui/SideSheet';
 import { Typography } from '@/src/core/ui/Typography';
+import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
 import { AudioTab } from '@/src/features/player/components/tabs/AudioTab';
-import { EpisodesTab } from '@/src/features/player/components/tabs/EpisodesTab';
+import { InfoTab } from '@/src/features/player/components/tabs/InfoTab';
 import { SettingsTab } from '@/src/features/player/components/tabs/SettingsTab';
 import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab';
@@ -64,6 +65,27 @@ export default function PlayerScreen() {
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
+
+    // Info Tab State (Meta Aggregator)
+    const baseId = useMemo(() => {
+        if (!id) return '';
+        const parts = String(id).split(':');
+        return parts[0];
+    }, [id]);
+
+    const currentSeason = useMemo(() => {
+        if (!id || type === 'movie') return 1;
+        const parts = String(id).split(':');
+        return parts.length > 1 ? parseInt(parts[1]) : 1;
+    }, [id, type]);
+
+    const [activeSeason, setActiveSeason] = useState(currentSeason);
+
+    useEffect(() => {
+        if (currentSeason) setActiveSeason(currentSeason);
+    }, [currentSeason]);
+
+    const { meta, enriched, seasonEpisodes, colors } = useMetaAggregator(baseId, String(type), activeSeason);
 
     // Tracks State
     const [audioTracks, setAudioTracks] = useState<any[]>([]);
@@ -757,9 +779,18 @@ export default function PlayerScreen() {
                         />
                     )}
                     {activeTab === 'info' && (
-                        <EpisodesTab
-                            episodes={[]}
-                            onSelectEpisode={() => setActiveTab('none')}
+                        <InfoTab
+                            meta={Object.keys(enriched).length > 0 ? enriched : (meta || {})}
+                            seasonEpisodes={seasonEpisodes}
+                            activeSeason={activeSeason}
+                            onSeasonChange={setActiveSeason}
+                            currentEpisodeId={String(id).split(':')[2]}
+                            onSelectEpisode={(ep) => {
+                                console.log('[Player] Selected episode:', ep);
+                                // Future: Implement episode switching logic (requires resolving streams)
+                                setActiveTab('none');
+                            }}
+                            colors={colors}
                         />
                     )}
                 </View>
