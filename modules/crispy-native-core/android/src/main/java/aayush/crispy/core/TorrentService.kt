@@ -247,6 +247,9 @@ class TorrentService : Service() {
             // Create latch BEFORE adding torrent so it's ready for the alert
             metadataLatches.putIfAbsent(hash, CountDownLatch(1))
             
+            // Track immediately to allow optimistic URL generation
+            activeTorrents[hash] = true
+            
             val params = AddTorrentParams.parseMagnetUri(magnetUri)
             params.savePath(downloadDir.absolutePath)
             session.swig().async_add_torrent(params.swig())
@@ -368,10 +371,12 @@ class TorrentService : Service() {
     fun getDownloadDir(): File = getExternalFilesDir(null) ?: filesDir
 
     fun getStreamUrl(infoHash: String, fileIdx: Int): String? {
-        val handle = getHandle(infoHash) ?: return null
-        val torrentInfo = handle.torrentFile() ?: return null
-        if (fileIdx >= torrentInfo.numFiles()) return null
-        return "http://localhost:11470/$infoHash/$fileIdx"
+        val hash = infoHash.lowercase()
+        if (!activeTorrents.containsKey(hash)) return null
+        
+        // Optimistic return - we don't wait for handle or metadata here.
+        // The CrispyServer handles waiting/retrying when the player actually connects.
+        return "http://localhost:11470/$hash/$fileIdx"
     }
 
     fun getLargestFileIndex(infoHash: String): Int {
