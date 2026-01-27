@@ -67,6 +67,33 @@ export const ensureContrast = (color: string, background: string, minContrast: n
 };
 
 /**
+ * Generates a Material 3 inspired dynamic palette from a seed color.
+ * Focuses on dark theme roles.
+ */
+export const generateMediaPalette = (seed: string) => {
+    const luma = getLuminance(seed);
+
+    // Base Primary: Ensure it's vibrant enough but not blinding
+    const primary = luma < 80 ? adjustBrightness(seed, 1.8) : seed;
+
+    return {
+        primary,
+        // High contrast text for the primary color
+        onPrimary: getLuminance(primary) > 160 ? '#000000' : '#FFFFFF',
+        // Tonal Surface: Deeply darkened seed, but visible (0.08 factor)
+        surface: luma < 20 ? adjustBrightness(seed, 3.0) : adjustBrightness(seed, 0.08),
+        // Surface Container: slightly lighter for sections
+        surfaceContainer: adjustBrightness(seed, 0.15),
+        // Primary Container: Mid-tone variant
+        primaryContainer: adjustBrightness(primary, 0.6),
+        // Secondary Container: Desaturated and dark for secondary actions
+        secondaryContainer: adjustBrightness(seed, 0.25),
+        // On Secondary Container: Subdued labels
+        onSecondaryContainer: adjustBrightness(seed, 2.0),
+    };
+};
+
+/**
  * Adjusts the brightness of a hex color by a factor.
  */
 export const adjustBrightness = (hex: string, factor: number): string => {

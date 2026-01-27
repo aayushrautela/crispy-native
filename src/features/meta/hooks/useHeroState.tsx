@@ -1,7 +1,7 @@
 
 import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { TrailerService } from '@/src/core/services/TrailerService';
-import { adjustBrightness, ensureContrast, getLuminance, isDarkColor } from '@/src/core/utils/colors';
+import { generateMediaPalette } from '@/src/core/utils/colors';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { Play, RotateCcw } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -81,17 +81,23 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         return state === 'rewatch' ? 'Rewatch' : 'Watch now';
     }, [state, progress, episode, meta?.type]);
 
+
+
+    const palette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
+
+    const watchButtonColor = useMemo(() => palette.primary, [palette]);
+    const watchButtonTextColor = useMemo(() => palette.secondaryContainer, [palette]);
+
+    const pillColor = useMemo(() => {
+        // Match the secondary container (watchlist bubble)
+        return palette.secondaryContainer;
+    }, [palette]);
+
     const watchButtonIcon = useMemo(() => (
         state === 'rewatch'
-            ? <RotateCcw size={20} color="black" />
-            : <Play size={20} color="black" fill="black" />
-    ), [state]);
-
-    const watchButtonColor = useMemo(() => {
-        const baseColor = isDarkColor(colors.lightVibrant) ? colors.lightMuted : colors.lightVibrant;
-        // Ensure production-grade contrast against the specific background (AMOLED or Standard)
-        return ensureContrast(baseColor, background, 60);
-    }, [colors, background]);
+            ? <RotateCcw size={20} color={palette.onSecondaryContainer} />
+            : <Play size={20} color={palette.onSecondaryContainer} fill={palette.onSecondaryContainer} />
+    ), [state, palette.onSecondaryContainer]);
 
     const watchButtonSubtext = useMemo(() => {
         if (state === 'rewatch') {
@@ -112,12 +118,6 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         return `Ends at ${endsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
     }, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
 
-    const pillColor = useMemo(() => {
-        const luma = getLuminance(watchButtonColor);
-        // If button is dark, lighten the pill. If light, darken it.
-        return luma < 128 ? adjustBrightness(watchButtonColor, 1.4) : adjustBrightness(watchButtonColor, 0.85);
-    }, [watchButtonColor]);
-
     return {
         isDescriptionExpanded,
         setIsDescriptionExpanded,
@@ -129,8 +129,10 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         watchButtonLabel,
         watchButtonIcon,
         watchButtonColor,
+        watchButtonTextColor, // New export
         watchButtonSubtext,
         pillColor,
         toggleTrailer,
+        palette
     };
 };

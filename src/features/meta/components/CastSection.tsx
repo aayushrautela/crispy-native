@@ -10,7 +10,7 @@ const CastItem = memo(({ person, theme, onPress, palette }: { person: any; theme
             <View style={styles.castItem}>
                 <ExpoImage
                     source={person.profile ? { uri: person.profile } : require('@/assets/images/icon.png')}
-                    style={[styles.castImage, { borderColor: palette.primary, borderWidth: 1 }]}
+                    style={styles.castImage}
                 />
                 <Typography
                     variant="label"
@@ -37,10 +37,11 @@ interface CastSectionProps {
     cast: any[];
     theme: any;
     colors: any;
+    palette: any;
     onPersonPress: (id: string) => void;
 }
 
-export const CastSection = memo(({ cast, theme, colors, onPersonPress }: CastSectionProps) => {
+export const CastSection = memo(({ cast, theme, colors, palette, onPersonPress }: CastSectionProps) => {
     if (!cast || cast.length === 0) return null;
 
     return (
@@ -56,7 +57,7 @@ export const CastSection = memo(({ cast, theme, colors, onPersonPress }: CastSec
                         key={person.id}
                         person={person}
                         theme={theme}
-                        palette={colors}
+                        palette={palette}
                         onPress={() => onPersonPress(person.id)}
                     />
                 ))}

@@ -1,5 +1,4 @@
 import { useResponsive } from '@/src/core/hooks/useResponsive';
-import { useTheme } from '@/src/core/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
@@ -7,13 +6,16 @@ import { StyleSheet, View, ViewStyle } from 'react-native';
 interface SplitHeroLayoutProps {
     leftNode: React.ReactNode;
     rightNode: React.ReactNode;
+    backgroundColor: string; // Dynamic surface color from palette
     style?: ViewStyle;
 }
 
-export const SplitHeroLayout = memo(({ leftNode, rightNode, style }: SplitHeroLayoutProps) => {
+export const SplitHeroLayout = memo(({ leftNode, rightNode, backgroundColor, style }: SplitHeroLayoutProps) => {
     const { width } = useResponsive();
-    const { theme } = useTheme();
-    const DARK_BASE = theme.colors.background;
+
+    // Ensure we have a hex with 00 alpha for the transparent start
+    // If it's a hex like #123456, we can just append 00
+    const transparentBg = backgroundColor.startsWith('#') ? backgroundColor.substring(0, 7) + '00' : 'transparent';
 
     return (
         <View style={[styles.container, { width }, style]}>
@@ -21,19 +23,19 @@ export const SplitHeroLayout = memo(({ leftNode, rightNode, style }: SplitHeroLa
             <View style={styles.leftPane}>
                 {leftNode}
 
-                {/* Right Edge Feathered Gradient */}
+                {/* Right Edge Hue-Locked Masking */}
                 <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.4)', DARK_BASE]}
-                    locations={[0, 0.2, 1]}
+                    colors={[transparentBg, backgroundColor]}
+                    locations={[0, 1]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.horizontalFade}
                     pointerEvents="none"
                 />
 
-                {/* Bottom Edge Feathered Gradient */}
+                {/* Bottom Edge Hue-Locked Masking */}
                 <LinearGradient
-                    colors={[DARK_BASE + '00', DARK_BASE]}
+                    colors={[transparentBg, backgroundColor]}
                     locations={[0, 1]}
                     style={styles.verticalFade}
                     pointerEvents="none"
@@ -77,13 +79,13 @@ const styles = StyleSheet.create({
         top: 0,
         right: 0,
         bottom: 0,
-        width: '10%',
+        width: '40%',
     },
     verticalFade: {
         position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        height: '10%',
+        height: '25%',
     }
 });

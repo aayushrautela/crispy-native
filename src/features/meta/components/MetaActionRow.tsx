@@ -15,6 +15,7 @@ interface MetaActionRowProps {
     onCollectionToggle: () => void;
     onWatchedToggle: () => void;
     onRatePress: () => void;
+    palette: any;
     style?: ViewStyle;
 }
 
@@ -29,8 +30,12 @@ export const MetaActionRow = memo(({
     onCollectionToggle,
     onWatchedToggle,
     onRatePress,
+    palette,
     style
 }: MetaActionRowProps) => {
+    const iconColor = palette.onSecondaryContainer;
+    const itemBg = palette.secondaryContainer;
+
     return (
         <View style={[styles.iconActionRow, style]}>
             <Pressable
@@ -38,12 +43,14 @@ export const MetaActionRow = memo(({
                 onPress={onWatchlistToggle}
                 disabled={!isAuthenticated}
             >
-                <Bookmark
-                    size={24}
-                    color="white"
-                    fill={isListed ? 'white' : 'transparent'}
-                />
-                <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                <View style={[styles.pill, { backgroundColor: itemBg }]}>
+                    <Bookmark
+                        size={22}
+                        color={iconColor}
+                        fill={isListed ? iconColor : 'transparent'}
+                    />
+                </View>
+                <Typography variant="label" style={[styles.iconActionLabel, { color: iconColor, opacity: 0.8 }]}>
                     Watchlist
                 </Typography>
             </Pressable>
@@ -53,12 +60,14 @@ export const MetaActionRow = memo(({
                 onPress={onCollectionToggle}
                 disabled={!isAuthenticated}
             >
-                <LayoutGrid
-                    size={24}
-                    color="white"
-                    fill={isCollected ? 'white' : 'transparent'}
-                />
-                <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                <View style={[styles.pill, { backgroundColor: itemBg }]}>
+                    <LayoutGrid
+                        size={22}
+                        color={iconColor}
+                        fill={isCollected ? iconColor : 'transparent'}
+                    />
+                </View>
+                <Typography variant="label" style={[styles.iconActionLabel, { color: iconColor, opacity: 0.8 }]}>
                     Collection
                 </Typography>
             </Pressable>
@@ -69,12 +78,14 @@ export const MetaActionRow = memo(({
                     onPress={onWatchedToggle}
                     disabled={!isAuthenticated}
                 >
-                    {isWatched ? (
-                        <Check size={24} color={'white'} />
-                    ) : (
-                        <Circle size={24} color="white" />
-                    )}
-                    <Typography variant="label" style={[styles.iconActionLabel, { color: 'white' }]}>
+                    <View style={[styles.pill, { backgroundColor: itemBg }]}>
+                        {isWatched ? (
+                            <Check size={22} color={iconColor} />
+                        ) : (
+                            <Circle size={22} color={iconColor} />
+                        )}
+                    </View>
+                    <Typography variant="label" style={[styles.iconActionLabel, { color: iconColor, opacity: 0.8 }]}>
                         Watched
                     </Typography>
                 </Pressable>
@@ -85,12 +96,14 @@ export const MetaActionRow = memo(({
                 onPress={onRatePress}
                 disabled={!isAuthenticated}
             >
-                <Star
-                    size={24}
-                    color={userRating ? '#FFD700' : 'white'}
-                    fill={userRating ? '#FFD700' : 'transparent'}
-                />
-                <Typography variant="label" style={[styles.iconActionLabel, userRating && { color: '#FFD700' }]}>
+                <View style={[styles.pill, { backgroundColor: itemBg }]}>
+                    <Star
+                        size={22}
+                        color={userRating ? '#FFD700' : iconColor}
+                        fill={userRating ? '#FFD700' : 'transparent'}
+                    />
+                </View>
+                <Typography variant="label" style={[styles.iconActionLabel, userRating ? { color: '#FFD700' } : { color: iconColor, opacity: 0.8 }]}>
                     {userRating ? `Rated ${userRating * 2}` : 'Rate'}
                 </Typography>
             </Pressable>
@@ -99,7 +112,8 @@ export const MetaActionRow = memo(({
 });
 
 const styles = StyleSheet.create({
-    iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
-    iconActionItem: { alignItems: 'center', gap: 8 },
-    iconActionLabel: { fontSize: 10 },
+    iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 24 },
+    iconActionItem: { alignItems: 'center', gap: 6 },
+    pill: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+    iconActionLabel: { fontSize: 10, fontWeight: '600' },
 });

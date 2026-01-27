@@ -3,6 +3,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
+import { generateMediaPalette } from '@/src/core/utils/colors';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { CastSection } from '@/src/features/meta/components/CastSection';
 import { CommentsSection } from '@/src/features/meta/components/CommentsSection';
@@ -125,6 +126,10 @@ export default function MetaDetailsScreen() {
     // AI Hooks
     const { loadFromCache } = useAiInsights();
 
+    const mediaPalette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
+    const amoled = theme.dark && theme.colors.background === '#000000';
+    const effectiveBackground = amoled ? '#000000' : mediaPalette.surface;
+
     useEffect(() => {
         if (enriched.tmdbId) {
             loadFromCache(enriched.tmdbId.toString());
@@ -209,7 +214,7 @@ export default function MetaDetailsScreen() {
 
     if (error) {
         return (
-            <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+            <View style={[styles.container, { backgroundColor: effectiveBackground, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
                 <Typography variant="h3" style={{ textAlign: 'center', marginBottom: 16 }}>
                     Failed to load content
                 </Typography>
@@ -231,7 +236,7 @@ export default function MetaDetailsScreen() {
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.container, { backgroundColor: effectiveBackground }]}>
             <View style={[styles.topBar, { top: insets.top + 8 }]}>
                 <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
                     <ArrowLeft color="white" size={24} />
@@ -273,7 +278,7 @@ export default function MetaDetailsScreen() {
                     onRatePress={() => setShowRatingModal(true)}
                 />
 
-                <View style={[styles.body, { backgroundColor: theme.colors.background, paddingHorizontal: 20 }]}>
+                <View style={[styles.body, { backgroundColor: effectiveBackground, paddingHorizontal: 20 }]}>
                     {!(isTablet && isLandscape) && (
                         <MetaActionRow
                             isAuthenticated={isAuthenticated}
@@ -286,6 +291,7 @@ export default function MetaDetailsScreen() {
                             onCollectionToggle={handleCollectionToggle}
                             onWatchedToggle={handleWatchedToggle}
                             onRatePress={() => setShowRatingModal(true)}
+                            palette={mediaPalette}
                             style={{ marginTop: 24 }}
                         />
                     )}
@@ -308,7 +314,7 @@ export default function MetaDetailsScreen() {
                     />
 
                     <View style={{ marginHorizontal: -20 }}>
-                        <RatingsSection enriched={enriched} colors={colors} />
+                        <RatingsSection enriched={enriched} colors={colors} palette={mediaPalette} />
                     </View>
 
                     {enriched.director && (
@@ -319,7 +325,7 @@ export default function MetaDetailsScreen() {
                     )}
 
                     <View style={{ marginHorizontal: -20 }}>
-                        <CastSection cast={enriched.cast} theme={theme} colors={colors} onPersonPress={handlePersonPress} />
+                        <CastSection cast={enriched.cast} theme={theme} colors={colors} palette={mediaPalette} onPersonPress={handlePersonPress} />
                     </View>
 
                     <View style={{ marginHorizontal: -20 }}>

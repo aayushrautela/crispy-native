@@ -44,23 +44,27 @@ interface HeroSectionProps {
  */
 const HeroBackdrop = memo(({
     backdropUrl, trailerKey, showTrailer, isMuted, isPlaying, revealTrailer, width, height = BACKDROP_HEIGHT, showBottomFade = true, backgroundColor
-}: any) => (
-    <View style={[styles.staticBackdrop, { width, height }]}>
-        <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
-        {showTrailer && trailerKey && (
-            <View style={StyleSheet.absoluteFill}>
-                <YouTubeTrailer videoId={trailerKey} isMuted={isMuted} isPlaying={isPlaying} isVisible={revealTrailer} />
-            </View>
-        )}
-        {showBottomFade && (
-            <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.4)', backgroundColor]}
-                locations={[0, 0.6, 1]}
-                style={styles.heroGradient}
-            />
-        )}
-    </View>
-));
+}: any) => {
+    const transparentBg = backgroundColor.startsWith('#') ? backgroundColor.substring(0, 7) + '00' : 'transparent';
+
+    return (
+        <View style={[styles.staticBackdrop, { width, height }]}>
+            <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
+            {showTrailer && trailerKey && (
+                <View style={StyleSheet.absoluteFill}>
+                    <YouTubeTrailer videoId={trailerKey} isMuted={isMuted} isPlaying={isPlaying} isVisible={revealTrailer} />
+                </View>
+            )}
+            {showBottomFade && (
+                <LinearGradient
+                    colors={[transparentBg, backgroundColor]}
+                    locations={[0, 1]}
+                    style={styles.heroGradient}
+                />
+            )}
+        </View>
+    );
+});
 
 /**
  * SUB-COMPONENT: HeroMetadata
@@ -87,23 +91,32 @@ const HeroMetadata = memo(({ enriched, alignment = 'center' }: { enriched: Parti
     </View>
 ));
 
+interface HeroWatchButtonProps {
+    onPress: () => void;
+    isLoading: boolean;
+    color: string;
+    textColor: string;
+    label: string;
+    subtext: string | null;
+    icon: React.ReactNode;
+    pillColor: string;
+}
+
 /**
  * SUB-COMPONENT: HeroWatchButton
  */
-const HeroWatchButton = memo(({
-    onPress, isLoading, color, label, subtext, icon, pillColor
-}: any) => (
+const HeroWatchButton = memo(({ onPress, isLoading, color, textColor, label, subtext, icon, pillColor }: HeroWatchButtonProps) => (
     <Pressable
         onPress={onPress}
         style={({ pressed }) => [
-            styles.watchNowBtn,
+            styles.watchBtn,
             { backgroundColor: color, opacity: pressed || isLoading ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
         ]}
         disabled={isLoading}
     >
         {isLoading ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <LoadingIndicator color="black" size={36} />
+                <LoadingIndicator color={textColor} size={36} />
             </View>
         ) : (
             <>
@@ -112,11 +125,11 @@ const HeroWatchButton = memo(({
                 </View>
                 <View style={styles.watchLabelContainer}>
                     <View>
-                        <Typography variant="h4" weight="black" style={{ color: 'black', fontSize: 16, textAlign: 'center' }}>
+                        <Typography variant="h4" weight="black" style={{ color: textColor, fontSize: 16, textAlign: 'center' }}>
                             {label}
                         </Typography>
                         {subtext && (
-                            <Typography variant="label" weight="bold" style={{ color: 'rgba(0,0,0,0.6)', fontSize: 11, textAlign: 'center', marginTop: -2 }}>
+                            <Typography variant="label" weight="bold" style={{ color: textColor, opacity: 0.8, fontSize: 11, textAlign: 'center', marginTop: -2 }}>
                                 {subtext}
                             </Typography>
                         )}
@@ -172,8 +185,8 @@ export const HeroSection = memo(({
     const { theme } = useTheme();
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
-        isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonSubtext,
-        pillColor, toggleTrailer
+        isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,
+        watchButtonSubtext, pillColor, toggleTrailer, palette
     } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background });
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
@@ -182,6 +195,7 @@ export const HeroSection = memo(({
     if (isSplitLayout) {
         return (
             <SplitHeroLayout
+                backgroundColor={palette.surface}
                 leftNode={
                     <>
                         <HeroBackdrop
@@ -207,37 +221,38 @@ export const HeroSection = memo(({
                     </>
                 }
                 rightNode={
-                    <>
+                    <View style={{ gap: 16, alignItems: 'center' }}>
                         {/* Force text-only identity for the right pane */}
-                        <HeroIdentity enriched={{ ...enriched, logo: undefined }} meta={meta} />
-                        <HeroMetadata enriched={enriched} />
+                        <HeroIdentity enriched={{ ...enriched, logo: undefined }} meta={meta} alignment="center" />
+                        <HeroMetadata enriched={enriched} alignment="center" />
                         <HeroDescription
-                            enriched={enriched} meta={meta}
+                            enriched={enriched} meta={meta} alignment="center"
                             isExpanded={isDescriptionExpanded}
                             onToggle={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                         />
-                        <View style={{ gap: 24, marginTop: 12, width: '100%', alignItems: 'center' }}>
+                        <View style={[styles.actionStack, { alignItems: 'center' }]}>
                             <HeroWatchButton
                                 onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
-                                label={watchButtonLabel} subtext={watchButtonSubtext} icon={watchButtonIcon}
-                                pillColor={pillColor}
+                                textColor={watchButtonTextColor} label={watchButtonLabel}
+                                subtext={watchButtonSubtext} icon={watchButtonIcon} pillColor={pillColor}
                             />
                             {/* In Split mode, we move the action row here */}
                             <MetaActionRow
-                                style={{ gap: 24 }}
-                                isAuthenticated={!!isAuthenticated}
-                                isListed={!!isListed}
-                                isCollected={!!isCollected}
-                                isWatched={!!isWatched}
-                                isSeries={!!isSeries}
-                                userRating={userRating ?? null}
-                                onWatchlistToggle={onWatchlistToggle!}
-                                onCollectionToggle={onCollectionToggle!}
-                                onWatchedToggle={onWatchedToggle!}
-                                onRatePress={onRatePress!}
+                                isAuthenticated={isAuthenticated}
+                                isListed={isListed}
+                                isCollected={isCollected}
+                                isWatched={isWatched}
+                                isSeries={isSeries}
+                                userRating={userRating}
+                                onWatchlistToggle={onWatchlistToggle}
+                                onCollectionToggle={onCollectionToggle}
+                                onWatchedToggle={onWatchedToggle}
+                                onRatePress={onRatePress}
+                                palette={palette}
+                                style={{ marginTop: 24 }}
                             />
                         </View>
-                    </>
+                    </View>
                 }
             />
         );
@@ -248,12 +263,12 @@ export const HeroSection = memo(({
             <HeroBackdrop
                 backdropUrl={backdropUrl} trailerKey={trailerKey} showTrailer={showTrailer}
                 isMuted={isMuted} isPlaying={isPlaying} revealTrailer={revealTrailer} width={width}
-                backgroundColor={theme.colors.background}
+                backgroundColor={palette.surface}
             />
 
             <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
                 <LinearGradient
-                    colors={['transparent', theme.colors.background, theme.colors.background]}
+                    colors={[palette.surface + '00', palette.surface, palette.surface]}
                     locations={[0, 0.4, 1]}
                     style={styles.fadeOverlay}
                     pointerEvents="none"
@@ -284,7 +299,8 @@ export const HeroSection = memo(({
                     <View style={styles.actionStack}>
                         <HeroWatchButton
                             onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
-                            label={watchButtonLabel} subtext={watchButtonSubtext} icon={watchButtonIcon}
+                            textColor={watchButtonTextColor} label={watchButtonLabel}
+                            subtext={watchButtonSubtext} icon={watchButtonIcon}
                             pillColor={pillColor}
                         />
                     </View>
@@ -312,7 +328,7 @@ const styles = StyleSheet.create({
     descriptionText: { color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 22, fontSize: 14 },
     descriptionChevron: { marginTop: 8 },
     actionStack: { width: '100%', marginTop: 8 },
-    watchNowBtn: { width: '100%', height: 68, borderRadius: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
+    watchBtn: { width: '100%', height: 68, borderRadius: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
     watchIconPill: { width: 60, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     watchLabelContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginRight: 60 },
     leftPaneOverlay: {
