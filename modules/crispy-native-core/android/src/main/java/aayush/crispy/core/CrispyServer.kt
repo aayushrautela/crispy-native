@@ -141,7 +141,7 @@ class CrispyServer(
         val fileIdx = parts[1].toIntOrNull() ?: 0
         val service = torrentService ?: return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "TorrentService inactive")
         
-        if (service.getTorrentStats(infoHash) == null) service.startInfoHash(infoHash)
+        if (service.getTorrentStats(infoHash) == null) service.startInfoHash(infoHash, null)
         
         val stats = service.getFileStats(infoHash, fileIdx) ?: return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "Loading metadata...").apply { addHeader("Retry-After", "2") }
         

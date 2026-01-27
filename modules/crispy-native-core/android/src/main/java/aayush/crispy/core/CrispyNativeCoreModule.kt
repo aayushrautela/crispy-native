@@ -58,8 +58,8 @@ class CrispyNativeCoreModule : Module() {
       crispyServer?.stop()
     }
 
-    AsyncFunction("startStream") { infoHash: String, fileIdx: Int ->
-      Log.d("CrispyModule", "[JS] startStream: $infoHash, index: $fileIdx")
+    AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->
+      Log.d("CrispyModule", "[JS] startStream: $infoHash, index: $fileIdx, session: $sessionId")
       
       val service = ensureService()
       if (service == null) {
@@ -67,29 +67,21 @@ class CrispyNativeCoreModule : Module() {
           return@AsyncFunction null
       }
       
-      // CRITICAL: Clean up previous torrents to prevent storage bloat
-      service.stopAll()
-      
-      // Start torrent download (creates latch internally)
-      if (!service.startInfoHash(infoHash)) {
+      // Start torrent download (non-blocking) with Session ID
+      if (!service.startInfoHash(infoHash, sessionId)) {
           Log.e("CrispyModule", "Failed to start torrent: $infoHash")
           return@AsyncFunction null
       }
       
-      // Block until metadata is received (up to 60 seconds)
-      if (!service.awaitMetadata(infoHash)) {
-          Log.e("CrispyModule", "Metadata timeout for torrent: $infoHash")
-          return@AsyncFunction null
-      }
-      
+      // Return URL immediately - Native Server handles waiting for metadata if player connects early
       val idx = if (fileIdx >= 0) fileIdx else service.getLargestFileIndex(infoHash)
       val url = service.getStreamUrl(infoHash, idx)
-      Log.d("CrispyModule", "[JS] -> resolved URL: $url")
+      Log.d("CrispyModule", "[JS] -> resolved URL immediately: $url")
       return@AsyncFunction url
     }
 
-    AsyncFunction("destroyStream") {
-      torrentService?.stopAll()
+    AsyncFunction("destroyStream") { sessionId: String ->
+      torrentService?.stopAll(sessionId)
     }
 
     AsyncFunction("stopTorrent") { infoHash: String ->

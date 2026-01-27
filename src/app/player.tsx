@@ -162,6 +162,9 @@ export default function PlayerScreen() {
 
     const { manifests } = useUserStore();
 
+    // Session ID to prevent race conditions during fast navigation
+    const sessionId = useMemo(() => Math.random().toString(36).substring(7), []);
+
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
@@ -183,8 +186,9 @@ export default function PlayerScreen() {
                 const idx = currentFileIdx ? parseInt(currentFileIdx as string) : -1;
 
                 if (hash) {
-                    console.log("Resolving torrent module...", hash, idx);
-                    const localUrl = await CrispyNativeCore.startStream(hash, idx);
+                    console.log(`Resolving torrent module... Hash: ${hash}, Idx: ${idx}, Session: ${sessionId}`);
+                    // Start stream logic is now non-blocking on native side
+                    const localUrl = await CrispyNativeCore.startStream(hash, idx, sessionId);
                     if (isMounted && localUrl) {
                         console.log("Resolved to local URL:", localUrl);
                         setFinalUrl(localUrl);
@@ -221,13 +225,16 @@ export default function PlayerScreen() {
 
         resolve();
 
-        // SIMPLE CLEANUP: Ask native to destroy whatever stream it has
+        // CLEANUP: Only destroy the stream belonging to THIS session
         return () => {
             isMounted = false;
-            console.log("Player unmounting, destroying stream...");
-            CrispyNativeCore.destroyStream();
+            console.log(`Player unmounting, destroying session: ${sessionId}`);
+            // Check if destroyStream exists (it should now, but safe guard)
+            if (CrispyNativeCore.destroyStream) {
+                CrispyNativeCore.destroyStream(sessionId);
+            }
         };
-    }, [url, infoHash, fileIdx, activeStream, id, type]);
+    }, [url, infoHash, fileIdx, activeStream, id, type, sessionId]);
 
     useEffect(() => {
         // Lock to landscape

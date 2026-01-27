@@ -49,13 +49,31 @@ export default {
 
     /**
      * Starts a torrent stream (e.g. infoHash) and resolves it to a localhost URL.
+     * @param sessionId Unique ID for the current player session (prevents race conditions)
      */
-    async startStream(infoHash: string, fileIdx: number = -1): Promise<string | null> {
+    async startStream(infoHash: string, fileIdx: number = -1, sessionId: string = ''): Promise<string | null> {
         try {
-            return await CrispyNativeCore.startStream(infoHash, fileIdx);
+            return await CrispyNativeCore.startStream(infoHash, fileIdx, sessionId);
         } catch (e) {
             console.error('[CrispyNativeCore] startStream failed:', e);
             return null;
+        }
+    },
+
+    /**
+     * Destroys the current stream if the session ID matches.
+     * @param sessionId Session ID to match against
+     */
+    async destroyStream(sessionId: string = ''): Promise<void> {
+        try {
+            // Check if the native method exists (it might not if native module is old during dev)
+            if (CrispyNativeCore.destroyStream) {
+                await CrispyNativeCore.destroyStream(sessionId);
+            } else {
+                console.warn('[CrispyNativeCore] destroyStream native method not found');
+            }
+        } catch (e) {
+            console.error('[CrispyNativeCore] destroyStream failed:', e);
         }
     },
 

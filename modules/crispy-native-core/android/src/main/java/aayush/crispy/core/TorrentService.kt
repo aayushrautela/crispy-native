@@ -51,11 +51,14 @@ class TorrentService : Service() {
     // Track pieces with active deadlines for efficient clearing on seek
     private val priorityWindows = ConcurrentHashMap<String, MutableSet<Int>>()
     
-    // Track pending metadata requests for blocking startStream
+    // Track pending metadata requests for blockers (if needed)
     private val metadataLatches = ConcurrentHashMap<String, CountDownLatch>()
     
     @Volatile
     private var isSessionActive = false
+
+    @Volatile
+    private var activeSessionId: String? = null
     
     inner class TorrentBinder : Binder() {
         fun getService(): TorrentService = this@TorrentService
@@ -222,9 +225,13 @@ class TorrentService : Service() {
         return try { sessionManager?.find(Sha1Hash(infoHash))?.takeIf { it.isValid } } catch (e: Throwable) { null }
     }
 
-    fun startInfoHash(infoHash: String): Boolean {
+    fun startInfoHash(infoHash: String, sessionId: String? = null): Boolean {
         val session = sessionManager ?: return false
         val hash = infoHash.lowercase()
+        
+        if (sessionId != null) {
+            this.activeSessionId = sessionId
+        }
         
         // If already tracked, don't re-add
         if (activeTorrents.containsKey(hash)) {
@@ -324,13 +331,19 @@ class TorrentService : Service() {
 
     /**
      * Stop all active torrents and delete their data.
-     * Used to ensure a clean slate before starting a new stream.
+     * @param onlyForSessionId If provided, only stops if the current active session matches this ID.
      */
-    fun stopAll() {
+    fun stopAll(onlyForSessionId: String? = null) {
+        if (onlyForSessionId != null && activeSessionId != null && onlyForSessionId != activeSessionId) {
+            Log.d(TAG, "stopAll ignored: Session mismatch (Active: $activeSessionId, Request: $onlyForSessionId)")
+            return
+        }
+        
         Log.d(TAG, "Stopping all torrents and cleaning data...")
         val torrents = activeTorrents.keys.toList()
         torrents.forEach { deleteTorrentData(it) }
         activeTorrents.clear()
+        activeSessionId = null
         updateServiceState()
     }
     
