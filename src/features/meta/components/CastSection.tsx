@@ -1,5 +1,5 @@
-import { Typography } from '@/src/core/ui/Typography';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
+import { Typography } from '@/src/core/ui/Typography';
 import { Image as ExpoImage } from 'expo-image';
 import React, { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -48,7 +48,6 @@ export const CastSection = memo(({ cast, theme, colors, onPersonPress }: CastSec
             <SectionHeader
                 title="Cast"
                 hideAction
-                textColor="white"
                 style={{ paddingHorizontal: 20 }}
             />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.castScroll}>

@@ -23,7 +23,7 @@ import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DARK_BASE = '#121212';
+// No hardcoded DARK_BASE
 
 export default function MetaDetailsScreen() {
     const { id, type } = useLocalSearchParams();
@@ -209,20 +209,20 @@ export default function MetaDetailsScreen() {
 
     if (error) {
         return (
-            <View style={[styles.container, { backgroundColor: DARK_BASE, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-                <Typography variant="h3" style={{ color: 'white', textAlign: 'center', marginBottom: 16 }}>
+            <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                <Typography variant="h3" style={{ textAlign: 'center', marginBottom: 16 }}>
                     Failed to load content
                 </Typography>
                 <Pressable
                     onPress={() => router.back()}
                     style={{
-                        backgroundColor: 'white',
+                        backgroundColor: theme.colors.primary,
                         paddingHorizontal: 24,
                         paddingVertical: 12,
                         borderRadius: 24,
                     }}
                 >
-                    <Typography variant="label" weight="bold" style={{ color: 'black' }}>
+                    <Typography variant="label" weight="bold" style={{ color: theme.colors.onPrimary }}>
                         Go Back
                     </Typography>
                 </Pressable>
@@ -231,16 +231,16 @@ export default function MetaDetailsScreen() {
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: DARK_BASE }]}>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View style={[styles.topBar, { top: insets.top + 8 }]}>
-                <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
                     <ArrowLeft color="white" size={24} />
                 </Pressable>
                 <View style={styles.topRightActions}>
-                    <Pressable onPress={() => setIsMuted(!isMuted)} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <Pressable onPress={() => setIsMuted(!isMuted)} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
                         {isMuted ? <VolumeX color="white" size={20} /> : <Volume2 color="white" size={20} />}
                     </Pressable>
-                    <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                    <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
                         <Share2 color="white" size={20} />
                     </Pressable>
                 </View>
@@ -273,7 +273,7 @@ export default function MetaDetailsScreen() {
                     onRatePress={() => setShowRatingModal(true)}
                 />
 
-                <View style={[styles.body, { backgroundColor: DARK_BASE, paddingHorizontal: 20 }]}>
+                <View style={[styles.body, { backgroundColor: theme.colors.background, paddingHorizontal: 20 }]}>
                     {!(isTablet && isLandscape) && (
                         <MetaActionRow
                             isAuthenticated={isAuthenticated}

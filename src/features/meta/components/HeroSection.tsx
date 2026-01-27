@@ -1,6 +1,7 @@
 
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { TMDBMeta } from '@/src/core/services/TMDBService';
+import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { useHeroState } from '@/src/features/meta/hooks/useHeroState';
@@ -16,7 +17,7 @@ import { SplitHeroLayout } from './SplitHeroLayout';
 
 const HERO_HEIGHT = 600;
 const BACKDROP_HEIGHT = 420;
-const DARK_BASE = '#121212';
+// No hardcoded DARK_BASE
 
 interface HeroSectionProps {
     meta: any;
@@ -42,7 +43,7 @@ interface HeroSectionProps {
  * SUB-COMPONENT: HeroBackdrop
  */
 const HeroBackdrop = memo(({
-    backdropUrl, trailerKey, showTrailer, isMuted, isPlaying, revealTrailer, width, height = BACKDROP_HEIGHT, showBottomFade = true
+    backdropUrl, trailerKey, showTrailer, isMuted, isPlaying, revealTrailer, width, height = BACKDROP_HEIGHT, showBottomFade = true, backgroundColor
 }: any) => (
     <View style={[styles.staticBackdrop, { width, height }]}>
         <ExpoImage source={{ uri: backdropUrl }} style={styles.heroImage} contentFit="cover" />
@@ -53,7 +54,7 @@ const HeroBackdrop = memo(({
         )}
         {showBottomFade && (
             <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.4)', DARK_BASE]}
+                colors={['transparent', 'rgba(0,0,0,0.4)', backgroundColor]}
                 locations={[0, 0.6, 1]}
                 style={styles.heroGradient}
             />
@@ -168,11 +169,12 @@ export const HeroSection = memo(({
     onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress
 }: HeroSectionProps) => {
     const { width, isTablet, isLandscape } = useResponsive();
+    const { theme } = useTheme();
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonSubtext,
         pillColor, toggleTrailer
-    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT });
+    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background });
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
     const isSplitLayout = isTablet && isLandscape;
@@ -180,13 +182,12 @@ export const HeroSection = memo(({
     if (isSplitLayout) {
         return (
             <SplitHeroLayout
-                DARK_BASE={DARK_BASE}
                 leftNode={
                     <>
                         <HeroBackdrop
                             backdropUrl={backdropUrl} trailerKey={trailerKey} showTrailer={showTrailer}
                             isMuted={isMuted} isPlaying={isPlaying} revealTrailer={revealTrailer} width="100%" height="100%"
-                            showBottomFade={false}
+                            showBottomFade={false} backgroundColor={theme.colors.background}
                         />
                         <View style={styles.leftPaneOverlay}>
                             <Pressable
@@ -247,11 +248,12 @@ export const HeroSection = memo(({
             <HeroBackdrop
                 backdropUrl={backdropUrl} trailerKey={trailerKey} showTrailer={showTrailer}
                 isMuted={isMuted} isPlaying={isPlaying} revealTrailer={revealTrailer} width={width}
+                backgroundColor={theme.colors.background}
             />
 
             <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
                 <LinearGradient
-                    colors={['transparent', DARK_BASE, DARK_BASE]}
+                    colors={['transparent', theme.colors.background, theme.colors.background]}
                     locations={[0, 0.4, 1]}
                     style={styles.fadeOverlay}
                     pointerEvents="none"

@@ -15,8 +15,8 @@ const RatingCard = memo(({ score, label, icon, palette }: { score: string; label
             {icon}
         </View>
         <View style={styles.ratingInfo}>
-            <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 13 }}>{score}</Typography>
-            <Typography variant="label" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>{label}</Typography>
+            <Typography variant="label" weight="black" style={{ fontSize: 13 }}>{score}</Typography>
+            <Typography variant="label" style={{ opacity: 0.6, fontSize: 11 }}>{label}</Typography>
         </View>
     </View>
 ));
@@ -113,7 +113,6 @@ export const RatingsSection = memo(({ enriched, colors }: RatingsSectionProps) =
             <SectionHeader
                 title="Ratings"
                 hideAction
-                textColor="white"
                 style={{ paddingHorizontal: 20 }}
             />
             {isTablet ? (

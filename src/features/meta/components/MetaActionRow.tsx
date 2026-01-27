@@ -101,5 +101,5 @@ export const MetaActionRow = memo(({
 const styles = StyleSheet.create({
     iconActionRow: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
     iconActionItem: { alignItems: 'center', gap: 8 },
-    iconActionLabel: { color: 'white', opacity: 0.6, fontSize: 10 },
+    iconActionLabel: { fontSize: 10 },
 });

@@ -1,10 +1,10 @@
 
-import { TrailerService } from '@/src/core/services/TrailerService';
 import { TMDBMeta } from '@/src/core/services/TMDBService';
-import { adjustBrightness, isDarkColor } from '@/src/core/utils/colors';
+import { TrailerService } from '@/src/core/services/TrailerService';
+import { adjustBrightness, ensureContrast, getLuminance, isDarkColor } from '@/src/core/utils/colors';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { Play, RotateCcw } from 'lucide-react-native';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Animated, { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 
 interface UseHeroStateProps {
@@ -13,9 +13,10 @@ interface UseHeroStateProps {
     colors: any;
     scrollY: Animated.SharedValue<number>;
     heroHeight: number;
+    background: string;
 }
 
-export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight }: UseHeroStateProps) => {
+export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background }: UseHeroStateProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [showTrailer, setShowTrailer] = useState(false);
@@ -82,48 +83,54 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight }: Us
 
     const watchButtonIcon = useMemo(() => (
         state === 'rewatch'
-            ? <RotateCcw size= { 20} color = "black" /> 
-            : <Play size={ 20 } color = "black" fill = "black" />
+            ? <RotateCcw size={20} color="black" />
+            : <Play size={20} color="black" fill="black" />
     ), [state]);
 
-const watchButtonColor = useMemo(() => (
-    isDarkColor(colors.lightVibrant) ? colors.lightMuted : colors.lightVibrant
-), [colors]);
+    const watchButtonColor = useMemo(() => {
+        const baseColor = isDarkColor(colors.lightVibrant) ? colors.lightMuted : colors.lightVibrant;
+        // Ensure production-grade contrast against the specific background (AMOLED or Standard)
+        return ensureContrast(baseColor, background, 60);
+    }, [colors, background]);
 
-const watchButtonSubtext = useMemo(() => {
-    if (state === 'rewatch') {
-        if (lastWatchedAt) {
-            const date = new Date(lastWatchedAt);
-            return `Last watched on ${date.toLocaleDateString()}`;
+    const watchButtonSubtext = useMemo(() => {
+        if (state === 'rewatch') {
+            if (lastWatchedAt) {
+                const date = new Date(lastWatchedAt);
+                return `Last watched on ${date.toLocaleDateString()}`;
+            }
+            return null;
         }
-        return null;
-    }
 
-    const runtime = enriched.runtimeMinutes;
-    if (!runtime) return null;
+        const runtime = enriched.runtimeMinutes;
+        if (!runtime) return null;
 
-    const percentageWatched = progress || 0;
-    const remainingMinutes = Math.max(0, runtime * (1 - percentageWatched / 100));
-    const endsAt = new Date(Date.now() + remainingMinutes * 60000);
+        const percentageWatched = progress || 0;
+        const remainingMinutes = Math.max(0, runtime * (1 - percentageWatched / 100));
+        const endsAt = new Date(Date.now() + remainingMinutes * 60000);
 
-    return `Ends at ${endsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
-}, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
+        return `Ends at ${endsAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
+    }, [state, progress, enriched.runtimeMinutes, lastWatchedAt]);
 
-const pillColor = useMemo(() => adjustBrightness(watchButtonColor, 0.85), [watchButtonColor]);
+    const pillColor = useMemo(() => {
+        const luma = getLuminance(watchButtonColor);
+        // If button is dark, lighten the pill. If light, darken it.
+        return luma < 128 ? adjustBrightness(watchButtonColor, 1.4) : adjustBrightness(watchButtonColor, 0.85);
+    }, [watchButtonColor]);
 
-return {
-    isDescriptionExpanded,
-    setIsDescriptionExpanded,
-    trailerKey,
-    showTrailer,
-    revealTrailer,
-    isPlaying,
-    isLoading,
-    watchButtonLabel,
-    watchButtonIcon,
-    watchButtonColor,
-    watchButtonSubtext,
-    pillColor,
-    toggleTrailer,
-};
+    return {
+        isDescriptionExpanded,
+        setIsDescriptionExpanded,
+        trailerKey,
+        showTrailer,
+        revealTrailer,
+        isPlaying,
+        isLoading,
+        watchButtonLabel,
+        watchButtonIcon,
+        watchButtonColor,
+        watchButtonSubtext,
+        pillColor,
+        toggleTrailer,
+    };
 };

@@ -1,5 +1,5 @@
-
 import { useResponsive } from '@/src/core/hooks/useResponsive';
+import { useTheme } from '@/src/core/ThemeContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo } from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
@@ -8,11 +8,12 @@ interface SplitHeroLayoutProps {
     leftNode: React.ReactNode;
     rightNode: React.ReactNode;
     style?: ViewStyle;
-    DARK_BASE: string;
 }
 
-export const SplitHeroLayout = memo(({ leftNode, rightNode, style, DARK_BASE }: SplitHeroLayoutProps) => {
+export const SplitHeroLayout = memo(({ leftNode, rightNode, style }: SplitHeroLayoutProps) => {
     const { width } = useResponsive();
+    const { theme } = useTheme();
+    const DARK_BASE = theme.colors.background;
 
     return (
         <View style={[styles.container, { width }, style]}>
@@ -22,8 +23,8 @@ export const SplitHeroLayout = memo(({ leftNode, rightNode, style, DARK_BASE }: 
 
                 {/* Right Edge Feathered Gradient */}
                 <LinearGradient
-                    colors={[DARK_BASE + '00', DARK_BASE]}
-                    locations={[0, 1]}
+                    colors={['transparent', 'rgba(0,0,0,0.4)', DARK_BASE]}
+                    locations={[0, 0.2, 1]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.horizontalFade}

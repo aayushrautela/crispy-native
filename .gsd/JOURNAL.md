@@ -94,6 +94,20 @@ Player is stable, seeking is reliable, and UI interactions (especially stream se
     - **Lifecycle**: Added `performStartupCleanup` to wipe ephemeral data on startup.
 - **Outcome**: Torrent playback is faster to start, more resilient to network restrictions, and highly stable during seeks.
 
+## Session: Production-Grade Color System (2026-01-27)
+
+### Summary
+Overhauled the color and contrast logic for the Details page to ensure accessibility and theme consistency.
+
+### Decisions
+- **Contrast Safety Engine**: Implemented `ensureContrast` in `colors.ts` to programmatically boost/dim colors based on background luminance, solving the "muddy button" issue on dark posters.
+- **Theme Desegregation**: Removed all hardcoded `#121212` values that were breaking **AMOLED Mode**. The page now correctly transitions to pure black.
+- **Luma Floor**: Established a minimum contrast gap of 60pts (perceptual luma) for primary action buttons.
+- **Standard Roles**: Migrated labels and icons to Material 3 roles (`onSurface`, `onSurfaceVariant`) instead of fixed white opacities.
+
+### Outcome
+The Details page is now visually consistent with the global theme, accessible on all media backdrops, and fully supports the "Deep Black" AMOLED experience without visual regressions.
+
 ## 2026-01-26: Responsive Hero Section
 - **Action**: Implemented production-grade responsive height and layout logic for the Home screen hero.
 - **Rationale**: The hero section was too tall on tablets/landscape, pushing content off-screen.
