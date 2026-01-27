@@ -70,6 +70,8 @@ export default function PlayerScreen() {
     const [subtitleTracks, setSubtitleTracks] = useState<any[]>([]);
     const [externalSubtitles, setExternalSubtitles] = useState<any[]>([]);
     const [subtitleDelay, setSubtitleDelay] = useState(0);
+    const [subtitleSize, setSubtitleSize] = useState(24);
+    const [subtitleOffset, setSubtitleOffset] = useState(0);
 
     // Combine embedded and external subtitles for the UI
     const allSubtitleTracks = useMemo(() => {
@@ -461,7 +463,7 @@ export default function PlayerScreen() {
 
             {/* LOADING CURTAIN OVERLAY (zIndex: 10) */}
             {(!finalUrl || loading) && (
-                <View style={styles.centerLoading}>
+                <View style={styles.centerLoading} pointerEvents="none">
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                     <Typography variant="body" className="text-white mt-4">Resolving Stream...</Typography>
                 </View>
@@ -471,8 +473,8 @@ export default function PlayerScreen() {
             <CustomSubtitles
                 visible={selectedExternalSubId !== null}
                 text={currentSubtitleText}
-                fontSize={24}
-                bottomOffset={showControls ? 110 : 40} // Push up when controls are visible
+                fontSize={subtitleSize}
+                bottomOffset={(showControls ? 110 : 40) + subtitleOffset} // Push up needed + user offset
             />
 
             {/* Gesture Layer & Main UI Wrapper */}
@@ -675,6 +677,10 @@ export default function PlayerScreen() {
                             selectedTrackId={selectedExternalSubId || (selectedSubtitleId === -1 ? 'off' : selectedSubtitleId)}
                             delay={subtitleDelay}
                             onUpdateDelay={setSubtitleDelay}
+                            size={subtitleSize}
+                            onUpdateSize={setSubtitleSize}
+                            offset={subtitleOffset}
+                            onUpdateOffset={setSubtitleOffset}
                             onSelectTrack={async (track) => {
                                 console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal, url: track.url } : null);
                                 if (!track) {

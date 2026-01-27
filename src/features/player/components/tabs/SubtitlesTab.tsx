@@ -1,5 +1,5 @@
-import { Typography } from '@/src/core/ui/Typography';
 import { useTheme } from '@/src/core/ThemeContext';
+import { Typography } from '@/src/core/ui/Typography';
 import { Check, Clock, Minus, Plus } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -18,6 +18,10 @@ interface SubtitlesTabProps {
     onSelectTrack: (track: SubtitleTrack | null) => void;
     delay?: number;
     onUpdateDelay?: (delay: number) => void;
+    size?: number;
+    onUpdateSize?: (size: number) => void;
+    offset?: number;
+    onUpdateOffset?: (offset: number) => void;
 }
 
 export function SubtitlesTab({
@@ -25,7 +29,11 @@ export function SubtitlesTab({
     selectedTrackId,
     onSelectTrack,
     delay = 0,
-    onUpdateDelay
+    onUpdateDelay,
+    size = 24,
+    onUpdateSize,
+    offset = 0,
+    onUpdateOffset
 }: SubtitlesTabProps) {
     const { theme } = useTheme();
     const [selectedLang, setSelectedLang] = useState<string | null>(null);
@@ -99,12 +107,12 @@ export function SubtitlesTab({
 
             {/* Delay Controls */}
             {onUpdateDelay && (
-                <View style={[styles.delayControl, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
-                    <View style={styles.delayHeader}>
-                        <View style={styles.delayTitle}>
+                <View style={[styles.controlCard, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                    <View style={styles.controlHeader}>
+                        <View style={styles.controlTitle}>
                             <Clock size={16} color={theme.colors.onSurfaceVariant} />
                             <Typography variant="label-medium" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 8 }}>
-                                SUBTITLE DELAY
+                                DELAY
                             </Typography>
                         </View>
                         <Pressable onPress={() => onUpdateDelay(0)}>
@@ -113,21 +121,90 @@ export function SubtitlesTab({
                             </Typography>
                         </Pressable>
                     </View>
-                    <View style={styles.delayButtons}>
+                    <View style={styles.controlRow}>
                         <Pressable
-                            onPress={() => onUpdateDelay(delay - 0.25)}
-                            style={[styles.delayBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                            onPress={() => onUpdateDelay((delay || 0) - 0.25)}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
                         >
                             <Minus size={20} color={theme.colors.onSurfaceVariant} />
                         </Pressable>
-                        <View style={styles.delayValue}>
+                        <View style={styles.controlValue}>
                             <Typography variant="title-medium" style={{ color: theme.colors.onSurface }}>
-                                {delay.toFixed(2)}s
+                                {(delay || 0).toFixed(2)}s
                             </Typography>
                         </View>
                         <Pressable
-                            onPress={() => onUpdateDelay(delay + 0.25)}
-                            style={[styles.delayBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                            onPress={() => onUpdateDelay((delay || 0) + 0.25)}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                        >
+                            <Plus size={20} color={theme.colors.onSurfaceVariant} />
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+
+            {/* Size Controls */}
+            {onUpdateSize && (
+                <View style={[styles.controlCard, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                    <View style={styles.controlHeader}>
+                        <View style={styles.controlTitle}>
+                            <Typography variant="label-medium" style={{ color: theme.colors.onSurfaceVariant }}>
+                                SIZE
+                            </Typography>
+                        </View>
+                    </View>
+                    <View style={styles.controlRow}>
+                        <Pressable
+                            onPress={() => onUpdateSize(Math.max(12, (size || 24) - 2))}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                        >
+                            <Minus size={20} color={theme.colors.onSurfaceVariant} />
+                        </Pressable>
+                        <View style={styles.controlValue}>
+                            <Typography variant="title-medium" style={{ color: theme.colors.onSurface }}>
+                                {size || 24}px
+                            </Typography>
+                        </View>
+                        <Pressable
+                            onPress={() => onUpdateSize(Math.min(64, (size || 24) + 2))}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                        >
+                            <Plus size={20} color={theme.colors.onSurfaceVariant} />
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+
+            {/* Offset Controls */}
+            {onUpdateOffset && (
+                <View style={[styles.controlCard, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+                    <View style={styles.controlHeader}>
+                        <View style={styles.controlTitle}>
+                            <Typography variant="label-medium" style={{ color: theme.colors.onSurfaceVariant }}>
+                                VERTICAL OFFSET
+                            </Typography>
+                        </View>
+                        <Pressable onPress={() => onUpdateOffset(0)}>
+                            <Typography variant="label-medium" style={{ color: theme.colors.primary }}>
+                                RESET
+                            </Typography>
+                        </Pressable>
+                    </View>
+                    <View style={styles.controlRow}>
+                        <Pressable
+                            onPress={() => onUpdateOffset((offset || 0) - 10)}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
+                        >
+                            <Minus size={20} color={theme.colors.onSurfaceVariant} />
+                        </Pressable>
+                        <View style={styles.controlValue}>
+                            <Typography variant="title-medium" style={{ color: theme.colors.onSurface }}>
+                                {offset || 0}px
+                            </Typography>
+                        </View>
+                        <Pressable
+                            onPress={() => onUpdateOffset((offset || 0) + 10)}
+                            style={[styles.controlBtn, { backgroundColor: theme.colors.surfaceVariant }]}
                         >
                             <Plus size={20} color={theme.colors.onSurfaceVariant} />
                         </Pressable>
@@ -217,35 +294,35 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 20,
     },
-    delayControl: {
+    controlCard: {
         padding: 16,
         borderRadius: 16,
         marginHorizontal: 4,
         marginBottom: 16,
     },
-    delayHeader: {
+    controlHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 12,
     },
-    delayTitle: {
+    controlTitle: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    delayButtons: {
+    controlRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
-    delayBtn: {
+    controlBtn: {
         width: 48,
         height: 48,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    delayValue: {
+    controlValue: {
         flex: 1,
         alignItems: 'center',
     },
