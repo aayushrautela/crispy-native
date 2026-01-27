@@ -394,71 +394,73 @@ export default function PlayerScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: '#000' }]}>
-            {finalUrl ? (
-                <VideoSurface
-                    ref={videoRef}
-                    source={finalUrl}
-                    headers={headers}
-                    paused={paused}
-                    useExoPlayer={useExoPlayer}
-                    decoderMode={settings.decoderMode}
-                    gpuMode={settings.gpuMode}
-                    metadata={mediaMetadata}
-                    selectedAudioTrack={selectedAudioTrackProp}
-                    selectedTextTrack={selectedTextTrackProp}
-                    subtitleDelay={subtitleDelay}
-                    externalSubtitles={externalSubtitles.map(s => ({
-                        url: s.url,
-                        title: s.title,
-                        language: s.language
-                    }))}
-                    onCodecError={handleCodecError}
-                    onTracksChanged={(data) => {
-                        console.log("Tracks changed", data);
-                        setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id}` })) || []);
-                        setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
-                    }}
-                    onProgress={(data) => {
-                        // Values are in SECONDS from react-native-video / MPV
-                        const positionSec = data.position ?? data.currentTime ?? 0;
-                        const durationSec = data.duration ?? 0;
+            {/* VIDEO LAYER - ALWAYS MOUNTED (zIndex: 0) */}
+            <VideoSurface
+                ref={videoRef}
+                source={finalUrl || ''}
+                headers={headers}
+                paused={paused}
+                useExoPlayer={useExoPlayer}
+                decoderMode={settings.decoderMode}
+                gpuMode={settings.gpuMode}
+                metadata={mediaMetadata}
+                selectedAudioTrack={selectedAudioTrackProp}
+                selectedTextTrack={selectedTextTrackProp}
+                subtitleDelay={subtitleDelay}
+                externalSubtitles={externalSubtitles.map(s => ({
+                    url: s.url,
+                    title: s.title,
+                    language: s.language
+                }))}
+                onCodecError={handleCodecError}
+                onTracksChanged={(data) => {
+                    console.log("Tracks changed", data);
+                    setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id}` })) || []);
+                    setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
+                }}
+                onProgress={(data) => {
+                    // Values are in SECONDS from react-native-video / MPV
+                    const positionSec = data.position ?? data.currentTime ?? 0;
+                    const durationSec = data.duration ?? 0;
 
-                        // Don't overwrite progress while user is seeking
-                        if (!isSeeking) {
-                            setProgress({ position: positionSec, duration: durationSec });
-                        }
+                    // Don't overwrite progress while user is seeking
+                    if (!isSeeking) {
+                        setProgress({ position: positionSec, duration: durationSec });
+                    }
 
-                        // JS Overlay Sync Logic
-                        if (selectedExternalSubId !== null && parsedCues.length > 0) {
-                            const adjustedTime = positionSec + (subtitleDelay / 1000); // delay is usually in ms
-                            const cue = parsedCues.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
-                            setCurrentSubtitleText(cue?.text || '');
-                        }
-                    }}
-                    onLoad={(data) => {
-                        setLoading(false);
-                        // Duration is in SECONDS from react-native-video / MPV
-                        const durationSec = data.duration ?? 0;
-                        if (durationSec > 0) {
-                            setStableDuration(durationSec);
-                        }
+                    // JS Overlay Sync Logic
+                    if (selectedExternalSubId !== null && parsedCues.length > 0) {
+                        const adjustedTime = positionSec + (subtitleDelay / 1000); // delay is usually in ms
+                        const cue = parsedCues.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
+                        setCurrentSubtitleText(cue?.text || '');
+                    }
+                }}
+                onLoad={(data) => {
+                    setLoading(false);
+                    // Duration is in SECONDS from react-native-video / MPV
+                    const durationSec = data.duration ?? 0;
+                    if (durationSec > 0) {
+                        setStableDuration(durationSec);
+                    }
 
-                        // Handle Resume - seek expects seconds
-                        if (resumePosition !== null && resumePosition > 0) {
-                            console.log("Resuming at:", resumePosition);
-                            videoRef.current?.seek(resumePosition);
-                            setResumePosition(null); // Consumed
-                        }
-                    }}
-                    onEnd={() => {
-                        // Only exit if we are not loading a new stream
-                        if (!loading) {
-                            router.back();
-                        }
-                    }}
-                    onError={(e) => console.error("Playback error", e.message)}
-                />
-            ) : (
+                    // Handle Resume - seek expects seconds
+                    if (resumePosition !== null && resumePosition > 0) {
+                        console.log("Resuming at:", resumePosition);
+                        videoRef.current?.seek(resumePosition);
+                        setResumePosition(null); // Consumed
+                    }
+                }}
+                onEnd={() => {
+                    // Only exit if we are not loading a new stream
+                    if (!loading) {
+                        router.back();
+                    }
+                }}
+                onError={(e) => console.error("Playback error", e.message)}
+            />
+
+            {/* LOADING CURTAIN OVERLAY (zIndex: 10) */}
+            {(!finalUrl || loading) && (
                 <View style={styles.centerLoading}>
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                     <Typography variant="body" className="text-white mt-4">Resolving Stream...</Typography>
