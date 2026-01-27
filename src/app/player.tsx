@@ -184,7 +184,6 @@ export default function PlayerScreen() {
 
                 if (hash) {
                     console.log("Resolving torrent module...", hash, idx);
-                    console.log("Resolving torrent module...", hash, idx);
                     const localUrl = await CrispyNativeCore.startStream(hash, idx);
                     if (isMounted && localUrl) {
                         console.log("Resolved to local URL:", localUrl);
@@ -201,9 +200,7 @@ export default function PlayerScreen() {
             if (isMounted && id && type) {
                 try {
                     const addonUrls = Object.keys(manifests);
-                    // console.log(`[Player] Fetching external subs for ${type}/${id}. Addons: ${addonUrls.length}`);
                     const subs = await AddonService.fetchAllSubtitles(addonUrls, type as string, id as string);
-                    // console.log(`[Player] fetchAllSubtitles returned ${subs.length} results`);
                     if (isMounted) {
                         setExternalSubtitles(subs.map((s, i) => ({
                             id: `external-${i}`,
@@ -211,7 +208,7 @@ export default function PlayerScreen() {
                             language: s.lang,
                             url: s.url,
                             isExternal: true,
-                            addonName: s.addonName // Pass addonName for UI
+                            addonName: s.addonName
                         })));
                     }
                 } catch (e) {
@@ -223,8 +220,14 @@ export default function PlayerScreen() {
         };
 
         resolve();
-        return () => { isMounted = false; };
-    }, [url, infoHash, fileIdx, activeStream, id, type]); // Re-run when activeStream or content changes
+
+        // SIMPLE CLEANUP: Ask native to destroy whatever stream it has
+        return () => {
+            isMounted = false;
+            console.log("Player unmounting, destroying stream...");
+            CrispyNativeCore.destroyStream();
+        };
+    }, [url, infoHash, fileIdx, activeStream, id, type]);
 
     useEffect(() => {
         // Lock to landscape

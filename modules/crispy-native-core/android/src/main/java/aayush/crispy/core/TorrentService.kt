@@ -11,6 +11,8 @@ import com.frostwire.jlibtorrent.*
 import com.frostwire.jlibtorrent.alerts.*
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Foreground service managing torrent downloads using jlibtorrent.
@@ -49,6 +51,9 @@ class TorrentService : Service() {
     // Track pieces with active deadlines for efficient clearing on seek
     private val priorityWindows = ConcurrentHashMap<String, MutableSet<Int>>()
     
+    // Track pending metadata requests for blocking startStream
+    private val metadataLatches = ConcurrentHashMap<String, CountDownLatch>()
+    
     @Volatile
     private var isSessionActive = false
     
@@ -73,7 +78,8 @@ class TorrentService : Service() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
-        Thread { stopSession() }.start()
+        // CRITICAL: Nuke everything on destroy
+        Thread { stopAll(); stopSession() }.start()
     }
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -155,7 +161,10 @@ class TorrentService : Service() {
                         }
                         AlertType.METADATA_RECEIVED -> {
                             val handle = (alert as MetadataReceivedAlert).handle()
-                            Log.d(TAG, "[ALERT] METADATA_RECEIVED: ${handle.infoHash().toHex()} (${handle.torrentFile()?.name()})")
+                            val hash = handle.infoHash().toHex()
+                            Log.d(TAG, "[ALERT] METADATA_RECEIVED: $hash (${handle.torrentFile()?.name()})")
+                            // Signal any waiting startStream calls
+                            metadataLatches[hash]?.countDown()
                         }
                         AlertType.METADATA_FAILED -> {
                             val handle = (alert as MetadataFailedAlert).handle()
@@ -214,10 +223,21 @@ class TorrentService : Service() {
 
     fun startInfoHash(infoHash: String): Boolean {
         val session = sessionManager ?: return false
+        val hash = infoHash.lowercase()
+        
+        // If already tracked, don't re-add
+        if (activeTorrents.containsKey(hash)) {
+            Log.d(TAG, "Torrent already active: $hash")
+            return true
+        }
+        
         try {
             val downloadDir = getDownloadDir()
             val trackerParams = PUBLIC_TRACKERS.joinToString("") { "&tr=${java.net.URLEncoder.encode(it, "UTF-8")}" }
-            val magnetUri = "magnet:?xt=urn:btih:$infoHash$trackerParams"
+            val magnetUri = "magnet:?xt=urn:btih:$hash$trackerParams"
+            
+            // Create latch BEFORE adding torrent so it's ready for the alert
+            metadataLatches.putIfAbsent(hash, CountDownLatch(1))
             
             val params = AddTorrentParams.parseMagnetUri(magnetUri)
             params.savePath(downloadDir.absolutePath)
@@ -225,7 +245,48 @@ class TorrentService : Service() {
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting magnet", e)
+            metadataLatches.remove(hash)
             return false
+        }
+    }
+    
+    /**
+     * Blocks until metadata is received for the given torrent.
+     * @param infoHash The torrent info hash
+     * @param timeoutMs Maximum time to wait in milliseconds (default 60s)
+     * @return true if metadata was received, false if timed out or error
+     */
+    fun awaitMetadata(infoHash: String, timeoutMs: Long = 60_000L): Boolean {
+        val hash = infoHash.lowercase()
+        
+        // Check if metadata already available
+        val handle = getHandle(hash)
+        if (handle != null && handle.status().hasMetadata()) {
+            Log.d(TAG, "Metadata already available for $hash")
+            metadataLatches.remove(hash)
+            return true
+        }
+        
+        val latch = metadataLatches[hash]
+        if (latch == null) {
+            Log.w(TAG, "No latch for $hash - torrent may not have been started")
+            return false
+        }
+        
+        return try {
+            Log.d(TAG, "Awaiting metadata for $hash (timeout: ${timeoutMs}ms)")
+            val received = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            if (received) {
+                Log.d(TAG, "Metadata received for $hash")
+            } else {
+                Log.w(TAG, "Metadata timeout for $hash after ${timeoutMs}ms")
+            }
+            metadataLatches.remove(hash)
+            received
+        } catch (e: InterruptedException) {
+            Log.e(TAG, "Interrupted while awaiting metadata for $hash", e)
+            metadataLatches.remove(hash)
+            false
         }
     }
 
@@ -235,6 +296,9 @@ class TorrentService : Service() {
         
         // Clear priority window for this torrent
         priorityWindows.keys.filter { it.startsWith("$hash:") }.forEach { priorityWindows.remove(it) }
+        
+        // Clean up any pending metadata latch
+        metadataLatches.remove(hash)?.countDown()
         
         updateServiceState()
         getHandle(hash)?.let { sessionManager?.remove(it) }
@@ -255,6 +319,18 @@ class TorrentService : Service() {
                 }
             } catch (e: Exception) {}
         }.start()
+    }
+
+    /**
+     * Stop all active torrents and delete their data.
+     * Used to ensure a clean slate before starting a new stream.
+     */
+    fun stopAll() {
+        Log.d(TAG, "Stopping all torrents and cleaning data...")
+        val torrents = activeTorrents.keys.toList()
+        torrents.forEach { deleteTorrentData(it) }
+        activeTorrents.clear()
+        updateServiceState()
     }
     
     /**

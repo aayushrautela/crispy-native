@@ -45,11 +45,8 @@ class CrispyNativeCoreModule : Module() {
       // 1. Start Local Server
       crispyServer = CrispyServer(11470, downloadDir)
       crispyServer?.safeStart()
-
-      // 2. Bind to Torrent Service
-      val intent = Intent(context, TorrentService::class.java)
-      context.startService(intent) // Ensure it's started as foreground
-      context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+      
+      // TorrentService will be started lazily when needed
     }
 
     OnDestroy {
@@ -64,19 +61,35 @@ class CrispyNativeCoreModule : Module() {
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int ->
       Log.d("CrispyModule", "[JS] startStream: $infoHash, index: $fileIdx")
       
-      val service = if (waitForService()) torrentService else null
+      val service = ensureService()
       if (service == null) {
           Log.e("CrispyModule", "Failed to start stream: Service not bound (timeout)")
           return@AsyncFunction null
       }
       
-      // Auto-start torrent if not active
-      service.startInfoHash(infoHash)
+      // CRITICAL: Clean up previous torrents to prevent storage bloat
+      service.stopAll()
+      
+      // Start torrent download (creates latch internally)
+      if (!service.startInfoHash(infoHash)) {
+          Log.e("CrispyModule", "Failed to start torrent: $infoHash")
+          return@AsyncFunction null
+      }
+      
+      // Block until metadata is received (up to 60 seconds)
+      if (!service.awaitMetadata(infoHash)) {
+          Log.e("CrispyModule", "Metadata timeout for torrent: $infoHash")
+          return@AsyncFunction null
+      }
       
       val idx = if (fileIdx >= 0) fileIdx else service.getLargestFileIndex(infoHash)
       val url = service.getStreamUrl(infoHash, idx)
       Log.d("CrispyModule", "[JS] -> resolved URL: $url")
       return@AsyncFunction url
+    }
+
+    AsyncFunction("destroyStream") {
+      torrentService?.stopAll()
     }
 
     AsyncFunction("stopTorrent") { infoHash: String ->
@@ -210,6 +223,27 @@ class CrispyNativeCoreModule : Module() {
     }
   }
 
+
+  private fun ensureService(): TorrentService? {
+      if (torrentService != null) return torrentService
+      
+      // Start and bind if not already bound
+      if (!isBound) {
+          val context = appContext.reactContext ?: return null
+          Log.d("CrispyModule", "Starting TorrentService lazily...")
+          val intent = Intent(context, TorrentService::class.java)
+          context.startService(intent)
+          context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+      }
+      
+      return if (waitForService()) {
+          // Pass service to server once connected
+          if (torrentService != null) {
+              crispyServer?.setTorrentService(torrentService!!)
+          }
+          torrentService
+      } else null
+  }
 
   private fun waitForService(): Boolean {
       if (torrentService != null) return true
