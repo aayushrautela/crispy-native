@@ -53,7 +53,7 @@ export default function LoginScreen() {
     };
 
     const handleGuest = () => {
-        StorageService.setGlobal('crispy-guest-mode', 'true');
+        StorageService.setGlobal('crispy-guest-mode', true);
         router.replace('/(tabs)');
     };
 

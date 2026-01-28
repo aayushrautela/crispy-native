@@ -84,7 +84,8 @@ function RootLayoutNav() {
     if (loading || !loaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const isGuestMode = StorageService.getGlobal<string>('crispy-guest-mode') === 'true';
+    const guestFlag = StorageService.getGlobal<boolean | string>('crispy-guest-mode');
+    const isGuestMode = guestFlag === true || guestFlag === 'true';
     const isAuthenticated = !!user || isGuestMode;
 
     if (!isAuthenticated && !inAuthGroup) {
@@ -92,7 +93,7 @@ function RootLayoutNav() {
     } else if (!!user && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [user, loading, segments, router]);
+  }, [user, loading, loaded, segments, router]);
 
   // Listen for Account Switches
   useEffect(() => {
