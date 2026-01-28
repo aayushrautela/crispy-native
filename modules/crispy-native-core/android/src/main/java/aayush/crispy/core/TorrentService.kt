@@ -376,7 +376,9 @@ class TorrentService : Service() {
         
         // Optimistic return - we don't wait for handle or metadata here.
         // The CrispyServer handles waiting/retrying when the player actually connects.
-        return "http://localhost:11470/$hash/$fileIdx"
+        // Use explicit IPv4 loopback. Some Android networking stacks resolve `localhost` to IPv6 (::1)
+        // while our NanoHTTPD server binds to 127.0.0.1.
+        return "http://127.0.0.1:11470/$hash/$fileIdx"
     }
 
     fun getLargestFileIndex(infoHash: String): Int {

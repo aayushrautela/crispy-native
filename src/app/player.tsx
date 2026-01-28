@@ -41,6 +41,45 @@ import Animated, {
 
 const SafeOrientation = ScreenOrientation || {};
 
+const LOCAL_STREAM_BASE = 'http://127.0.0.1:11470';
+
+const normalizeLocalStreamUrl = (url: string) => {
+    if (!url) return url;
+    return url
+        .replace('http://localhost:11470', LOCAL_STREAM_BASE)
+        .replace('http://127.0.0.1:11470', LOCAL_STREAM_BASE);
+};
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const waitForLocalStreamReady = async (url: string, signal: AbortSignal, timeoutMs = 45_000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        if (signal.aborted) throw new Error('aborted');
+        try {
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: { Range: 'bytes=0-1' },
+                signal,
+            });
+
+            if (res.status === 200 || res.status === 206) return;
+            if (res.status === 503) {
+                await sleep(750);
+                continue;
+            }
+
+            const body = await res.text().catch(() => '');
+            throw new Error(`Unexpected status ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
+        } catch (e) {
+            // Network errors can happen while the server/service spins up; retry briefly.
+            await sleep(750);
+        }
+    }
+
+    throw new Error(`Timed out waiting for local stream (${timeoutMs}ms)`);
+};
+
 type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
 
 export default function PlayerScreen() {
@@ -225,6 +264,7 @@ export default function PlayerScreen() {
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
+        const controller = new AbortController();
 
         // Use activeStream if set, otherwise fall back to params
         const currentUrl = activeStream?.url || url as string;
@@ -246,9 +286,17 @@ export default function PlayerScreen() {
                     console.log(`Resolving torrent module... Hash: ${hash}, Idx: ${idx}, Session: ${sessionId}`);
                     // Start stream logic is now non-blocking on native side
                     const localUrl = await CrispyNativeCore.startStream(hash, idx, sessionId);
-                    if (isMounted && localUrl) {
-                        console.log("Resolved to local URL:", localUrl);
-                        setFinalUrl(localUrl);
+                    const normalizedUrl = localUrl ? normalizeLocalStreamUrl(localUrl) : null;
+                    if (isMounted && normalizedUrl) {
+                        console.log("Resolved to local URL:", normalizedUrl);
+                        try {
+                            await waitForLocalStreamReady(normalizedUrl, controller.signal);
+                        } catch (e) {
+                            if (!controller.signal.aborted) {
+                                console.warn('[Player] Local stream not ready yet:', String(e));
+                            }
+                        }
+                        if (isMounted) setFinalUrl(normalizedUrl);
                     }
                 }
             }
@@ -285,6 +333,7 @@ export default function PlayerScreen() {
         // CLEANUP: Only destroy the stream belonging to THIS session
         return () => {
             isMounted = false;
+            controller.abort();
             console.log(`Player unmounting, destroying session: ${sessionId}`);
             // Check if destroyStream exists (it should now, but safe guard)
             if (CrispyNativeCore.destroyStream) {
