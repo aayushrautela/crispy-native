@@ -4,6 +4,8 @@ import { Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-n
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { LoadingIndicator } from './LoadingIndicator';
 
+type IconComponent = React.ComponentType<{ size?: number; color?: string }>;
+
 interface ExpressiveButtonProps {
     onPress: () => void;
     title: string;
@@ -11,7 +13,7 @@ interface ExpressiveButtonProps {
     size?: 'sm' | 'md' | 'lg';
     style?: ViewStyle;
     textStyle?: TextStyle;
-    icon?: React.ReactNode;
+    icon?: React.ReactNode | IconComponent;
     isLoading?: boolean;
 }
 
@@ -126,11 +128,11 @@ export const ExpressiveButton = ({
                 ) : (
                     <>
                         {icon && (
-                            <View style={[styles.iconContainer, !title && { marginRight: 0 }]}>
+                            <View style={[styles.iconContainer, !title && { marginRight: 0 }]}> 
                                 {React.isValidElement(icon) ? (
                                     icon
                                 ) : (
-                                    React.createElement(icon as any, {
+                                    React.createElement(icon as IconComponent, {
                                         size: size === 'sm' ? 16 : size === 'md' ? 20 : 24,
                                         color: colors.text
                                     })

@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../core/AuthContext';
 import { useTheme } from '../../core/ThemeContext';
-import { supabase } from '../../core/services/supabase';
 import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
 import { SettingsGroup } from '../../core/ui/SettingsGroup';
 import { SettingsItem } from '../../core/ui/SettingsItem';
@@ -32,8 +31,7 @@ export default function AccountScreen() {
                     onPress: async () => {
                         setIsLoading(true);
                         try {
-                            const { error } = await supabase.auth.signOut();
-                            if (error) throw error;
+                            await auth.signOut();
                         } catch (e: any) {
                             Alert.alert('Error', e.message);
                         } finally {

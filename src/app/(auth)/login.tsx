@@ -23,6 +23,7 @@ export default function LoginScreen() {
     const handleAuth = async () => {
         setLoading(true);
         try {
+            StorageService.removeGlobal('crispy-guest-mode');
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
                     email,
@@ -83,7 +84,7 @@ export default function LoginScreen() {
                                         onChangeText={setName}
                                         placeholder="Your Name"
                                         placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
-                                        style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
+                                        style={[styles.input, { backgroundColor: theme.colors.elevation.level2, color: theme.colors.onSurface }]}
                                     />
                                 </View>
                             </>
@@ -102,7 +103,7 @@ export default function LoginScreen() {
                                 placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
                                 autoCapitalize="none"
                                 keyboardType="email-address"
-                                style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
+                                style={[styles.input, { backgroundColor: theme.colors.elevation.level2, color: theme.colors.onSurface }]}
                             />
                         </View>
 
@@ -118,7 +119,7 @@ export default function LoginScreen() {
                                 placeholder="••••••••"
                                 placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
                                 secureTextEntry
-                                style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
+                                style={[styles.input, { backgroundColor: theme.colors.elevation.level2, color: theme.colors.onSurface }]}
                             />
                         </View>
                     </SettingsGroup>

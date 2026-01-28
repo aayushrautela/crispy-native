@@ -2,6 +2,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabase } from './services/supabase';
 import { SessionManager } from './SessionManager';
+import { StorageService } from './storage';
 
 interface AuthContextType {
     session: Session | null;
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const signOut = useCallback(async () => {
+        StorageService.removeGlobal('crispy-guest-mode');
         if (user) {
             await SessionManager.removeAccount(user.id);
         } else {

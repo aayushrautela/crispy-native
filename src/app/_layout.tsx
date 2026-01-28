@@ -1,15 +1,16 @@
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { ThemeProvider as NavigationThemeProvider } from '@react-navigation/native';
+import { ThemeProvider as NavigationThemeProvider, type Theme as NavigationTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { AuthProvider, useAuth } from '../core/AuthContext';
 import { DiscoveryProvider } from '../core/DiscoveryContext';
+import { StorageService } from '../core/storage';
 import { SyncService } from '../core/services/SyncService';
 import { TraktService } from '../core/services/TraktService';
 import { SessionManager } from '../core/SessionManager';
@@ -41,6 +42,26 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
+  const navigationTheme = useMemo<NavigationTheme>(() => {
+    return {
+      dark: isDark,
+      colors: {
+        primary: theme.colors.primary,
+        background: theme.colors.background,
+        card: theme.colors.surface,
+        text: theme.colors.onSurface,
+        border: theme.colors.outlineVariant,
+        notification: theme.colors.tertiary,
+      },
+      fonts: {
+        regular: { fontFamily: 'GoogleSans-Regular', fontWeight: 'normal' },
+        medium: { fontFamily: 'GoogleSans-Medium', fontWeight: '500' },
+        bold: { fontFamily: 'GoogleSans-Bold', fontWeight: 'bold' },
+        heavy: { fontFamily: 'GoogleSans-Bold', fontWeight: '800' },
+      },
+    };
+  }, [theme, isDark]);
+
   const [loaded, error] = useFonts({
     'GoogleSans-Regular': require('../../assets/fonts/GoogleSans-Regular.ttf'),
     'GoogleSans-Medium': require('../../assets/fonts/GoogleSans-Medium.ttf'),
@@ -63,10 +84,12 @@ function RootLayoutNav() {
     if (loading || !loaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const isGuestMode = StorageService.getGlobal<string>('crispy-guest-mode') === 'true';
+    const isAuthenticated = !!user || isGuestMode;
 
-    if (!user && !inAuthGroup) {
-      // router.replace('/(auth)/login'); 
-    } else if (user && inAuthGroup) {
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (!!user && inAuthGroup) {
       router.replace('/(tabs)');
     }
   }, [user, loading, segments, router]);
@@ -83,7 +106,7 @@ function RootLayoutNav() {
   }, []);
 
   return (
-    <NavigationThemeProvider value={theme}>
+    <NavigationThemeProvider value={navigationTheme}>
       <BottomSheetModalProvider>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
