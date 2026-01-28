@@ -3,8 +3,8 @@ import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
 import { HeroCarousel } from '@/src/features/home/components/HeroCarousel';
 import { TraktRecommendationsRow } from '@/src/features/home/components/TraktRecommendationsRow';
-import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { memo, useEffect, useState } from 'react';
+import { InteractionManager, StyleSheet, View } from 'react-native';
 
 interface HomeHeaderProps {
     carouselItems: MetaPreview[];
@@ -19,11 +19,23 @@ const HomeHeaderComponent = ({
     showTraktRecommendations,
     isEmpty
 }: HomeHeaderProps) => {
+    const [deferHeavyRows, setDeferHeavyRows] = useState(true);
+
+    useEffect(() => {
+        const task = InteractionManager.runAfterInteractions(() => {
+            setDeferHeavyRows(false);
+        });
+
+        return () => {
+            if ('cancel' in task) task.cancel();
+        };
+    }, []);
+
     return (
         <View style={styles.container}>
             <HeroCarousel items={carouselItems} />
-            {showContinueWatching && <ContinueWatchingRow />}
-            {showTraktRecommendations && <TraktRecommendationsRow />}
+            {!deferHeavyRows && showContinueWatching && <ContinueWatchingRow />}
+            {!deferHeavyRows && showTraktRecommendations && <TraktRecommendationsRow />}
             {isEmpty && (
                 <View style={styles.emptyPrompt}>
                     <CatalogRow

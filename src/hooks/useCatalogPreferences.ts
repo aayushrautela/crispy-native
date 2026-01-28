@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { CatalogPreferences, useUserStore } from '../core/stores/userStore';
 
 export type { CatalogPreferences };
@@ -13,6 +13,15 @@ export function getCatalogKey(catalog: { addonUrl: string; type: string; id: str
 
 export function useCatalogPreferences() {
     const { catalogPrefs, updateCatalogPrefs } = useUserStore();
+
+    const disabledSet = useMemo(() => new Set(catalogPrefs.disabled), [catalogPrefs.disabled]);
+    const heroSet = useMemo(() => new Set(catalogPrefs.hero), [catalogPrefs.hero]);
+    const preferences = useMemo(() => ({
+        disabled: disabledSet,
+        hero: heroSet,
+        traktTopPicks: catalogPrefs.traktTopPicks,
+        continueWatching: catalogPrefs.continueWatching
+    }), [disabledSet, heroSet, catalogPrefs.traktTopPicks, catalogPrefs.continueWatching]);
 
     const savePrefs = useCallback((newPrefs: Partial<CatalogPreferences>) => {
         updateCatalogPrefs(newPrefs);
@@ -52,12 +61,7 @@ export function useCatalogPreferences() {
     }, []);
 
     return {
-        preferences: {
-            disabled: new Set(catalogPrefs.disabled),
-            hero: new Set(catalogPrefs.hero),
-            traktTopPicks: catalogPrefs.traktTopPicks,
-            continueWatching: catalogPrefs.continueWatching
-        },
+        preferences,
         toggleCatalog,
         toggleTraktTopPicks,
         toggleContinueWatching,

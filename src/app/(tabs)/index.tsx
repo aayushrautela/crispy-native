@@ -7,8 +7,8 @@ import { HomeHeader } from '@/src/features/home/components/HomeHeader';
 import { getCatalogKey, useCatalogPreferences } from '@/src/hooks/useCatalogPreferences';
 import { useRouter } from 'expo-router';
 import { CircleUser } from 'lucide-react-native';
-import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { StyleSheet, View, ViewToken } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedScrollHandler,
@@ -23,6 +23,26 @@ export default function HomeScreen() {
   const { manifests } = useUserStore();
   const { preferences, sortCatalogsByPreferences } = useCatalogPreferences();
   const router = useRouter();
+
+  const [visibleCatalogKeys, setVisibleCatalogKeys] = useState<Set<string>>(new Set());
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 40, minimumViewTime: 150 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    setVisibleCatalogKeys((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+
+      viewableItems.forEach(({ item }) => {
+        if (!item) return;
+        const key = getCatalogKey(item);
+        if (!next.has(key)) {
+          next.add(key);
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }).current;
 
   const scrollY = useSharedValue(0);
   const headerTranslateY = useSharedValue(0);
@@ -137,35 +157,43 @@ export default function HomeScreen() {
         </View>
       </Animated.View>
 
-      <Animated.FlatList
-        data={homeCatalogs}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        keyExtractor={(item) => getCatalogKey(item)}
-        ListHeaderComponent={
-          <HomeHeader
-            carouselItems={carouselItems}
-            showContinueWatching={preferences.continueWatching}
-            showTraktRecommendations={preferences.traktTopPicks}
-            isEmpty={homeCatalogs.length === 0}
-          />
-        }
-        renderItem={({ item: catalog, index }) => (
-          <CatalogRow
-            key={`${catalog.id}-${catalog.type}-${index}`}
-            title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
-            catalogType={catalog.type}
-            catalogId={catalog.id}
-            addonUrl={(catalog as any).addonUrl}
-          />
-        )}
-        ListFooterComponent={() => <View style={{ height: 120 }} />}
-        maxToRenderPerBatch={3}
-        windowSize={5}
-        initialNumToRender={2}
-      />
+        <Animated.FlatList
+          data={homeCatalogs}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          keyExtractor={(item) => getCatalogKey(item)}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          ListHeaderComponent={
+            <HomeHeader
+              carouselItems={carouselItems}
+              showContinueWatching={preferences.continueWatching}
+              showTraktRecommendations={preferences.traktTopPicks}
+              isEmpty={homeCatalogs.length === 0}
+            />
+          }
+          renderItem={({ item: catalog, index }) => {
+            const catalogKey = getCatalogKey(catalog);
+            const fetchEnabled = index < 2 || visibleCatalogKeys.has(catalogKey);
+
+            return (
+              <CatalogRow
+                key={`${catalog.id}-${catalog.type}-${index}`}
+                title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
+                catalogType={catalog.type}
+                catalogId={catalog.id}
+                addonUrl={(catalog as any).addonUrl}
+                fetchEnabled={fetchEnabled}
+              />
+            );
+          }}
+          ListFooterComponent={() => <View style={{ height: 120 }} />}
+          maxToRenderPerBatch={3}
+          windowSize={5}
+          initialNumToRender={2}
+        />
     </View>
   );
 }

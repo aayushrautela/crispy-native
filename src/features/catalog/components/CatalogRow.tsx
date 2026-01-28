@@ -22,6 +22,7 @@ interface CatalogRowProps {
     extra?: Record<string, any>;
     addonUrl?: string;
     textColor?: string;
+    fetchEnabled?: boolean;
 }
 
 export const CatalogRow = ({
@@ -33,7 +34,8 @@ export const CatalogRow = ({
     catalogId,
     extra,
     addonUrl,
-    textColor
+    textColor,
+    fetchEnabled = true
 }: CatalogRowProps) => {
     const { theme } = useTheme();
     const router = useRouter();
@@ -48,7 +50,8 @@ export const CatalogRow = ({
         catalogType || '',
         catalogId || '',
         extra,
-        addonUrl
+        addonUrl,
+        fetchEnabled
     );
 
     const items = propItems || fetchedItems;

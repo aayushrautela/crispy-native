@@ -18,7 +18,8 @@ export const usePaginatedCatalog = (
     type: string,
     id: string,
     extra?: Record<string, any>,
-    addonUrl?: string
+    addonUrl?: string,
+    enabled = true
 ): PaginatedCatalogResult => {
     const { manifests } = useUserStore();
 
@@ -69,7 +70,7 @@ export const usePaginatedCatalog = (
         },
         getNextPageParam: (lastPage) => lastPage.nextSkip,
         initialPageParam: 0,
-        enabled: !!type && !!id && targetUrls.length > 0,
+        enabled: enabled && !!type && !!id && targetUrls.length > 0,
         staleTime: 1000 * 60 * 30, // 30 minutes
         gcTime: 1000 * 60 * 60, // 1 hour (formerly cacheTime)
     });
