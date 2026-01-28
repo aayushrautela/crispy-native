@@ -62,10 +62,34 @@ jobs:
             --parallel \
             --build-cache
 
-      - name: 📤 Upload Release APK
+      - name: 📤 Upload Universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: crispy-native-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
+          name: crispy-native-release-universal
+          path: android/app/build/outputs/apk/release/*-universal-*.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 📤 Upload arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispy-native-release-arm64-v8a
+          path: android/app/build/outputs/apk/release/*-arm64-v8a-*.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 📤 Upload armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispy-native-release-armeabi-v7a
+          path: android/app/build/outputs/apk/release/*-armeabi-v7a-*.apk
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 📤 Upload x86_64 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispy-native-release-x86_64
+          path: android/app/build/outputs/apk/release/*-x86_64-*.apk
+          if-no-files-found: warn
           retention-days: 7
