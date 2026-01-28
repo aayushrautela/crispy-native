@@ -10,7 +10,6 @@ import android.util.Log
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class CrispyNativeCoreModule : Module() {
   private var crispyServer: CrispyServer? = null
@@ -57,11 +56,6 @@ class CrispyNativeCoreModule : Module() {
         isBound = false
       }
       crispyServer?.stop()
-    }
-
-    OnActivityEntersPictureInPictureMode {
-      appContext.reactContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        ?.emit("onPipModeChanged", it)
     }
 
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->
