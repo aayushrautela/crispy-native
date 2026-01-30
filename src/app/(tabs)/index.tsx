@@ -111,11 +111,7 @@ export default function HomeScreen() {
     if (heroData?.metas && heroData.metas.length > 0) {
       return heroData.metas.slice(0, 10);
     }
-    return [
-      { id: 'tt1160419', type: 'movie', name: 'Dune: Part Two' },
-      { id: 'tt1536537', type: 'movie', name: 'Oppenheimer' },
-      { id: 'tt1386697', type: 'movie', name: 'The Batman' },
-    ];
+    return [];
   }, [heroData]);
 
   return (
@@ -166,6 +162,7 @@ export default function HomeScreen() {
               showContinueWatching={preferences.continueWatching}
               showTraktRecommendations={preferences.traktTopPicks}
               isEmpty={homeCatalogs.length === 0}
+              isLoading={heroLoading}
             />
           }
           renderItem={({ item: catalog, index }) => {

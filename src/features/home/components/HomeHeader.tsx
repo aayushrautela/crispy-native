@@ -11,13 +11,15 @@ interface HomeHeaderProps {
     showContinueWatching?: boolean;
     showTraktRecommendations?: boolean;
     isEmpty?: boolean;
+    isLoading?: boolean;
 }
 
 const HomeHeaderComponent = ({
     carouselItems,
     showContinueWatching,
     showTraktRecommendations,
-    isEmpty
+    isEmpty,
+    isLoading
 }: HomeHeaderProps) => {
     const [deferHeavyRows, setDeferHeavyRows] = useState(true);
 
@@ -33,7 +35,7 @@ const HomeHeaderComponent = ({
 
     return (
         <View style={styles.container}>
-            <HeroCarousel items={carouselItems} />
+            <HeroCarousel items={carouselItems} isLoading={isLoading} />
             {!deferHeavyRows && showContinueWatching && <ContinueWatchingRow />}
             {!deferHeavyRows && showTraktRecommendations && <TraktRecommendationsRow />}
             {isEmpty && (

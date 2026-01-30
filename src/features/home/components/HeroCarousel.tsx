@@ -1,6 +1,7 @@
 import { Meta } from '@/src/core/hooks/useHeroItems';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
+import { Shimmer } from '@/src/core/ui/Shimmer';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
@@ -11,15 +12,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface HeroCarouselProps {
     items?: Meta[];
+    isLoading?: boolean;
 }
 
-export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
+export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarouselProps) => {
     const { theme } = useTheme();
     const { heroHeight } = useResponsive();
     const router = useRouter();
-    // const { data: items, isLoading } = useHeroItems();
     const items = propItems || [];
-    const isLoading = false; // Controlled by parent now
     const scrollX = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
@@ -43,8 +43,16 @@ export const HeroCarousel = ({ items: propItems }: HeroCarouselProps) => {
 
     if (isLoading || !items || items.length === 0) {
         return (
-            <View style={styles.skeletonContainer}>
-                <View style={[styles.skeleton, { backgroundColor: theme.colors.surfaceVariant, height: heroHeight }]} />
+            <View style={[styles.skeletonContainer, { height: heroHeight }]}>
+                <Shimmer height={heroHeight} width={SCREEN_WIDTH} borderRadius={0} />
+                <View style={styles.skeletonContent}>
+                    <Shimmer width="60%" height={40} borderRadius={8} style={{ marginBottom: 12 }} />
+                    <Shimmer width="40%" height={20} borderRadius={4} style={{ marginBottom: 24 }} />
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <Shimmer width={120} height={48} borderRadius={24} />
+                        <Shimmer width={120} height={48} borderRadius={24} />
+                    </View>
+                </View>
             </View>
         );
     }
@@ -99,13 +107,14 @@ const styles = StyleSheet.create({
         marginBottom: 0,
     },
     skeletonContainer: {
-        paddingHorizontal: 0,
-        paddingTop: 0,
-        marginBottom: 0,
-    },
-    skeleton: {
         width: SCREEN_WIDTH,
-        opacity: 0.5,
+        overflow: 'hidden',
+    },
+    skeletonContent: {
+        position: 'absolute',
+        bottom: 100,
+        left: 24,
+        right: 24,
     },
     dotsContainer: {
         position: 'absolute',
