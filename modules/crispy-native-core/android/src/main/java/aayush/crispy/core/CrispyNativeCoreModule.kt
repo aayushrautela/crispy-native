@@ -8,6 +8,7 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import com.facebook.react.bridge.ReactContext
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -43,8 +44,11 @@ class CrispyNativeCoreModule : Module() {
       val context = appContext.reactContext ?: return@OnCreate
       val downloadDir = context.getExternalFilesDir(null) ?: context.filesDir
 
-      // PiP lifecycle bridge (events + pause-on-dismiss).
-      PipBridge.start(context)
+      val reactContext = context as? ReactContext
+      if (reactContext != null) {
+        // PiP lifecycle bridge (events + pause-on-dismiss).
+        PipBridge.start(reactContext)
+      }
       
       // 1. Start Local Server
       crispyServer = CrispyServer(11470, downloadDir)
