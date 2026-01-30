@@ -31,7 +31,7 @@ import {
     StepForward
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, AppState, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -147,6 +147,7 @@ export default function PlayerScreen() {
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     const [isPipMode, setIsPipMode] = useState(false);
+    const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
 
     const [showUpNext, setShowUpNext] = useState(false);
     const [upNextTimer, setUpNextTimer] = useState(0);
@@ -500,6 +501,35 @@ export default function PlayerScreen() {
         };
     }, []);
 
+    // Enable PiP only while the player screen is mounted.
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+
+        void CrispyNativeCore.setPiPConfig({
+            enabled: true,
+            isPlaying: !paused,
+            width: videoNaturalSize?.width,
+            height: videoNaturalSize?.height,
+        });
+
+        return () => {
+            void CrispyNativeCore.setPiPConfig({ enabled: false, isPlaying: false });
+        };
+        // Intentionally mount/unmount only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Keep native PiP params up to date (aspect ratio + playback state).
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+        void CrispyNativeCore.setPiPConfig({
+            enabled: true,
+            isPlaying: !paused,
+            width: videoNaturalSize?.width,
+            height: videoNaturalSize?.height,
+        });
+    }, [paused, videoNaturalSize?.width, videoNaturalSize?.height]);
+
     const resetControlsTimer = useCallback(() => {
         if (isPipMode) return;
         if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -509,6 +539,21 @@ export default function PlayerScreen() {
             controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
         }
     }, [activeTab, isPipMode]);
+
+    // Fallback: when app backgrounds (incl. PiP), immediately hide overlays.
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+        const sub = AppState.addEventListener('change', (state) => {
+            if (state !== 'active') {
+                setShowControls(false);
+                setActiveTab('none');
+            } else {
+                resetControlsTimer();
+            }
+        });
+
+        return () => sub.remove();
+    }, [resetControlsTimer]);
 
     // Keep controls visible when tab is active
     useEffect(() => {
@@ -676,6 +721,10 @@ export default function PlayerScreen() {
                     const durationSec = data.duration ?? 0;
                     if (durationSec > 0) {
                         setStableDuration(durationSec);
+                    }
+
+                    if ((data.width ?? 0) > 0 && (data.height ?? 0) > 0) {
+                        setVideoNaturalSize({ width: data.width, height: data.height });
                     }
 
                     // Handle Resume - seek expects seconds

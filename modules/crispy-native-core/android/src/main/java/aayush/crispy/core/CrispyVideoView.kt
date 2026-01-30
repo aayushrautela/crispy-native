@@ -411,18 +411,21 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                 if (!hasLoadEventFired && value > 0) {
                     val width = MPVLib.getPropertyInt("width") ?: 0
                     val height = MPVLib.getPropertyInt("height") ?: 0
-                    if (width > 0 && height > 0) {
-                        hasLoadEventFired = true
-                        onLoad(mapOf("duration" to value, "width" to width, "height" to height))
+                     if (width > 0 && height > 0) {
+                         hasLoadEventFired = true
+                         onLoad(mapOf("duration" to value, "width" to width, "height" to height))
 
-                        // Update Activity PiP params proactively for auto-PiP
-                        if (width > 0 && height > 0) {
-                             currentAspectRatio = android.util.Rational(width, height)
-                             updatePipParams()
-                        }
-                    }
-                }
-            }
+                         // Update Activity PiP params proactively for auto-PiP
+                         if (width > 0 && height > 0) {
+                              currentAspectRatio = android.util.Rational(width, height)
+                              updatePipParams()
+
+                              // Keep shared state updated so MainActivity can use the same ratio.
+                              PipState.setAspectRatio(width.toDouble(), height.toDouble())
+                         }
+                     }
+                 }
+             }
         }
     }
 
