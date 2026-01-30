@@ -27,6 +27,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private var surface: Surface? = null
     private var httpHeaders: Map<String, String>? = null
 
+    private var lastAppliedSurfaceW: Int = 0
+    private var lastAppliedSurfaceH: Int = 0
+
     // Media Session Handler
     private var mediaSessionHandler: MediaSessionHandler? = null
     
@@ -94,6 +97,19 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     init {
         surfaceView.surfaceTextureListener = this
         surfaceView.isOpaque = false
+
+        // Some devices don't reliably deliver onSurfaceTextureSizeChanged during PiP transitions.
+        // On layout changes, keep the SurfaceTexture buffer size and mpv surface size in sync.
+        surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val w = right - left
+            val h = bottom - top
+            val oldW = oldRight - oldLeft
+            val oldH = oldBottom - oldTop
+            if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
+            if (w == oldW && h == oldH) return@addOnLayoutChangeListener
+            applySurfaceSize(w, h)
+        }
+
         addView(surfaceView, android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
             android.view.ViewGroup.LayoutParams.MATCH_PARENT
@@ -109,6 +125,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "Surface texture available: ${width}x${height}")
         try {
+            // Critical for correct scaling: keep SurfaceTexture buffer aligned to the view size.
+            if (width > 0 && height > 0) {
+                surfaceTexture.setDefaultBufferSize(width, height)
+            }
             surface = Surface(surfaceTexture)
             
             MPVLib.create(context.applicationContext)
@@ -129,14 +149,19 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                     seek(pos / 1000.0)
                 }
             })
-            
-            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+
+            applySurfaceSize(width, height)
             observeProperties()
             isMpvInitialized = true
+
+            // Ensure media session + PiP gating reflect the actual initial state even if
+            // the paused prop was applied before MPV finished initializing.
+            syncPlaybackAndPip()
             
             pendingDataSource?.let { url ->
                 loadFile(url)
                 pendingDataSource = null
+                syncPlaybackAndPip()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize MPV", e)
@@ -145,9 +170,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-        if (isMpvInitialized) {
-            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        if (width > 0 && height > 0) {
+            surfaceTexture.setDefaultBufferSize(width, height)
         }
+        applySurfaceSize(width, height)
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
@@ -227,6 +253,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         MPVLib.observeProperty("time-pos", MPV_FORMAT_DOUBLE)
         MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
         MPVLib.observeProperty("eof-reached", MPV_FORMAT_FLAG)
+        MPVLib.observeProperty("pause", MPV_FORMAT_FLAG)
         MPVLib.observeProperty("track-list", MPV_FORMAT_NONE)
         MPVLib.observeProperty("width", MPV_FORMAT_INT64)
         MPVLib.observeProperty("height", MPV_FORMAT_INT64)
@@ -263,26 +290,36 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
-    private var currentAspectRatio = android.util.Rational(16, 9)
+    private fun applySurfaceSize(width: Int, height: Int) {
+        if (!isMpvInitialized) return
+        if (width <= 0 || height <= 0) return
+        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
-    private fun updatePipParams() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val activity = appContext.currentActivity ?: return
-            val builder = android.app.PictureInPictureParams.Builder()
-            
-            try {
-                builder.setAspectRatio(currentAspectRatio)
-                
-                // Enable Auto-PiP for Android 12+ (S)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    builder.setAutoEnterEnabled(!isPaused)
-                }
-                
-                activity.setPictureInPictureParams(builder.build())
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to update PiP params", e)
-            }
+        lastAppliedSurfaceW = width
+        lastAppliedSurfaceH = height
+
+        try {
+            surfaceView.surfaceTexture?.setDefaultBufferSize(width, height)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to set SurfaceTexture buffer size", e)
         }
+
+        try {
+            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply mpv android-surface-size", e)
+        }
+    }
+
+    private fun syncPlaybackAndPip() {
+        val playing = !isPaused
+
+        // Media notification & headset controls
+        mediaSessionHandler?.updatePlaybackState(playing)
+
+        // PiP gating is driven by the actual playback state.
+        PipState.isPlaying = playing
+        PipState.applyToActivity(appContext.currentActivity)
     }
 
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
@@ -294,8 +331,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         this.isPaused = paused
         if (isMpvInitialized) {
             MPVLib.setPropertyBoolean("pause", paused)
-            mediaSessionHandler?.updatePlaybackState(!paused)
-            updatePipParams()
+            syncPlaybackAndPip()
         }
     }
 
@@ -395,7 +431,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     override fun eventProperty(property: String, value: Long) {}
     override fun eventProperty(property: String, value: Boolean) {
-        if (property == "eof-reached" && value) onEnd(Unit)
+        when (property) {
+            "eof-reached" -> {
+                if (value) onEnd(Unit)
+            }
+            "pause" -> {
+                // Keep state consistent even if pause changes from native controls.
+                isPaused = value
+                syncPlaybackAndPip()
+            }
+        }
     }
     override fun eventProperty(property: String, value: String) {}
     override fun eventProperty(property: String, value: Double) {
@@ -412,20 +457,15 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                     val width = MPVLib.getPropertyInt("width") ?: 0
                     val height = MPVLib.getPropertyInt("height") ?: 0
                      if (width > 0 && height > 0) {
-                         hasLoadEventFired = true
-                         onLoad(mapOf("duration" to value, "width" to width, "height" to height))
+                          hasLoadEventFired = true
+                          onLoad(mapOf("duration" to value, "width" to width, "height" to height))
 
-                         // Update Activity PiP params proactively for auto-PiP
-                         if (width > 0 && height > 0) {
-                              currentAspectRatio = android.util.Rational(width, height)
-                              updatePipParams()
-
-                              // Keep shared state updated so MainActivity can use the same ratio.
-                              PipState.setAspectRatio(width.toDouble(), height.toDouble())
-                         }
-                     }
-                 }
-             }
+                          // Keep shared state updated so MainActivity can use the correct ratio.
+                          PipState.setAspectRatio(width.toDouble(), height.toDouble())
+                          PipState.applyToActivity(appContext.currentActivity)
+                      }
+                  }
+              }
         }
     }
 
@@ -436,7 +476,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         if (eventId == MPV_EVENT_FILE_LOADED && !isPaused) {
              MPVLib.setPropertyBoolean("pause", false)
-             updatePipParams()
+             syncPlaybackAndPip()
         }
     }
 

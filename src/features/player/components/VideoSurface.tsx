@@ -1,8 +1,9 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
-import Video, { ResizeMode, VideoRef } from 'react-native-video';
 import { usePlayerControls } from '../hooks/usePlayerControls';
+import ExoPlayerNative, { ExoPlayerNativeRef } from './ExoPlayerNative';
 import MpvPlayer, { MpvPlayerRef } from './MpvPlayer';
+import { KSPlayerSurface, type KSPlayerSurfaceRef } from './ios/KSPlayerSurface';
 
 // Codec error patterns that should trigger MPV fallback
 const CODEC_ERROR_PATTERNS = [
@@ -96,7 +97,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         console.log('[VideoSurface] Received metadata:', props.metadata);
     }, [props.metadata]);
 
-    const exoPlayerRef = useRef<VideoRef>(null);
+    const exoPlayerRef = useRef<ExoPlayerNativeRef>(null);
     const mpvPlayerRef = useRef<MpvPlayerRef>(null);
 
     const isSeeking = useRef(false);
@@ -120,16 +121,12 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
             seekToTime(seconds);
         },
         setAudioTrack: (id: number) => {
-            if (useExoPlayer) {
-                // ExoPlayer handles track selection differently via props, but we can expose it if needed
-            } else {
-                mpvPlayerRef.current?.setAudioTrack(id);
-            }
+            if (useExoPlayer) exoPlayerRef.current?.setAudioTrack(id);
+            else mpvPlayerRef.current?.setAudioTrack(id);
         },
         setSubtitleTrack: (id: number) => {
-            if (!useExoPlayer) {
-                mpvPlayerRef.current?.setSubtitleTrack(id);
-            }
+            if (useExoPlayer) exoPlayerRef.current?.setSubtitleTrack(id);
+            else mpvPlayerRef.current?.setSubtitleTrack(id);
         },
         setSubtitleSize: (size: number) => {
             if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleSize(size);
@@ -162,62 +159,22 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         },
     }));
 
-    // ========== ExoPlayer Handlers ==========
-    const handleExoLoad = (data: any) => {
-        console.log('[VideoSurface] ExoPlayer onLoad:', data);
+    // Apply track selection for native Exo.
+    useEffect(() => {
+        if (!useExoPlayer) return;
 
-        // Extract tracks - IMPORTANT: use 0-based array index for react-native-video
-        const audioTracks = data.audioTracks?.map((t: any, i: number) => ({
-            id: i,
-            name: t.title || t.language || `Track ${i + 1}`,
-            language: t.language,
-        })) ?? [];
-
-        const subtitleTracks = data.textTracks?.map((t: any, i: number) => ({
-            id: i,
-            name: t.title || t.language || `Track ${i + 1}`,
-            language: t.language,
-        })) ?? [];
-
-        if (onTracksChanged && (audioTracks.length > 0 || subtitleTracks.length > 0)) {
-            onTracksChanged({ audioTracks, subtitleTracks });
+        if (selectedAudioTrack?.type === 'index' && typeof selectedAudioTrack.value === 'number') {
+            exoPlayerRef.current?.setAudioTrack(selectedAudioTrack.value);
+        } else if (selectedAudioTrack?.type === 'disabled') {
+            exoPlayerRef.current?.setAudioTrack(-1);
         }
 
-        onLoad?.({
-            duration: data.duration,
-            width: data.naturalSize?.width || 1920,
-            height: data.naturalSize?.height || 1080,
-        });
-    };
-
-    const handleExoProgress = (data: any) => {
-        onProgress?.({
-            currentTime: data.currentTime,
-            duration: data.playableDuration || data.currentTime,
-        });
-    };
-
-    const handleExoError = (error: any) => {
-        console.log('[VideoSurface] ExoPlayer onError:', JSON.stringify(error, null, 2));
-
-        // Extract error string from multiple possible paths
-        const errorParts: string[] = [];
-        if (typeof error?.error === 'string') errorParts.push(error.error);
-        if (error?.error?.errorString) errorParts.push(error.error.errorString);
-        if (error?.error?.errorCode) errorParts.push(String(error.error.errorCode));
-        if (error?.nativeStackAndroid) errorParts.push(error.nativeStackAndroid.join(' '));
-        if (error?.message) errorParts.push(error.message);
-
-        const errorString = errorParts.length > 0 ? errorParts.join(' ') : JSON.stringify(error);
-
-        if (isCodecError(errorString)) {
-            console.warn('[VideoSurface] Codec error, triggering MPV fallback');
-            onCodecError?.();
-            return;
+        if (selectedTextTrack?.type === 'index' && typeof selectedTextTrack.value === 'number') {
+            exoPlayerRef.current?.setSubtitleTrack(selectedTextTrack.value);
+        } else if (selectedTextTrack?.type === 'disabled') {
+            exoPlayerRef.current?.setSubtitleTrack(-1);
         }
-
-        onError?.({ message: errorString });
-    };
+    }, [useExoPlayer, selectedAudioTrack?.type, selectedAudioTrack?.value, selectedTextTrack?.type, selectedTextTrack?.value]);
 
     // ========== MPV Handlers ==========
     const handleMpvLoad = (data: any) => {
@@ -249,48 +206,52 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         });
     };
 
-    const getExoResizeMode = (): ResizeMode => {
-        switch (resizeMode) {
-            case 'cover': return ResizeMode.COVER;
-            case 'stretch': return ResizeMode.STRETCH;
-            default: return ResizeMode.CONTAIN;
-        }
-    };
-
     if (Platform.OS !== 'android') {
-        return <View style={styles.container} />;
+        return (
+            <KSPlayerSurface
+                ref={useRef<KSPlayerSurfaceRef>(null) as any}
+                source={source}
+                headers={headers}
+                paused={paused}
+                volume={volume}
+                rate={rate}
+                resizeMode={resizeMode}
+                onLoad={onLoad}
+                onProgress={onProgress}
+                onEnd={onEnd}
+                onError={onError}
+                onTracksChanged={onTracksChanged}
+            />
+        );
     }
-
-    // react-native-video's type defs can lag behind supported props.
-    // We keep the component typed, but cast at the callsite for a few props.
-    const ExoVideo = Video as any;
 
     return (
         <View style={styles.container}>
             {useExoPlayer ? (
-                <ExoVideo
+                <ExoPlayerNative
                     ref={exoPlayerRef}
-                    source={{ uri: source, headers }}
+                    source={source}
+                    headers={headers}
                     paused={paused}
                     volume={volume}
                     rate={rate}
-                    resizeMode={getExoResizeMode()}
-                    selectedAudioTrack={selectedAudioTrack as any}
-                    selectedTextTrack={selectedTextTrack as any}
                     style={styles.player}
-                    onLoad={handleExoLoad}
-                    onProgress={handleExoProgress}
                     onEnd={onEnd}
-                    onError={handleExoError}
-                    progressUpdateInterval={500}
+                    resizeMode={resizeMode}
+                    metadata={props.metadata}
                     playInBackground={true}
-                    playWhenInactive={true}
-                    title={props.metadata?.title}
-                    subtitle={props.metadata?.subtitle}
-                    poster={props.metadata?.artworkUrl}
-                    ignoreSilentSwitch="ignore"
-                    automaticallyWaitsToMinimizeStalling={true}
-                    useTextureView={true}
+                    onLoad={(data) => onLoad?.(data)}
+                    onProgress={(data) => onProgress?.(data)}
+                    onTracksChanged={(data) => onTracksChanged?.(data)}
+                    onError={(e) => {
+                        const msg = e?.error || 'ExoPlayer error';
+                        if (isCodecError(msg)) {
+                            console.warn('[VideoSurface] Codec error, triggering MPV fallback');
+                            onCodecError?.();
+                            return;
+                        }
+                        onError?.({ message: msg });
+                    }}
                 />
             ) : (
                 <MpvPlayer
