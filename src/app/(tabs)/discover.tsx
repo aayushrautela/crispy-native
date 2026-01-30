@@ -20,7 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const HEADER_HEIGHT = 220;
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as unknown as typeof FlashList<MetaPreview>;
 
 const TYPE_OPTIONS = [
     { label: 'All', value: 'all' },
@@ -340,7 +340,7 @@ export default function DiscoverScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>
@@ -382,7 +382,7 @@ export default function DiscoverScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>

@@ -76,8 +76,9 @@ export const CatalogRow = ({
         }
         if (catalogId && catalogType) {
             router.push({
-                pathname: `/catalog/${catalogId}`,
+                pathname: '/catalog/[id]' as any,
                 params: {
+                    id: catalogId,
                     type: catalogType,
                     addonUrl: addonUrl,
                     title: title
@@ -97,14 +98,14 @@ export const CatalogRow = ({
             style={[
                 styles.skeleton,
                 {
-                    backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                    backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant,
                     width: CARD_WIDTH,
                     height: CARD_WIDTH * 1.5,
                     borderRadius: 16
                 }
             ]}
         />
-    ), [theme.colors.surfaceContainerHighest, theme.colors.surfaceVariant]);
+    ), [theme.colors, theme.colors.surfaceVariant]);
 
     if (!isLoading && items.length === 0 && !!catalogId) {
         return null;
@@ -157,7 +158,7 @@ export const CatalogRow = ({
 // Static Definitions outside component
 const SKELETON_DATA = [...Array(6)];
 const ItemSeparator = () => <View style={{ width: ITEM_GAP }} />;
-const keyExtractor = (item: MetaPreview, index: number) => `${item.id}-${index}`;
+const keyExtractor = (item: MetaPreview) => item.id;
 
 const styles = StyleSheet.create({
     container: {

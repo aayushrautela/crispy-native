@@ -1,20 +1,26 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
-import { useTraktStore } from '@/src/core/stores/traktStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { ActionItem, ActionSheet } from '@/src/core/ui/ActionSheet';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
-import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
-import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
+import { useCatalogActions } from '@/src/features/catalog/context/CatalogActionsContext';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Check, Eye, EyeOff, Info, Plus, Star } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Star } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
 
 const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
+
+function formatBadgeRating(value: unknown): string | null {
+    const n = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(n)) return null;
+
+    // Avoid rendering trailing '.0' which is prone to Android clipping in tiny badges.
+    if (Math.abs(n - Math.round(n)) < 0.0001) return String(Math.round(n));
+    return n.toFixed(1);
+}
 
 interface CatalogCardProps {
     item: MetaPreview;
@@ -26,40 +32,12 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     const { theme } = useTheme();
     const settings = useUserStore(s => s.settings);
     const [focused, setFocused] = useState(false);
+    const { openActions } = useCatalogActions();
 
     // Pure Component: No enrichment hook. 
     // We display exactly what is passed in 'item'.
     const displayItem = item;
-
-    // Stable IDs for selectors
-    const id = displayItem.id;
-    const type = displayItem.type === 'movie' ? 'movie' : 'series';
-
-    // Atomic State Selectors 
-    const inList = useTraktStore(state => state.isInWatchlist(id));
-    const isWatched = useTraktStore(state => state.isWatched(id));
-    const userRating = useTraktStore(state => {
-        if (!id) return null;
-        const itemRating = state.ratedContent.find(r => {
-            const media = type === 'movie' ? r.movie : r.show;
-            if (!media) return false;
-            return media.ids.imdb === id || String(media.ids.tmdb) === String(id).replace('tmdb:', '');
-        });
-        return itemRating ? Math.round(itemRating.rating / 2) : null;
-    });
-
-    const [showActionSheet, setShowActionSheet] = useState(false);
-    const [showRatingModal, setShowRatingModal] = useState(false);
-
-    const {
-        isAuthenticated,
-        addToWatchlist,
-        markMovieAsWatched,
-        removeMovieFromHistory,
-        removeFromWatchlist,
-        rateContent,
-        removeContentRating
-    } = useTraktContext();
+    const displayAny = displayItem as any;
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
@@ -72,57 +50,8 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     }, [item.id, item.type, router]);
 
     const handleLongPress = useCallback(() => {
-        if (isAuthenticated) {
-            setShowActionSheet(true);
-        }
-    }, [isAuthenticated]);
-
-    // Construct Menu Actions
-    const menuActions: ActionItem[] = useMemo(() => {
-        if (!isAuthenticated) return [];
-
-        const actions: ActionItem[] = [
-            {
-                id: 'details',
-                label: 'View Details',
-                icon: <Info size={20} color={theme.colors.onSurface} />,
-                onPress: handlePress
-            }
-        ];
-
-        actions.push({
-            id: 'watchlist',
-            label: inList ? 'Remove from My List' : 'Add to My List',
-            icon: inList ? <Check size={20} color={theme.colors.primary} /> : <Plus size={20} color={theme.colors.onSurface} />,
-            onPress: async () => {
-                if (inList) await removeFromWatchlist(id, type);
-                else await addToWatchlist(id, type);
-            }
-        });
-
-        if (type === 'movie') {
-            actions.push({
-                id: 'watched',
-                label: isWatched ? 'Mark as Unwatched' : 'Mark as Watched',
-                icon: isWatched ? <EyeOff size={20} color={theme.colors.onSurface} /> : <Eye size={20} color={theme.colors.onSurface} />,
-                onPress: async () => {
-                    if (isWatched) await removeMovieFromHistory(id);
-                    else await markMovieAsWatched(id);
-                }
-            });
-        }
-
-        actions.push({
-            id: 'rate',
-            label: userRating ? `Rate (Rated ${userRating * 2})` : 'Rate',
-            icon: <Star size={20} color={userRating ? '#FFD700' : theme.colors.onSurface} fill={userRating ? '#FFD700' : 'transparent'} />,
-            onPress: () => {
-                setTimeout(() => setShowRatingModal(true), 300);
-            }
-        });
-
-        return actions;
-    }, [isAuthenticated, id, type, inList, isWatched, userRating, theme]);
+        openActions(item);
+    }, [item, openActions]);
 
     const animatedImageStyle = useAnimatedStyle(() => {
         return {
@@ -139,8 +68,9 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                 onPress={handlePress}
                 onLongPress={handleLongPress}
                 onFocusChange={setFocused}
+                disableLayoutAnimation={true}
             >
-                <View style={[styles.imageContainer, { backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant }]}>
+                <View style={[styles.imageContainer, { backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant }]}>
                     {/* Placeholder / Fallback: Always rendered behind image */}
                     <View style={styles.absolutePlaceholder}>
                         <Typography
@@ -161,12 +91,12 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         if (imageSrc) {
                             return (
                                 <AnimatedExpoImage
-                                    key={id} // React Key for clean remounts
+                                    key={displayItem.id} // React Key for clean remounts
                                     recyclingKey={imageSrc} // Native recycling key
                                     source={{ uri: imageSrc }}
                                     style={[styles.image, animatedImageStyle]}
                                     contentFit="cover"
-                                    transition={200}
+                                    transition={Platform.OS === 'android' ? 0 : 200}
                                     cachePolicy="memory-disk"
                                 />
                             );
@@ -186,14 +116,30 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                     )}
 
                     {/* Rating Overlay */}
-                    {(settings.showRatingBadges && (displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating)) && (
+                    {(() => {
+                        if (!settings.showRatingBadges) return null;
+                        const ratingText = formatBadgeRating(displayAny.imdbRating ?? displayAny.rating ?? displayAny.meta?.rating);
+                        if (!ratingText) return null;
+
+                        return (
                         <View style={styles.ratingOverlay}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
-                            <Typography variant="label-small" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                                {Number(displayItem.imdbRating || displayItem.rating || displayItem.meta?.rating || 0).toFixed(1)}
+                            <Typography
+                                variant="label-small"
+                                weight="black"
+                                style={{
+                                    color: 'white',
+                                    marginLeft: 4,
+                                    letterSpacing: 0,
+                                    paddingRight: 2,
+                                    includeFontPadding: true,
+                                }}
+                            >
+                                {ratingText}
                             </Typography>
                         </View>
-                    )}
+                        );
+                    })()}
                 </View>
                 {/* No Progress Bar in CatalogCard anymore */}
             </ExpressiveSurface >
@@ -216,39 +162,24 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                     >
                         {(() => {
                             // Simple Year Fallback
-                            const year = displayItem.year || displayItem.meta?.year || displayItem.releaseInfo?.split('-')[0] || '';
+                            const year = displayAny.year || displayAny.meta?.year || displayAny.releaseInfo?.split('-')[0] || '';
                             return year;
                         })()}
                     </Typography>
-                    {(displayItem.genres?.[0] || displayItem.meta?.genres?.[0]) && (
+                    {(displayItem.genres?.[0] || displayAny.meta?.genres?.[0]) && (
                         <View style={[styles.genrePill, { backgroundColor: (theme.colors.primary + '20') || theme.colors.surfaceVariant }]}>
                             <Typography
                                 variant="label-small"
                                 weight="black"
                                 style={{ color: theme.colors.primary, fontSize: 9 }}
                             >
-                                {(displayItem.genres?.[0] || displayItem.meta?.genres?.[0])}
+                                {(displayItem.genres?.[0] || displayAny.meta?.genres?.[0])}
                             </Typography>
                         </View>
                     )}
                 </View>
             </View >
 
-            <ActionSheet
-                visible={showActionSheet}
-                onClose={() => setShowActionSheet(false)}
-                title={item.name}
-                actions={menuActions}
-            />
-
-            <RatingModal
-                visible={showRatingModal}
-                onClose={() => setShowRatingModal(false)}
-                title={item.name}
-                initialRating={userRating ? (userRating * 2) : 0}
-                onRate={(r) => rateContent(id, type, r)}
-                onRemoveRating={() => removeContentRating(id, type)}
-            />
         </View >
     );
 };

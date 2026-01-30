@@ -24,24 +24,18 @@ export default function HomeScreen() {
   const { preferences, sortCatalogsByPreferences } = useCatalogPreferences();
   const router = useRouter();
 
-  const [visibleCatalogKeys, setVisibleCatalogKeys] = useState<Set<string>>(new Set());
+  const [enabledRowCount, setEnabledRowCount] = useState(3);
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 40, minimumViewTime: 150 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    setVisibleCatalogKeys((prev) => {
-      let changed = false;
-      const next = new Set(prev);
+    let maxIndex = -1;
+    for (const v of viewableItems) {
+      if (typeof v.index === 'number' && v.index > maxIndex) maxIndex = v.index;
+    }
+    if (maxIndex < 0) return;
 
-      viewableItems.forEach(({ item }) => {
-        if (!item) return;
-        const key = getCatalogKey(item);
-        if (!next.has(key)) {
-          next.add(key);
-          changed = true;
-        }
-      });
-
-      return changed ? next : prev;
-    });
+    // Enable fetching for a small buffer ahead of the highest visible row.
+    const target = maxIndex + 3;
+    setEnabledRowCount(prev => (target > prev ? target : prev));
   }).current;
 
   const scrollY = useSharedValue(0);
@@ -175,12 +169,10 @@ export default function HomeScreen() {
             />
           }
           renderItem={({ item: catalog, index }) => {
-            const catalogKey = getCatalogKey(catalog);
-            const fetchEnabled = index < 2 || visibleCatalogKeys.has(catalogKey);
+            const fetchEnabled = index < enabledRowCount;
 
             return (
               <CatalogRow
-                key={`${catalog.id}-${catalog.type}-${index}`}
                 title={catalog.name || `${catalog.addonName} - ${catalog.type}`}
                 catalogType={catalog.type}
                 catalogId={catalog.id}

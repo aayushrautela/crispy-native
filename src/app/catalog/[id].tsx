@@ -305,7 +305,7 @@ export default function CatalogScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>
@@ -347,7 +347,7 @@ export default function CatalogScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>

@@ -201,11 +201,11 @@ export default function LibraryScreen() {
             ) : filteredAndSortedItems.length > 0 ? (
                 <AnimatedFlashList
                     data={filteredAndSortedItems}
-                    keyExtractor={(item, index) => `${(item as any).id}-${index}`}
+                    keyExtractor={(item) => String((item as any).id)}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={itemWidth * 1.5}
+                    estimatedItemSize={itemWidth * 1.85}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
                         paddingHorizontal: padding,
@@ -372,7 +372,7 @@ export default function LibraryScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>
@@ -414,7 +414,7 @@ export default function LibraryScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>

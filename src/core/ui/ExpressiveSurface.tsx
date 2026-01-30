@@ -1,7 +1,7 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
     interpolate,
     LinearTransition,
@@ -16,7 +16,7 @@ interface ExpressiveSurfaceProps {
     children: React.ReactNode;
     onPress?: () => void;
     onLongPress?: () => void;
-    style?: ViewStyle;
+    style?: StyleProp<ViewStyle>;
     variant?: 'elevated' | 'filled' | 'outlined' | 'tonal';
     rounding?: 'md' | 'lg' | 'xl' | '2xl' | '3xl' | 'full' | 'none';
     onFocusChange?: (focused: boolean) => void;
@@ -25,6 +25,7 @@ interface ExpressiveSurfaceProps {
     index?: number;
     activeIndex?: number;
     disablePulse?: boolean;
+    disableLayoutAnimation?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -42,6 +43,7 @@ export const ExpressiveSurface = ({
     index,
     activeIndex,
     disablePulse = false,
+    disableLayoutAnimation = false,
 }: ExpressiveSurfaceProps) => {
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -124,7 +126,7 @@ export const ExpressiveSurface = ({
             case 'tonal': return theme.colors.secondaryContainer;
             case 'filled': return theme.colors.primaryContainer;
             case 'outlined': return 'transparent';
-            default: return theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant;
+            default: return (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant;
         }
     };
 
@@ -143,7 +145,7 @@ export const ExpressiveSurface = ({
                 focusAnim.value = withSpring(0);
                 onFocusChange?.(false);
             }}
-            layout={LinearTransition.duration(300)}
+            layout={disableLayoutAnimation ? undefined : LinearTransition.duration(300)}
             style={[
                 styles.base,
                 {

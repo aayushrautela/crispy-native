@@ -3,6 +3,7 @@ import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { FlashList } from '@shopify/flash-list';
+import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -12,6 +13,7 @@ const ITEM_SEPARATOR_WIDTH = 16;
 
 export const TraktRecommendationsRow = () => {
     const { theme } = useTheme();
+    const router = useRouter();
     const { recommendations, isAuthenticated } = useTraktContext();
 
     const renderItem = useCallback(({ item }: { item: any }) => (
@@ -26,6 +28,7 @@ export const TraktRecommendationsRow = () => {
         <View style={styles.container}>
             <SectionHeader
                 title="Trakt Top Picks"
+                onAction={() => router.push('/trakt/recommendations' as any)}
                 style={styles.header}
             />
             <View style={{ minHeight: CARD_WIDTH * 1.5 }}>

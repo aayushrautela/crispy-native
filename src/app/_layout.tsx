@@ -16,6 +16,7 @@ import { TraktService } from '../core/services/TraktService';
 import { SessionManager } from '../core/SessionManager';
 import { useUserStore } from '../core/stores/userStore';
 import { ThemeProvider, useTheme } from '../core/ThemeContext';
+import { CatalogActionsProvider } from '../features/catalog/context/CatalogActionsContext';
 import { TraktProvider } from '../features/trakt/context/TraktContext';
 import '../styles/global.css';
 
@@ -109,17 +110,20 @@ function RootLayoutNav() {
   return (
     <NavigationThemeProvider value={navigationTheme}>
       <BottomSheetModalProvider>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="meta/[id]" options={{ headerShown: false, animation: 'default' }} />
-          <Stack.Screen name="player" options={{ headerShown: false, animation: 'fade' }} />
-          <Stack.Screen name="catalog/[id]" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="person/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
-          <Stack.Screen name="settings" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        </Stack>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <CatalogActionsProvider>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="meta/[id]" options={{ headerShown: false, animation: 'default' }} />
+            <Stack.Screen name="player" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="catalog/[id]" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="person/[id]" options={{ headerShown: false, animation: 'slide_from_right' }} />
+            <Stack.Screen name="trakt/recommendations" options={{ headerShown: false, animation: 'slide_from_right' }} />
+            <Stack.Screen name="settings" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          </Stack>
+          <StatusBar style={isDark ? 'light' : 'dark'} />
+        </CatalogActionsProvider>
       </BottomSheetModalProvider>
     </NavigationThemeProvider>
   );
