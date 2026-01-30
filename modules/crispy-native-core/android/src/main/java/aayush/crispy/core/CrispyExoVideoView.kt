@@ -22,7 +22,7 @@ import expo.modules.kotlin.views.ExpoView
 import android.os.Handler
 import android.os.Looper
 
-class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), PipPlaybackTarget {
 
     companion object {
         private const val TAG = "CrispyExoVideoView"
@@ -48,6 +48,9 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var lastVideoSize: VideoSize? = null
     private var hasLoadEventFired: Boolean = false
     private var pendingSource: String? = null
+
+    private var requestedResizeMode: String? = null
+    private var isInPipMode: Boolean = false
 
     // Track mapping for index-based selection from JS
     private data class TrackRef(
@@ -139,6 +142,8 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         playerView.player = player
         addView(playerView)
 
+        PlaybackRegistry.register(this)
+
         // Media session + notification
         mediaSessionHandler = MediaSessionHandler(context, object : MediaSessionHandler.MediaSessionCallbacks {
             override fun onPlay() { setPaused(false) }
@@ -208,6 +213,11 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     fun setResizeMode(mode: String?) {
+        requestedResizeMode = mode
+        applyResizeMode(if (isInPipMode) "contain" else mode)
+    }
+
+    private fun applyResizeMode(mode: String?) {
         playerView.resizeMode = when (mode) {
             "cover" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             "stretch" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
@@ -403,6 +413,16 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             mediaSessionHandler?.release()
             mediaSessionHandler = null
             (context as? ReactContext)?.removeLifecycleEventListener(lifecycleListener)
+            PlaybackRegistry.unregister(this)
         }
+    }
+
+    override fun onPipModeChanged(isPip: Boolean) {
+        isInPipMode = isPip
+        applyResizeMode(if (isPip) "contain" else requestedResizeMode)
+    }
+
+    override fun pauseFromPipDismissed() {
+        setPaused(true)
     }
 }

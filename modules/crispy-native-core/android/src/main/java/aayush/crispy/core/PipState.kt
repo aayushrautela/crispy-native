@@ -3,6 +3,7 @@ package aayush.crispy.core
 import android.app.Activity
 import android.app.PictureInPictureParams
 import android.os.Build
+import android.graphics.Rect
 import android.util.Rational
 import android.util.Log
 
@@ -49,6 +50,15 @@ object PipState {
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
 
+            try {
+                val rect = Rect()
+                if (activity.window?.decorView?.getGlobalVisibleRect(rect) == true && !rect.isEmpty) {
+                    builder.setSourceRectHint(rect)
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
+
             // Android 12+ can auto-enter PiP when the user goes home.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(shouldEnterOnUserLeave())
@@ -72,6 +82,15 @@ object PipState {
 
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
+
+            try {
+                val rect = Rect()
+                if (activity.window?.decorView?.getGlobalVisibleRect(rect) == true && !rect.isEmpty) {
+                    builder.setSourceRectHint(rect)
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setAutoEnterEnabled(shouldEnterOnUserLeave())
