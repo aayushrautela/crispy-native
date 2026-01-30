@@ -62,7 +62,8 @@
         }
       ],
       "./plugins/withCrispyNative.js",
-      "expo-font"
+      "expo-font",
+      "expo-navigation-bar"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -6,21 +6,66 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 interface SettingsTabProps {
     playbackSpeed?: number;
     onSelectSpeed?: (speed: number) => void;
+    resizeMode?: 'contain' | 'cover' | 'stretch';
+    onSelectResizeMode?: (mode: 'contain' | 'cover' | 'stretch') => void;
     currentEngine?: 'exo' | 'mpv';
     // Add more settings as needed
 }
 
 const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+const RESIZE_MODES = [
+    { label: 'Fit', value: 'contain' as const },
+    { label: 'Fill', value: 'cover' as const },
+    { label: 'Stretch', value: 'stretch' as const },
+];
 
 export function SettingsTab({
     playbackSpeed = 1.0,
-    onSelectSpeed
+    onSelectSpeed,
+    resizeMode = 'contain',
+    onSelectResizeMode
 }: SettingsTabProps) {
     const { theme } = useTheme();
     const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
     return (
         <ScrollView contentContainerStyle={styles.content}>
+            <View style={styles.section}>
+                <Typography variant="title-medium" style={{ color: theme.colors.onSurface, marginBottom: 12 }}>
+                    Video Aspect Ratio
+                </Typography>
+                <View style={styles.grid}>
+                    {RESIZE_MODES.map((mode) => {
+                        const isSelected = mode.value === resizeMode;
+                        return (
+                            <Pressable
+                                key={mode.value}
+                                onPress={() => onSelectResizeMode?.(mode.value)}
+                                style={[
+                                    styles.pill,
+                                    {
+                                        backgroundColor: isSelected
+                                            ? theme.colors.primary
+                                            : surfaceContainerHigh
+                                    }
+                                ]}
+                            >
+                                <Typography
+                                    variant="label-medium"
+                                    style={{
+                                        color: isSelected
+                                            ? theme.colors.onPrimary
+                                            : theme.colors.onSurface
+                                    }}
+                                >
+                                    {mode.label}
+                                </Typography>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </View>
+
             <View style={styles.section}>
                 <Typography variant="title-medium" style={{ color: theme.colors.onSurface, marginBottom: 12 }}>
                     Playback Speed

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -149,6 +150,7 @@ export default function PlayerScreen() {
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     const [isPipMode, setIsPipMode] = useState(false);
     const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
+    const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
 
     const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
 
@@ -510,6 +512,10 @@ export default function PlayerScreen() {
 
         lock();
         StatusBar.setHidden(true);
+        if (Platform.OS === 'android') {
+            NavigationBar.setVisibilityAsync("hidden");
+            NavigationBar.setBehaviorAsync("overlay-swipe");
+        }
 
         // Listen for PiP mode changes (Android)
         const pipSubscription = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
@@ -570,6 +576,9 @@ export default function PlayerScreen() {
 
             unlock();
             StatusBar.setHidden(false);
+            if (Platform.OS === 'android') {
+                NavigationBar.setVisibilityAsync("visible");
+            }
         };
     }, []);
 
@@ -778,6 +787,7 @@ export default function PlayerScreen() {
                 headers={headers}
                 paused={paused}
                 rate={playbackRate}
+                resizeMode={resizeMode}
                 useExoPlayer={useExoPlayer}
                 decoderMode={settings.decoderMode}
                 gpuMode={settings.gpuMode}
@@ -1157,10 +1167,9 @@ export default function PlayerScreen() {
                         {activeTab === 'settings' && (
                             <SettingsTab
                                 playbackSpeed={playbackRate}
-                                onSelectSpeed={(speed) => {
-                                    setPlaybackRate(speed);
-                                    setActiveTab('none');
-                                }}
+                                onSelectSpeed={setPlaybackRate}
+                                resizeMode={resizeMode}
+                                onSelectResizeMode={setResizeMode}
                             />
                         )}
                         {activeTab === 'streams' && (

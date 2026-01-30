@@ -23,7 +23,10 @@ export interface CrispyVideoViewProps extends ViewProps {
     headers?: Record<string, string>;
     paused?: boolean;
     resizeMode?: 'contain' | 'cover' | 'stretch';
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    gpuMode?: 'gpu' | 'gpu-next';
     metadata?: CrispyMediaMetadata;
+    playInBackground?: boolean;
 
     // Events
     onLoad?: (event: { nativeEvent: { duration: number, width: number, height: number } }) => void;
