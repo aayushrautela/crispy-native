@@ -22,6 +22,7 @@ export function AudioTab({
     onSelectTrack
 }: AudioTabProps) {
     const { theme } = useTheme();
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
     if (!tracks || tracks.length === 0) {
         return (
@@ -49,7 +50,6 @@ export function AudioTab({
                                 backgroundColor: isSelected
                                     ? theme.colors.primaryContainer
                                     : 'transparent',
-                                borderColor: theme.colors.outlineVariant
                             }
                         ]}
                     >
@@ -90,7 +90,6 @@ const styles = StyleSheet.create({
     item: {
         padding: 16,
         borderRadius: 12,
-        borderWidth: 1,
         flexDirection: 'row',
         alignItems: 'center',
     }

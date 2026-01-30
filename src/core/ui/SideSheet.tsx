@@ -27,6 +27,7 @@ export function SideSheet({
     width = '45%' // Default width for side sheet
 }: SideSheetProps) {
     const { theme } = useTheme();
+    const sheetBg = (theme.colors as any).surfaceContainerHigh || '#1E1E1E';
 
     // Handle Hardware Back Button
     useEffect(() => {
@@ -61,10 +62,10 @@ export function SideSheet({
                 style={[
                     styles.sheet,
                     {
-                        width,
-                        backgroundColor: theme.colors.surfaceContainerHigh || '#1E1E1E',
-                        borderLeftColor: theme.colors.outlineVariant,
-                    }
+                        width: width as any,
+                        backgroundColor: sheetBg,
+                        borderLeftColor: 'transparent',
+                    } as any
                 ]}
             >
                 {title && (
@@ -101,7 +102,7 @@ const styles = StyleSheet.create({
     },
     sheet: {
         height: '100%',
-        borderLeftWidth: 1,
+        borderLeftWidth: 0,
         elevation: 16,
         shadowColor: "#000",
         shadowOffset: {
