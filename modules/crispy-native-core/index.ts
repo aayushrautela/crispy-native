@@ -1,4 +1,5 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
+import type React from 'react';
 import { ViewProps } from 'react-native';
 
 // requireNativeModule will look for a module with the same name as in CrispyNativeCoreModule.kt
@@ -40,7 +41,35 @@ export interface CrispyVideoViewRef {
     setSubtitleDelay: (delay: number) => void;
 }
 
-export const CrispyVideoView: React.ComponentType<CrispyVideoViewProps> = requireNativeViewManager('CrispyNativeCore');
+type NativeView<P> = React.ForwardRefExoticComponent<React.PropsWithoutRef<P> & React.RefAttributes<any>>;
+
+export const CrispyVideoView = requireNativeViewManager('CrispyNativeCore') as NativeView<CrispyVideoViewProps>;
+
+export interface CrispyExoVideoViewProps extends ViewProps {
+    source?: string;
+    headers?: Record<string, string>;
+    paused?: boolean;
+    rate?: number;
+    volume?: number;
+    resizeMode?: 'contain' | 'cover' | 'stretch';
+    metadata?: CrispyMediaMetadata;
+    playInBackground?: boolean;
+
+    // Events
+    onLoad?: (event: { nativeEvent: { duration: number, width: number, height: number } }) => void;
+    onProgress?: (event: { nativeEvent: { currentTime: number, duration: number } }) => void;
+    onEnd?: () => void;
+    onError?: (event: { nativeEvent: { error: string } }) => void;
+    onTracksChanged?: (event: { nativeEvent: any }) => void;
+}
+
+export interface CrispyExoVideoViewRef {
+    seek: (positionSec: number) => void;
+    setAudioTrack: (trackId: number) => void;
+    setSubtitleTrack: (trackId: number) => void;
+}
+
+export const CrispyExoVideoView = requireNativeViewManager('CrispyExoPlayer') as NativeView<CrispyExoVideoViewProps>;
 
 
 
@@ -157,5 +186,21 @@ export default {
             console.error('[CrispyNativeCore] setPiPConfig failed:', e);
             return false;
         }
-    }
+    },
+
+    /**
+     * Returns whether the host activity is currently in PiP.
+     * Android-only.
+     */
+    async isInPiPMode(): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.isInPiPMode) {
+                return await CrispyNativeCore.isInPiPMode();
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] isInPiPMode failed:', e);
+            return false;
+        }
+    },
 };

@@ -4,7 +4,8 @@
     ],
     "android": {
         "modules": [
-            "aayush.crispy.core.CrispyNativeCoreModule"
+            "aayush.crispy.core.CrispyNativeCoreModule",
+            "aayush.crispy.core.CrispyExoPlayerModule"
         ]
     }
 }

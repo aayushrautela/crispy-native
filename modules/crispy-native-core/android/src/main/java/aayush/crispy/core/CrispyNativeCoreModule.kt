@@ -5,6 +5,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import java.io.File
@@ -105,7 +106,7 @@ class CrispyNativeCoreModule : Module() {
       val activity = appContext.currentActivity ?: return@AsyncFunction false
       // Keep shared state in sync even when PiP is entered explicitly.
       PipState.enabled = true
-      PipState.isPlaying = true
+      // Don't force isPlaying here; player views update this from actual playback.
       PipState.setAspectRatio(width, height)
       PipState.applyToActivity(activity)
       return@AsyncFunction PipState.enterPiP(activity, width, height)
@@ -121,10 +122,16 @@ class CrispyNativeCoreModule : Module() {
      */
     AsyncFunction("setPiPConfig") { enabled: Boolean, isPlaying: Boolean, width: Double?, height: Double? ->
       PipState.enabled = enabled
-      PipState.isPlaying = isPlaying
+      // JS-provided isPlaying is best-effort; native player views are the source of truth.
       PipState.setAspectRatio(width, height)
       PipState.applyToActivity(appContext.currentActivity)
       return@AsyncFunction true
+    }
+
+    AsyncFunction("isInPiPMode") {
+      val activity = appContext.currentActivity
+      if (activity == null) return@AsyncFunction false
+      return@AsyncFunction (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && activity.isInPictureInPictureMode)
     }
 
     // --- VIDEO PLAYER VIEW ---

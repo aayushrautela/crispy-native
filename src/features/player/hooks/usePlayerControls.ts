@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { VideoRef } from 'react-native-video';
 
 const END_EPSILON = 0.3;
 
@@ -12,7 +11,7 @@ export const usePlayerControls = (
     isSeeking: React.MutableRefObject<boolean>,
     isMounted: React.MutableRefObject<boolean>,
     // Dual engine support
-    exoPlayerRef?: React.RefObject<VideoRef | null>,
+    exoPlayerRef?: React.RefObject<{ seek: (seconds: number) => void } | null>,
     useExoPlayer?: boolean
 ) => {
     const togglePlayback = useCallback(() => {
