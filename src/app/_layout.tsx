@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
 import { AuthProvider, useAuth } from '../core/AuthContext';
 import { DiscoveryProvider } from '../core/DiscoveryContext';
@@ -133,16 +134,18 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <AuthProvider>
-          <SyncService />
-          <ThemeProvider>
-            <DiscoveryProvider>
-              <TraktProvider>
-                <RootLayoutNav />
-              </TraktProvider>
-            </DiscoveryProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <SyncService />
+            <ThemeProvider>
+              <DiscoveryProvider>
+                <TraktProvider>
+                  <RootLayoutNav />
+                </TraktProvider>
+              </DiscoveryProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

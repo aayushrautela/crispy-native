@@ -80,8 +80,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     );
 
     const backgroundStyle = useMemo(() => ({
-        backgroundColor: theme.colors.surfaceContainerHigh || theme.colors.surfaceVariant,
-    }), [theme.colors.surfaceContainerHigh, theme.colors.surfaceVariant]);
+        backgroundColor: (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant,
+    }), [theme.colors]);
 
     const handleStyle = useMemo(() => ({
         backgroundColor: theme.colors.outlineVariant,
@@ -123,11 +123,11 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
                     </View>
                 )}
                 {scrollable ? (
-                    <BottomSheetScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(bottom, 24) + 80 }]}>
+                    <BottomSheetScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(bottom, 16) + 16 }]}>
                         {children}
                     </BottomSheetScrollView>
                 ) : (
-                    <View style={[styles.container, { paddingBottom: Math.max(bottom, 24) + 80 }]}>
+                    <View style={[styles.container, { paddingBottom: Math.max(bottom, 16) + 16 }]}>
                         {children}
                     </View>
                 )}

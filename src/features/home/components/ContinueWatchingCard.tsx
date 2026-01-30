@@ -16,10 +16,10 @@ const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
 
 function formatBadgeRating(value: unknown): string | null {
     const n = typeof value === 'number' ? value : Number(value);
-    if (!Number.isFinite(n)) return null;
+    if (!Number.isFinite(n) || n <= 0) return null;
 
-    if (Math.abs(n - Math.round(n)) < 0.0001) return String(Math.round(n));
-    return n.toFixed(1);
+    // Format to 1 decimal place and strip trailing .0 to prevent Android clipping
+    return parseFloat(n.toFixed(1)).toString();
 }
 
 interface ContinueWatchingCardProps {
@@ -136,7 +136,6 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                                     marginLeft: 4,
                                     letterSpacing: 0,
                                     paddingRight: 2,
-                                    includeFontPadding: true,
                                 }}
                             >
                                 {ratingText}
