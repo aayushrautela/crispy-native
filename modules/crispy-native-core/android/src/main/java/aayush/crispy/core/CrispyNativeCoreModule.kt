@@ -103,21 +103,28 @@ class CrispyNativeCoreModule : Module() {
 
     AsyncFunction("enterPiP") { width: Double?, height: Double? ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
-      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-          val builder = android.app.PictureInPictureParams.Builder()
-          if (width != null && height != null && height > 0) {
-              val rational = android.util.Rational(width.toInt(), height.toInt())
-              // Android PiP has limits on aspect ratio (max 2.39:1, min 1:2.39)
-              try {
-                  builder.setAspectRatio(rational)
-              } catch (e: Exception) {
-                  Log.w("CrispyModule", "Failed to set aspect ratio: ${e.message}")
-              }
-          }
-          activity.enterPictureInPictureMode(builder.build())
-          return@AsyncFunction true
-      }
-      return@AsyncFunction false
+      // Keep shared state in sync even when PiP is entered explicitly.
+      PipState.enabled = true
+      PipState.isPlaying = true
+      PipState.setAspectRatio(width, height)
+      PipState.applyToActivity(activity)
+      return@AsyncFunction PipState.enterPiP(activity, width, height)
+    }
+
+    /**
+     * Updates PiP configuration without necessarily entering PiP.
+     *
+     * JS should call this from the player screen whenever:
+     * - playback starts/pauses
+     * - video dimensions become known
+     * - player screen mounts/unmounts (enabled flag)
+     */
+    AsyncFunction("setPiPConfig") { enabled: Boolean, isPlaying: Boolean, width: Double?, height: Double? ->
+      PipState.enabled = enabled
+      PipState.isPlaying = isPlaying
+      PipState.setAspectRatio(width, height)
+      PipState.applyToActivity(appContext.currentActivity)
+      return@AsyncFunction true
     }
 
     // --- VIDEO PLAYER VIEW ---

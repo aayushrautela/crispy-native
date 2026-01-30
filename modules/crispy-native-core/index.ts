@@ -10,6 +10,13 @@ export interface CrispyMediaMetadata {
     artworkUrl?: string;
 }
 
+export interface CrispyPiPConfig {
+    enabled: boolean;
+    isPlaying: boolean;
+    width?: number;
+    height?: number;
+}
+
 export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;
@@ -124,11 +131,31 @@ export default {
     /**
      * Enters Picture-in-Picture mode.
      */
-    async enterPiP(): Promise<void> {
+    async enterPiP(width?: number, height?: number): Promise<void> {
         try {
-            await CrispyNativeCore.enterPiP();
+            await CrispyNativeCore.enterPiP(width ?? null, height ?? null);
         } catch (e) {
             console.error('[CrispyNativeCore] enterPiP failed:', e);
+        }
+    },
+
+    /**
+     * Updates PiP configuration without entering PiP.
+     *
+     * This is used so Android PiP can use the correct aspect ratio and so
+     * MainActivity can decide whether it should enter PiP on user leave.
+     */
+    async setPiPConfig(config: CrispyPiPConfig): Promise<boolean> {
+        try {
+            return await CrispyNativeCore.setPiPConfig(
+                config.enabled,
+                config.isPlaying,
+                config.width ?? null,
+                config.height ?? null
+            );
+        } catch (e) {
+            console.error('[CrispyNativeCore] setPiPConfig failed:', e);
+            return false;
         }
     }
 };
