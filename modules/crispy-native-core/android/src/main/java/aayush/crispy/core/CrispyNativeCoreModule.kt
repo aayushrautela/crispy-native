@@ -42,6 +42,9 @@ class CrispyNativeCoreModule : Module() {
     OnCreate {
       val context = appContext.reactContext ?: return@OnCreate
       val downloadDir = context.getExternalFilesDir(null) ?: context.filesDir
+
+      // PiP lifecycle bridge (events + pause-on-dismiss).
+      PipBridge.start(context)
       
       // 1. Start Local Server
       crispyServer = CrispyServer(11470, downloadDir)
@@ -57,6 +60,8 @@ class CrispyNativeCoreModule : Module() {
         isBound = false
       }
       crispyServer?.stop()
+
+      PipBridge.stop()
     }
 
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->

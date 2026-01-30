@@ -536,6 +536,15 @@ export default function PlayerScreen() {
             if (controlsTimer.current) clearTimeout(controlsTimer.current);
         });
 
+        const pipDismissedSubscription = DeviceEventEmitter.addListener('onPipDismissed', () => {
+            console.log('[Player] PiP dismissed — pausing playback');
+            setPaused(true);
+            setIsPipMode(false);
+            setShowControls(false);
+            setActiveTab('none');
+            if (controlsTimer.current) clearTimeout(controlsTimer.current);
+        });
+
         // Sync initial state in case the event was missed.
         if (Platform.OS === 'android' && CrispyNativeCore.isInPiPMode) {
             void CrispyNativeCore.isInPiPMode().then((v: boolean) => {
@@ -550,6 +559,7 @@ export default function PlayerScreen() {
         return () => {
             pipSubscription.remove();
             pipWillEnterSubscription.remove();
+            pipDismissedSubscription.remove();
             const unlock = async () => {
                 try {
                     await SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.PORTRAIT_UP);
@@ -607,6 +617,12 @@ export default function PlayerScreen() {
                     setShowControls(false);
                     setActiveTab('none');
                     if (controlsTimer.current) clearTimeout(controlsTimer.current);
+                } else {
+                    // Match the native event behavior in case the activity callback is missed.
+                    setShowControls(true);
+                    setActiveTab('none');
+                    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+                    controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
                 }
             });
         }, 800);

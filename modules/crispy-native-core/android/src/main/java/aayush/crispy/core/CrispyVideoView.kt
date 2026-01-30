@@ -14,7 +14,7 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
-class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver {
+class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, PipPlaybackTarget {
 
     companion object {
         private const val TAG = "CrispyVideoView"
@@ -29,6 +29,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private var lastAppliedSurfaceW: Int = 0
     private var lastAppliedSurfaceH: Int = 0
+
+    private var requestedResizeMode: String? = null
+    private var isInPipMode: Boolean = false
 
     // Media Session Handler
     private var mediaSessionHandler: MediaSessionHandler? = null
@@ -120,6 +123,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
         // Register lifecycle listener properly
         (context as? ReactContext)?.addLifecycleEventListener(lifeCycleListener)
+
+        PlaybackRegistry.register(this)
     }
 
     override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
@@ -179,6 +184,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
         Log.d(TAG, "Surface texture destroyed")
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
+
+        PlaybackRegistry.unregister(this)
+
         if (isMpvInitialized) {
             MPVLib.removeObserver(this)
             MPVLib.detachSurface()
@@ -361,9 +369,19 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     fun setResizeMode(mode: String?) {
-        if (isMpvInitialized) {
+        requestedResizeMode = mode
+        applyResizeMode(if (isInPipMode) "contain" else mode)
+    }
+
+    private fun applyResizeMode(mode: String?) {
+        if (!isMpvInitialized) return
+
+        try {
             when (mode) {
-                "cover" -> MPVLib.setPropertyDouble("panscan", 1.0)
+                "cover" -> {
+                    MPVLib.setPropertyDouble("panscan", 1.0)
+                    MPVLib.setPropertyString("keepaspect", "yes")
+                }
                 "stretch" -> {
                     MPVLib.setPropertyDouble("panscan", 0.0)
                     MPVLib.setPropertyString("keepaspect", "no")
@@ -373,7 +391,18 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                     MPVLib.setPropertyString("keepaspect", "yes")
                 }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to set resize mode", e)
         }
+    }
+
+    override fun onPipModeChanged(isPip: Boolean) {
+        isInPipMode = isPip
+        applyResizeMode(if (isPip) "contain" else requestedResizeMode)
+    }
+
+    override fun pauseFromPipDismissed() {
+        setPaused(true)
     }
 
     // Subtitle Styling (Ported from Nuvio)
