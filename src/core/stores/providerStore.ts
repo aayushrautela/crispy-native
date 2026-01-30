@@ -126,15 +126,33 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     getStreams: async (type, id) => {
         const { addons, manifests } = useUserStore.getState();
 
+        const normalizedType = type === 'show' ? 'series' : type;
+
         const promises = addons.map(addon => {
             const manifest = manifests[addon.url];
-            const hasStreams = manifest?.resources?.some(r =>
+            if (!manifest) return null;
+
+            const hasStreamResource = manifest?.resources?.some(r =>
                 (typeof r === 'string' ? r === 'stream' : r.name === 'stream')
             );
-            if (hasStreams) {
-                return AddonService.getStreams(addon.url, type, id);
-            }
-            return null;
+
+            const supportsType =
+                manifest.types?.includes(normalizedType) ||
+                manifest.resources?.some(r =>
+                    typeof r !== 'string' && r.name === 'stream' && r.types?.includes(normalizedType)
+                );
+
+            if (!hasStreamResource || !supportsType) return null;
+
+            const addonName = manifest.name || addon.url;
+            return AddonService.getStreams(addon.url, normalizedType, id).then((res) => ({
+                streams: (res.streams || []).map(s => ({
+                    ...s,
+                    addonName,
+                    addonUrl: addon.url,
+                    addonId: manifest.id,
+                }))
+            }));
         }).filter(p => p !== null) as Promise<{ streams: any[] }>[];
 
         const results = await Promise.allSettled(promises);
@@ -146,6 +164,25 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
             }
         });
 
-        return allStreams;
+        // De-dupe for stable UX (many addons return identical magnet URLs)
+        const seen = new Set<string>();
+        const deduped = allStreams.filter((s: any) => {
+            const key =
+                (typeof s?.url === 'string' && s.url) ||
+                (s?.infoHash ? `infoHash:${s.infoHash}:${s.fileIdx ?? ''}` : '') ||
+                `${s?.addonId ?? s?.addonName ?? ''}:${s?.name ?? s?.title ?? ''}`;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        // Prefer higher-seeded results first when available
+        deduped.sort((a: any, b: any) => {
+            const sa = typeof a?.seeders === 'number' ? a.seeders : -1;
+            const sb = typeof b?.seeders === 'number' ? b.seeders : -1;
+            return sb - sa;
+        });
+
+        return deduped;
     }
 }));

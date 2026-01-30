@@ -22,6 +22,7 @@ export function EpisodesTab({
     onSelectEpisode
 }: EpisodesTabProps) {
     const { theme } = useTheme();
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
     if (!episodes || episodes.length === 0) {
         return (
@@ -49,7 +50,6 @@ export function EpisodesTab({
                                 backgroundColor: isSelected
                                     ? theme.colors.primaryContainer
                                     : 'transparent',
-                                borderColor: theme.colors.outlineVariant
                             }
                         ]}
                     >
@@ -100,7 +100,6 @@ const styles = StyleSheet.create({
     item: {
         padding: 12,
         borderRadius: 12,
-        borderWidth: 1,
         flexDirection: 'row',
         alignItems: 'center',
     }

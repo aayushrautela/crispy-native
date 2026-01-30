@@ -12,7 +12,7 @@ export const usePlayerControls = (
     isSeeking: React.MutableRefObject<boolean>,
     isMounted: React.MutableRefObject<boolean>,
     // Dual engine support
-    exoPlayerRef?: React.RefObject<VideoRef>,
+    exoPlayerRef?: React.RefObject<VideoRef | null>,
     useExoPlayer?: boolean
 ) => {
     const togglePlayback = useCallback(() => {

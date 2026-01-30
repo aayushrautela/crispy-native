@@ -261,10 +261,14 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         return <View style={styles.container} />;
     }
 
+    // react-native-video's type defs can lag behind supported props.
+    // We keep the component typed, but cast at the callsite for a few props.
+    const ExoVideo = Video as any;
+
     return (
         <View style={styles.container}>
             {useExoPlayer ? (
-                <Video
+                <ExoVideo
                     ref={exoPlayerRef}
                     source={{ uri: source, headers }}
                     paused={paused}
@@ -281,9 +285,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     progressUpdateInterval={500}
                     playInBackground={true}
                     playWhenInactive={true}
-                    pictureInPicture={true}
                     title={props.metadata?.title}
-                    subtitle={props.metadata?.artist}
+                    subtitle={props.metadata?.subtitle}
                     poster={props.metadata?.artworkUrl}
                     ignoreSilentSwitch="ignore"
                     automaticallyWaitsToMinimizeStalling={true}
@@ -311,6 +314,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         </View>
     );
 });
+
+VideoSurface.displayName = 'VideoSurface';
 
 const styles = StyleSheet.create({
     container: {

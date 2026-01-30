@@ -30,6 +30,10 @@ export interface AppSettings {
     amoledMode: boolean;
     useMaterialYou: boolean;
     videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
+
+    // Player engine tuning (used by MPV surface)
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    gpuMode?: 'gpu' | 'gpu-next';
     updatedAt?: number;
 }
 
@@ -41,7 +45,6 @@ export interface Addon {
 }
 
 export interface CatalogPreferences {
-    disabled: string[];
     disabled: string[];
     hero: string[];
     traktTopPicks: boolean;
@@ -91,6 +94,9 @@ function getDefaultSettings(): AppSettings {
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
         useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
         videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
+
+        decoderMode: (StorageService.getUser<string>('crispy-decoder-mode') as any) || 'auto',
+        gpuMode: (StorageService.getUser<string>('crispy-gpu-mode') as any) || 'gpu',
     };
 }
 

@@ -1,5 +1,7 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { AddonService } from '@/src/core/services/AddonService';
+import { TMDBService } from '@/src/core/services/TMDBService';
+import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
@@ -28,8 +30,8 @@ import {
     StepBack,
     StepForward
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { DeviceEventEmitter, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -43,6 +45,9 @@ const SafeOrientation = ScreenOrientation || {};
 
 const LOCAL_STREAM_BASE = 'http://127.0.0.1:11470';
 
+const INTRO_SKIP_TO_SECONDS = 85;
+const UP_NEXT_TRIGGER_SECONDS = 25;
+
 const normalizeLocalStreamUrl = (url: string) => {
     if (!url) return url;
     return url
@@ -51,6 +56,19 @@ const normalizeLocalStreamUrl = (url: string) => {
 };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+type ContentType = 'movie' | 'series';
+
+const pickParam = (v: string | string[] | undefined): string | undefined => {
+    if (Array.isArray(v)) return v[0];
+    return v;
+};
+
+const normalizeContentType = (raw: unknown): ContentType => {
+    const t = String(raw ?? '').toLowerCase();
+    if (t === 'series' || t === 'show' || t === 'tv') return 'series';
+    return 'movie';
+};
 
 const waitForLocalStreamReady = async (url: string, signal: AbortSignal, timeoutMs = 45_000) => {
     const startedAt = Date.now();
@@ -71,7 +89,7 @@ const waitForLocalStreamReady = async (url: string, signal: AbortSignal, timeout
 
             const body = await res.text().catch(() => '');
             throw new Error(`Unexpected status ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
-        } catch (e) {
+        } catch {
             // Network errors can happen while the server/service spins up; retry briefly.
             await sleep(750);
         }
@@ -84,19 +102,43 @@ type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info
 
 export default function PlayerScreen() {
     const params = useLocalSearchParams();
-    const { id, type, url, title, infoHash, fileIdx, headers: headersParam, streams: streamsParam, poster, episodeTitle } = params;
+
+    const idParam = pickParam(params.id);
+    const typeParam = pickParam(params.type);
+    const urlParam = pickParam(params.url);
+    const titleParam = pickParam(params.title);
+    const infoHashParam = pickParam(params.infoHash);
+    const fileIdxParam = pickParam(params.fileIdx);
+    const headersParam = pickParam(params.headers);
+    const streamsParam = pickParam(params.streams);
+    const posterParam = pickParam(params.poster);
+    const episodeTitleParam = pickParam(params.episodeTitle);
+
+    const id = idParam || '';
+    const type: ContentType = normalizeContentType(typeParam);
+    const url = urlParam || '';
+    const title = titleParam || '';
+    const infoHash = infoHashParam || '';
+    const fileIdx = fileIdxParam || '';
+    const poster = posterParam || '';
+    const episodeTitle = episodeTitleParam || '';
+
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
+    const getStreams = useProviderStore((s) => s.getStreams);
 
     const [finalUrl, setFinalUrl] = useState<string | null>(null);
     const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
 
     // Internal state for seamless switching (overrides params)
-    const [activeStream, setActiveStream] = useState<{ url: string; infoHash?: string; fileIdx?: string } | null>(null);
+    const [activeStream, setActiveStream] = useState<{ url?: string; infoHash?: string; fileIdx?: number; behaviorHints?: { headers?: Record<string, string> } } | null>(null);
     const [resumePosition, setResumePosition] = useState<number | null>(null);
 
     const [availableStreams, setAvailableStreams] = useState<any[]>([]); // For StreamsTab
+    const [streamsLoading, setStreamsLoading] = useState(false);
+    const [pendingEpisode, setPendingEpisode] = useState<null | { videoId: string; season: number; episode: number; episodeTitle?: string }>(null);
+    const [playbackRate, setPlaybackRate] = useState(1.0);
     const [paused, setPaused] = useState(false);
     const [loading, setLoading] = useState(true);
     const [showControls, setShowControls] = useState(true);
@@ -105,6 +147,36 @@ export default function PlayerScreen() {
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     const [isPipMode, setIsPipMode] = useState(false);
+
+    const [showUpNext, setShowUpNext] = useState(false);
+    const [upNextTimer, setUpNextTimer] = useState(0);
+
+    // If we navigate to a different item (e.g. another episode), clear any internal
+    // overrides so the new route params take effect.
+    const lastRouteKeyRef = useRef<string>('');
+    useEffect(() => {
+        const key = `${type}:${id}`;
+        if (!id) return;
+
+        if (!lastRouteKeyRef.current) {
+            lastRouteKeyRef.current = key;
+            return;
+        }
+
+        if (lastRouteKeyRef.current !== key) {
+            lastRouteKeyRef.current = key;
+            setActiveStream(null);
+            setResumePosition(null);
+            setPendingEpisode(null);
+            setActiveTab('none');
+
+            // Reset external subtitle overlay state on content change
+            setSelectedExternalSubId(null);
+            setSelectedSubtitleId(-1);
+            setParsedCues([]);
+            setCurrentSubtitleText('');
+        }
+    }, [id, type]);
 
     // Info Tab State (Meta Aggregator)
     const baseId = useMemo(() => {
@@ -179,48 +251,51 @@ export default function PlayerScreen() {
 
     // Gesture & Feedback State
     const [seekAccumulation, setSeekAccumulation] = useState<{ amount: number; direction: 'forward' | 'backward' | null }>({ amount: 0, direction: null });
-    const seekAccumulationTimer = useRef<NodeJS.Timeout | null>(null);
+    const seekAccumulationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const seekBasePosition = useRef<number | null>(null);
     const lastTapRef = useRef<{ time: number; x: number }>({ time: 0, x: 0 });
     const { width } = useWindowDimensions();
 
     // Play/Pause Animation State
     const playPauseScale = useSharedValue(1);
-    const [isIconAnimating, setIsIconAnimating] = useState(false);
+    // (reserved) icon animation state removed; controls already animate via reanimated
 
     // Media Metadata for Notification
     const mediaMetadata = useMemo(() => {
-        let displayTitle = ((episodeTitle || title) as string) || 'Unknown Title';
-        let displayArtist = ((type === 'movie' ? 'Movie' : title) as string) || 'Crispy Player';
-        let displayArtwork = (poster as string) || '';
+        let displayTitle = (episodeTitle || title) || 'Unknown Title';
+        let displaySubtitle = (type === 'movie' ? 'Movie' : title) || 'Crispy Player';
+        let displayArtwork = poster || '';
 
         // Try to upgrade metadata from MetaAggregator
-        if (type === 'show') {
-            // Upgrade Show Name (Artist)
-            if (enriched?.title) displayArtist = enriched.title;
-            else if (meta?.title) displayArtist = meta.title;
+        if (type === 'series') {
+            // Upgrade Show Name (Subtitle)
+            if (enriched?.title) displaySubtitle = enriched.title;
+            else if ((meta as any)?.name) displaySubtitle = (meta as any).name;
 
             // Upgrade Episode Name (Title) & Artwork
             const episodeId = String(id).split(':')[2];
             if (episodeId && seasonEpisodes?.length > 0) {
-                const ep = seasonEpisodes.find((e: any) => String(e.number) === episodeId || String(e.id) === episodeId);
+                const ep = seasonEpisodes.find((e: any) => {
+                    const num = e?.episode ?? e?.number ?? e?.episodeNumber;
+                    return String(num) === episodeId || String(e?.id) === episodeId;
+                });
                 if (ep) {
-                    if (ep.title) displayTitle = ep.title;
-                    if (ep.image) displayArtwork = ep.image; // Use episode specific image if available
+                    if (ep.name || ep.title) displayTitle = ep.name || ep.title;
+                    if (ep.thumbnail || ep.image) displayArtwork = ep.thumbnail || ep.image;
                 }
             }
         } else {
             // For movies, upgrade from enriched/meta
             if (enriched?.title) displayTitle = enriched.title;
-            else if (meta?.title) displayTitle = meta.title;
+            else if ((meta as any)?.name) displayTitle = (meta as any).name;
 
-            if (enriched?.images?.poster?.[0]) displayArtwork = enriched.images.poster[0];
-            else if (meta?.image) displayArtwork = meta.image;
+            if (enriched?.poster) displayArtwork = enriched.poster;
+            else if ((meta as any)?.poster) displayArtwork = (meta as any).poster;
         }
 
         const metaObj = {
             title: displayTitle,
-            artist: displayArtist,
+            subtitle: displaySubtitle,
             artworkUrl: displayArtwork,
         };
         console.log('[Player] Generating mediaMetadata:', metaObj);
@@ -236,25 +311,67 @@ export default function PlayerScreen() {
     });
 
     const videoRef = useRef<VideoSurfaceRef>(null);
-    const controlsTimer = useRef<NodeJS.Timeout | null>(null);
+    const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Parse headers if present
+    // Parse headers/streams if present
     useEffect(() => {
         if (headersParam && typeof headersParam === 'string') {
             try {
                 setHeaders(JSON.parse(headersParam));
             } catch (e) {
-                console.error("Failed to parse headers", e);
+                console.error('Failed to parse headers', e);
             }
         }
+
         if (streamsParam && typeof streamsParam === 'string') {
             try {
                 setAvailableStreams(JSON.parse(streamsParam));
             } catch (e) {
-                console.error("Failed to parse streams", e);
+                console.error('Failed to parse streams', e);
             }
         }
-    }, [headersParam]);
+    }, [headersParam, streamsParam]);
+
+    const loadStreamsFor = async (contentType: ContentType, videoId: string) => {
+        if (!videoId) return;
+        setStreamsLoading(true);
+        try {
+            const streams = await getStreams(contentType, videoId);
+            setAvailableStreams(streams);
+        } catch (e) {
+            console.error('[Player] Failed to fetch streams', e);
+            setAvailableStreams([]);
+        } finally {
+            setStreamsLoading(false);
+        }
+    };
+
+    // Always fetch streams in-player (streams param is treated as warm cache only)
+    useEffect(() => {
+        if (!id) return;
+        if (pendingEpisode) return;
+
+        let cancelled = false;
+        setStreamsLoading(true);
+
+        getStreams(type, id)
+            .then((streams) => {
+                if (!cancelled) setAvailableStreams(streams);
+            })
+            .catch((e) => {
+                if (!cancelled) {
+                    console.error('[Player] Failed to fetch streams', e);
+                    setAvailableStreams([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setStreamsLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [getStreams, id, type, pendingEpisode]);
 
     const { manifests } = useUserStore();
 
@@ -267,9 +384,12 @@ export default function PlayerScreen() {
         const controller = new AbortController();
 
         // Use activeStream if set, otherwise fall back to params
-        const currentUrl = activeStream?.url || url as string;
+        const currentUrl = activeStream?.url || url;
         const currentInfoHash = activeStream?.infoHash || infoHash;
-        const currentFileIdx = activeStream?.fileIdx || fileIdx;
+        const currentFileIdx =
+            typeof activeStream?.fileIdx === 'number'
+                ? activeStream.fileIdx
+                : (fileIdx ? parseInt(String(fileIdx), 10) : undefined);
 
         const resolve = async () => {
             setLoading(true);
@@ -280,7 +400,7 @@ export default function PlayerScreen() {
             // 1. Magnet link or infoHash -> Torrent
             if (currentUrl?.startsWith('magnet:') || currentInfoHash) {
                 const hash = (currentInfoHash as string) || extractInfoHash(currentUrl);
-                const idx = currentFileIdx ? parseInt(currentFileIdx as string) : -1;
+                const idx = typeof currentFileIdx === 'number' ? currentFileIdx : -1;
 
                 if (hash) {
                     console.log(`Resolving torrent module... Hash: ${hash}, Idx: ${idx}, Session: ${sessionId}`);
@@ -340,7 +460,7 @@ export default function PlayerScreen() {
                 CrispyNativeCore.destroyStream(sessionId);
             }
         };
-    }, [url, infoHash, fileIdx, activeStream, id, type, sessionId]);
+    }, [url, infoHash, fileIdx, activeStream, id, type, sessionId, manifests]);
 
     useEffect(() => {
         // Lock to landscape
@@ -380,7 +500,7 @@ export default function PlayerScreen() {
         };
     }, []);
 
-    const resetControlsTimer = () => {
+    const resetControlsTimer = useCallback(() => {
         if (isPipMode) return;
         if (controlsTimer.current) clearTimeout(controlsTimer.current);
         setShowControls(true);
@@ -388,7 +508,7 @@ export default function PlayerScreen() {
         if (activeTab === 'none') {
             controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
         }
-    };
+    }, [activeTab, isPipMode]);
 
     // Keep controls visible when tab is active
     useEffect(() => {
@@ -399,7 +519,7 @@ export default function PlayerScreen() {
         } else {
             resetControlsTimer();
         }
-    }, [activeTab, isPipMode]);
+    }, [activeTab, isPipMode, resetControlsTimer]);
 
     const togglePlay = () => {
         const nextPaused = !paused;
@@ -509,6 +629,7 @@ export default function PlayerScreen() {
                 source={finalUrl || ''}
                 headers={headers}
                 paused={paused}
+                rate={playbackRate}
                 useExoPlayer={useExoPlayer}
                 decoderMode={settings.decoderMode}
                 gpuMode={settings.gpuMode}
@@ -516,11 +637,6 @@ export default function PlayerScreen() {
                 selectedAudioTrack={selectedAudioTrackProp}
                 selectedTextTrack={selectedTextTrackProp}
                 subtitleDelay={subtitleDelay}
-                externalSubtitles={externalSubtitles.map(s => ({
-                    url: s.url,
-                    title: s.title,
-                    language: s.language
-                }))}
                 onCodecError={handleCodecError}
                 onTracksChanged={(data) => {
                     console.log("Tracks changed", data);
@@ -529,7 +645,7 @@ export default function PlayerScreen() {
                 }}
                 onProgress={(data) => {
                     // Values are in SECONDS from react-native-video / MPV
-                    const positionSec = data.position ?? data.currentTime ?? 0;
+                    const positionSec = data.currentTime ?? 0;
                     const durationSec = data.duration ?? 0;
 
                     // Don't overwrite progress while user is seeking
@@ -542,6 +658,16 @@ export default function PlayerScreen() {
                         const adjustedTime = positionSec + (subtitleDelay / 1000); // delay is usually in ms
                         const cue = parsedCues.find(c => adjustedTime >= c.start && adjustedTime <= c.end);
                         setCurrentSubtitleText(cue?.text || '');
+                    }
+
+                    // Up Next Logic
+                    if (type === 'series' && durationSec > 0) {
+                        const timeLeft = durationSec - positionSec;
+                        if (timeLeft <= UP_NEXT_TRIGGER_SECONDS && timeLeft > 0 && !showUpNext) {
+                            setShowUpNext(true);
+                        } else if ((timeLeft > UP_NEXT_TRIGGER_SECONDS || timeLeft <= 0) && showUpNext) {
+                            setShowUpNext(false);
+                        }
                     }
                 }}
                 onLoad={(data) => {
@@ -584,6 +710,85 @@ export default function PlayerScreen() {
                 bottomOffset={(showControls ? 110 : 40) + subtitleOffset} // Push up needed + user offset
             />
 
+            {/* Skip Intro Button Overlay */}
+            {settings.introSkipMode !== 'off' && progress.position > 5 && progress.position < 180 && !isPipMode && (
+                <Animated.View
+                    entering={FadeIn.duration(300)}
+                    exiting={FadeOut.duration(300)}
+                    style={styles.skipIntroContainer}
+                >
+                    <Pressable
+                        style={[styles.skipIntroBtn, { backgroundColor: 'rgba(0,0,0,0.8)', borderColor: theme.colors.outline }]}
+                        onPress={() => {
+                            // Per user: just loading style button for now (placeholder only)
+                            console.log('Skip Intro pressed');
+                        }}
+                    >
+                        <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
+                        <Typography variant="label" style={{ color: 'white' }}>SKIP INTRO</Typography>
+                    </Pressable>
+                </Animated.View>
+            )}
+
+            {/* Up Next Overlay */}
+            {showUpNext && !isPipMode && (
+                <Animated.View
+                    entering={FadeIn.duration(300)}
+                    exiting={FadeOut.duration(300)}
+                    style={styles.upNextContainer}
+                >
+                    <View style={[styles.upNextCard, { backgroundColor: 'rgba(30,30,30,0.95)' }]}>
+                        <View style={{ flexDirection: 'row', gap: 12 }}>
+                            <Image
+                                source={{ uri: poster as string }}
+                                style={styles.upNextPoster}
+                            />
+                            <View style={{ flex: 1, justifyContent: 'center' }}>
+                                <Typography variant="label-small" style={{ color: theme.colors.primary }}>UP NEXT</Typography>
+                                <Typography variant="title-medium" style={{ color: 'white' }} numberOfLines={1}>
+                                    {title}
+                                </Typography>
+                                <Typography variant="body-small" style={{ color: 'rgba(255,255,255,0.7)' }} numberOfLines={1}>
+                                    Next Episode
+                                </Typography>
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                            <Pressable
+                                style={[styles.upNextActionBtn, { backgroundColor: theme.colors.primary, flex: 2 }]}
+                                onPress={() => {
+                                    // Trigger next episode flow via Info tab's selection logic
+                                    const nextEpNum = Number(id.toString().split(':')[2]) + 1;
+                                    const nextEp = seasonEpisodes.find(e => Number(e.episode) === nextEpNum);
+                                    if (nextEp) {
+                                        // Use existing onSelectEpisode-like logic
+                                        const videoId = `${baseId}:${activeSeason}:${nextEpNum}`;
+                                        setPendingEpisode({
+                                            videoId,
+                                            season: activeSeason,
+                                            episode: nextEpNum,
+                                            episodeTitle: nextEp.name || nextEp.title,
+                                        });
+                                        setActiveTab('streams');
+                                        loadStreamsFor('series', videoId);
+                                    } else {
+                                        setShowUpNext(false);
+                                    }
+                                }}
+                            >
+                                <Typography variant="label" style={{ color: theme.colors.onPrimary }}>PLAY NEXT</Typography>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.upNextActionBtn, { backgroundColor: 'rgba(255,255,255,0.1)', flex: 1 }]}
+                                onPress={() => setShowUpNext(false)}
+                            >
+                                <Typography variant="label" style={{ color: 'white' }}>CANCEL</Typography>
+                            </Pressable>
+                        </View>
+                    </View>
+                </Animated.View>
+            )}
+
             {/* Gesture Layer & Main UI Wrapper */}
             <Pressable style={StyleSheet.absoluteFill} onPress={handleTouchEnd}>
                 {showControls && !isPipMode && (
@@ -599,11 +804,11 @@ export default function PlayerScreen() {
                             </Pressable>
                             <View style={styles.titlesContainer}>
                                 <Text style={styles.mainTitle} numberOfLines={1}>
-                                    {title as string}
+                                    {title}
                                 </Text>
-                                {params.episodeTitle && (
+                                {!!episodeTitle && (
                                     <Text style={styles.subTitle} numberOfLines={1}>
-                                        {params.episodeTitle as string}
+                                        {episodeTitle}
                                     </Text>
                                 )}
                             </View>
@@ -763,7 +968,12 @@ export default function PlayerScreen() {
             {/* Side Sheet */}
             <SideSheet
                 isVisible={activeTab !== 'none'}
-                onClose={() => setActiveTab('none')}
+                onClose={() => {
+                    setActiveTab('none');
+                    if (pendingEpisode) {
+                        setPendingEpisode(null);
+                    }
+                }}
                 title={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
             >
                 <View style={{ flex: 1 }}>
@@ -780,63 +990,15 @@ export default function PlayerScreen() {
                     )}
                     {activeTab === 'subtitles' && (
                         <SubtitlesTab
-                            tracks={allSubtitleTracks}
-                            selectedTrackId={selectedExternalSubId || (selectedSubtitleId === -1 ? 'off' : selectedSubtitleId)}
                             delay={subtitleDelay}
                             onUpdateDelay={setSubtitleDelay}
-                            size={subtitleSize}
-                            onUpdateSize={setSubtitleSize}
-                            offset={subtitleOffset}
-                            onUpdateOffset={setSubtitleOffset}
-                            onSelectTrack={async (track) => {
-                                console.log('[Player] SubtitlesTab onSelectTrack called:', track ? { id: track.id, title: track.title, isExternal: track.isExternal, url: track.url } : null);
-                                if (!track) {
-                                    // Disable everything
-                                    setSelectedSubtitleId(-1);
-                                    setSelectedExternalSubId(null);
-                                    setParsedCues([]);
-                                    setCurrentSubtitleText('');
-                                    if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
-                                } else if (track.url && (track.isExternal || typeof track.id === 'string')) {
-                                    // EXTERNAL SELECTION (By ID/URL) - JS Overlay Way
-                                    console.log('[Player] Selecting EXTERNAL subtitle via JS Overlay:', track.url);
-
-                                    try {
-                                        setLoading(true);
-                                        const response = await fetch(track.url);
-                                        const content = await response.text();
-                                        const cues = parseSubtitle(content, track.url);
-
-                                        setParsedCues(cues);
-                                        setSelectedSubtitleId(-1); // Disable internal
-                                        setSelectedExternalSubId(String(track.id));
-
-                                        if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(-1);
-                                    } catch (e) {
-                                        console.error("Failed to load external subtitle", e);
-                                    } finally {
-                                        setLoading(false);
-                                    }
-                                } else {
-                                    // INTERNAL SELECTION (By Index)
-                                    const trackId = Number(track.id);
-                                    console.log('[Player] Selecting INTERNAL subtitle index:', trackId);
-                                    setSelectedSubtitleId(trackId);
-                                    setSelectedExternalSubId(null);
-                                    setParsedCues([]);
-                                    setCurrentSubtitleText('');
-                                    if (!useExoPlayer) videoRef.current?.setSubtitleTrack?.(trackId);
-                                }
-                                setActiveTab('none');
-                            }}
                         />
                     )}
                     {activeTab === 'settings' && (
                         <SettingsTab
-                            playbackSpeed={1.0}
+                            playbackSpeed={playbackRate}
                             onSelectSpeed={(speed) => {
-                                console.log("Speed selected", speed);
-                                // Wiring speed needs VideoSurface update or ref method, leaving for now
+                                setPlaybackRate(speed);
                                 setActiveTab('none');
                             }}
                         />
@@ -844,20 +1006,56 @@ export default function PlayerScreen() {
                     {activeTab === 'streams' && (
                         <StreamsTab
                             streams={availableStreams}
-                            currentStreamUrl={(activeStream?.url || url) as string}
+                            currentStreamUrl={activeStream?.url || url}
+                            isLoading={streamsLoading}
                             onSelectStream={(stream) => {
-                                console.log("Switching to stream:", stream);
-                                // Save current position
+                                console.log('Switching to stream:', stream);
+
+                                // Episode selection flow: selecting an episode opens streams; picking a stream navigates.
+                                if (pendingEpisode) {
+                                    const nextTitle = enriched?.title || (meta as any)?.name || title || 'Video';
+                                    const epName = pendingEpisode.episodeTitle || '';
+                                    const nextEpisodeTitle = `S${pendingEpisode.season}:E${pendingEpisode.episode}${epName ? ` - ${epName}` : ''}`;
+
+                                    const params: any = {
+                                        id: pendingEpisode.videoId,
+                                        type: 'series',
+                                        url: (stream as any).url || '',
+                                        title: nextTitle,
+                                        episodeTitle: nextEpisodeTitle,
+                                    };
+
+                                    const artwork = enriched?.poster || (meta as any)?.poster || poster;
+                                    if (artwork) params.poster = artwork;
+
+                                    if ((stream as any).infoHash) {
+                                        params.infoHash = (stream as any).infoHash;
+                                        if ((stream as any).fileIdx !== undefined) params.fileIdx = String((stream as any).fileIdx);
+                                    }
+
+                                    if ((stream as any).behaviorHints?.headers) {
+                                        params.headers = JSON.stringify((stream as any).behaviorHints.headers);
+                                    }
+
+                                    if (availableStreams?.length > 0) {
+                                        params.streams = JSON.stringify(availableStreams);
+                                    }
+
+                                    setActiveTab('none');
+                                    setPendingEpisode(null);
+                                    router.replace({ pathname: '/player', params });
+                                    return;
+                                }
+
+                                // Quality switching flow: in-place switch, keep playback position.
                                 setResumePosition(progress.position);
 
-                                // Update headers
-                                if (stream.behaviorHints?.headers) {
-                                    setHeaders(stream.behaviorHints.headers);
+                                if ((stream as any).behaviorHints?.headers) {
+                                    setHeaders((stream as any).behaviorHints.headers);
                                 } else {
                                     setHeaders(undefined);
                                 }
 
-                                // Switch stream and close tab
                                 setActiveStream(stream);
                                 setActiveTab('none');
                             }}
@@ -872,8 +1070,30 @@ export default function PlayerScreen() {
                             currentEpisodeId={String(id).split(':')[2]}
                             onSelectEpisode={(ep) => {
                                 console.log('[Player] Selected episode:', ep);
-                                // Future: Implement episode switching logic (requires resolving streams)
-                                setActiveTab('none');
+
+                                const seasonNum = activeSeason;
+                                const episodeNum = Number(ep?.episode ?? ep?.number ?? ep?.episodeNumber);
+                                if (!baseId || !seasonNum || !episodeNum) return;
+
+                                const videoId = `${baseId}:${seasonNum}:${episodeNum}`;
+
+                                // If user taps the currently-playing episode, treat it as a stream switch (no navigation).
+                                if (videoId === id) {
+                                    setPendingEpisode(null);
+                                    setActiveTab('streams');
+                                    loadStreamsFor(type, id);
+                                    return;
+                                }
+
+                                setPendingEpisode({
+                                    videoId,
+                                    season: seasonNum,
+                                    episode: episodeNum,
+                                    episodeTitle: ep?.name || ep?.title,
+                                });
+
+                                setActiveTab('streams');
+                                loadStreamsFor('series', videoId);
                             }}
                             colors={colors}
                         />
@@ -893,6 +1113,43 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 1,
+    },
+    skipIntroContainer: {
+        position: 'absolute',
+        bottom: 120,
+        right: 48,
+        zIndex: 100,
+    },
+    skipIntroBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    upNextContainer: {
+        position: 'absolute',
+        bottom: 100,
+        right: 48,
+        width: 320,
+        zIndex: 100,
+    },
+    upNextCard: {
+        padding: 16,
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    upNextPoster: {
+        width: 60,
+        height: 90,
+        borderRadius: 8,
+    },
+    upNextActionBtn: {
+        paddingVertical: 10,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     overlay: {
         flex: 1,

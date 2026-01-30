@@ -4,9 +4,7 @@ import { Typography } from '@/src/core/ui/Typography';
 import { MetaPalette } from '@/src/features/meta/hooks/useMetaAggregator';
 import { Play } from 'lucide-react-native';
 import React, { useMemo } from 'react';
-import { Dimensions, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 interface InfoTabProps {
     meta: Partial<TMDBMeta>;
@@ -28,11 +26,11 @@ export function InfoTab({
     colors,
 }: InfoTabProps) {
     const { theme } = useTheme();
-    const isSeries = meta.type === 'series' || meta.type === 'tv';
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
+    const isSeries = meta.type === 'series';
 
     // Dynamic Accent Colors
     const activeColor = colors.vibrant || theme.colors.primary;
-    const activeOnColor = colors.vibrant ? '#000000' : theme.colors.onPrimary;
 
     // Seasons list from meta
     const seasons = useMemo(() => {
@@ -43,63 +41,89 @@ export function InfoTab({
     }, [meta.seasons]);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.container}>
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Header Section */}
+                {/* Header Section - Screenshot Style */}
                 <View style={styles.header}>
-                    <Image
-                        source={{ uri: meta.poster }}
-                        style={styles.poster}
-                        resizeMode="cover"
-                    />
-                    <View style={styles.headerInfo}>
-                        <Typography variant="h3" numberOfLines={2} style={{ color: theme.colors.onSurface }}>
-                            {meta.title}
+                    <Typography variant="h3" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
+                        {meta.title || (meta as any).name}
+                    </Typography>
+                    
+                    <View style={styles.metaRow}>
+                        <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant }}>
+                            {meta.year}
                         </Typography>
-                        <View style={styles.metaRow}>
-                            <Typography variant="label" style={{ color: activeColor }}>
-                                {meta.year}
-                            </Typography>
-                            {meta.runtime && (
-                                <>
-                                    <View style={[styles.dot, { backgroundColor: theme.colors.onSurfaceVariant }]} />
-                                    <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant }}>
-                                        {meta.runtime}
-                                    </Typography>
-                                </>
-                            )}
-                            {meta.rating && (
-                                <>
-                                    <View style={[styles.dot, { backgroundColor: theme.colors.onSurfaceVariant }]} />
-                                    <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant }}>
-                                        ★ {meta.rating}
-                                    </Typography>
-                                </>
-                            )}
-                        </View>
-                        {meta.genres && meta.genres.length > 0 && (
-                            <View style={styles.genres}>
-                                {meta.genres.slice(0, 3).map(g => (
-                                    <View key={g} style={[styles.genreChip, { borderColor: theme.colors.outline }]}>
-                                        <Typography variant="label-small" style={{ color: theme.colors.onSurfaceVariant }}>
-                                            {g}
-                                        </Typography>
-                                    </View>
-                                ))}
-                            </View>
+                        <View style={[styles.dot, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+                        {meta.runtime && (
+                            <>
+                                <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant }}>
+                                    {meta.runtime}
+                                </Typography>
+                                <View style={[styles.dot, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+                            </>
                         )}
-                        <Typography
-                            variant="body-small"
-                            style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}
-                            numberOfLines={4}
-                        >
-                            {meta.description}
-                        </Typography>
+                        {meta.maturityRating && (
+                            <>
+                                <View style={[styles.ratingBadge, { borderColor: theme.colors.outline }]}>
+                                    <Typography variant="label-small" style={{ color: theme.colors.onSurfaceVariant, fontWeight: 'bold' }}>
+                                        {meta.maturityRating}
+                                    </Typography>
+                                </View>
+                                <View style={[styles.dot, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+                            </>
+                        )}
                     </View>
+
+                    {meta.genres && meta.genres.length > 0 && (
+                        <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
+                            {meta.genres.join(' ')}
+                        </Typography>
+                    )}
+
+                    <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontWeight: 'bold', marginBottom: 8 }}>
+                        SYNOPSIS
+                    </Typography>
+                    
+                    <Typography
+                        variant="body"
+                        style={{ color: theme.colors.onSurface, lineHeight: 22 }}
+                    >
+                        {meta.description || (meta as any).overview}
+                    </Typography>
                 </View>
+
+                {/* Cast Section - Screenshot Style */}
+                {Array.isArray((meta as any).cast) && (meta as any).cast.length > 0 && (
+                    <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                        <Typography variant="label" style={{ color: theme.colors.onSurfaceVariant, fontWeight: 'bold', marginBottom: 16 }}>
+                            CAST
+                        </Typography>
+                        <View style={{ gap: 16 }}>
+                            {(meta as any).cast.slice(0, 10).map((c: any) => (
+                                <View key={`${c.id || c.name}`} style={styles.castRow}>
+                                    {c.profile ? (
+                                        <Image source={{ uri: c.profile }} style={styles.castAvatar} />
+                                    ) : (
+                                        <View style={[styles.castAvatar, { backgroundColor: theme.colors.surfaceVariant }]} />
+                                    )}
+                                    <View style={styles.castInfo}>
+                                        <Typography variant="title-medium" style={{ color: theme.colors.onSurface, fontWeight: '500' }}>
+                                            {c.name}
+                                        </Typography>
+                                        {c.character && (
+                                            <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
+                                                {c.character}
+                                            </Typography>
+                                        )}
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
 
                 {/* Series Content */}
                 {isSeries && seasons.length > 0 && (
@@ -133,7 +157,7 @@ export function InfoTab({
                                             variant="label"
                                             style={{
                                                 color: activeSeason === s.seasonNumber
-                                                    ? activeOnColor
+                                                    ? (colors.vibrant ? '#000000' : theme.colors.onPrimary)
                                                     : theme.colors.onSurfaceVariant
                                             }}
                                         >
@@ -154,13 +178,12 @@ export function InfoTab({
                                 return (
                                     <Pressable
                                         key={ep.episode || index}
-                                        onSelectEpisode={() => onSelectEpisode?.(ep)}
                                         onPress={() => onSelectEpisode?.(ep)}
                                         style={[
                                             styles.episodeItem,
                                             {
                                                 backgroundColor: isSelected
-                                                    ? theme.colors.surfaceContainerHigh
+                                                    ? surfaceContainerHigh
                                                     : 'transparent'
                                             }
                                         ]}
@@ -210,42 +233,38 @@ const styles = StyleSheet.create({
         paddingBottom: 24,
     },
     header: {
-        flexDirection: 'row',
         padding: 16,
-        gap: 16,
-    },
-    poster: {
-        width: 100,
-        height: 150,
-        borderRadius: 8,
-        backgroundColor: '#2a2a2a',
-    },
-    headerInfo: {
-        flex: 1,
     },
     metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 4,
+        marginTop: 8,
         marginBottom: 8,
     },
     dot: {
         width: 3,
         height: 3,
         borderRadius: 1.5,
-        marginHorizontal: 6,
+        marginHorizontal: 8,
     },
-    genres: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 6,
-        marginBottom: 8,
-    },
-    genreChip: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 12,
+    ratingBadge: {
         borderWidth: 1,
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: 4,
+    },
+    castRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    castAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+    },
+    castInfo: {
+        flex: 1,
     },
     seriesSection: {
         marginTop: 8,

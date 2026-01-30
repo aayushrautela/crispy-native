@@ -17,6 +17,7 @@ export function SettingsTab({
     onSelectSpeed
 }: SettingsTabProps) {
     const { theme } = useTheme();
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
     return (
         <ScrollView contentContainerStyle={styles.content}>
@@ -32,14 +33,14 @@ export function SettingsTab({
                                 key={speed}
                                 onPress={() => onSelectSpeed?.(speed)}
                                 style={[
-                                    styles.pill,
-                                    {
-                                        backgroundColor: isSelected
-                                            ? theme.colors.primary
-                                            : theme.colors.surfaceContainerHigh
-                                    }
-                                ]}
-                            >
+                                            styles.pill,
+                                            {
+                                                backgroundColor: isSelected
+                                                    ? theme.colors.primary
+                                                    : surfaceContainerHigh
+                                            }
+                                        ]}
+                                    >
                                 <Typography
                                     variant="label-medium"
                                     style={{
