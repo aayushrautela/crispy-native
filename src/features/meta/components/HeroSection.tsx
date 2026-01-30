@@ -8,10 +8,10 @@ import { useHeroState } from '@/src/features/meta/hooks/useHeroState';
 import { YouTubeTrailer } from '@/src/features/player/components/YouTubeTrailer';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronDown, Play, Star } from 'lucide-react-native';
+import { Play, Star } from 'lucide-react-native';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { type SharedValue } from 'react-native-reanimated';
 import { MetaActionRow } from './MetaActionRow';
 import { SplitHeroLayout } from './SplitHeroLayout';
 
@@ -23,7 +23,7 @@ interface HeroSectionProps {
     meta: any;
     enriched: Partial<TMDBMeta>;
     colors: any;
-    scrollY: Animated.SharedValue<number>;
+    scrollY: SharedValue<number>;
     onWatchPress: () => void;
     isMuted?: boolean;
     // Trakt Props for Split Mode
@@ -125,7 +125,7 @@ const HeroWatchButton = memo(({ onPress, isLoading, color, textColor, label, sub
                 </View>
                 <View style={styles.watchLabelContainer}>
                     <View>
-                        <Typography variant="h4" weight="black" style={{ color: textColor, fontSize: 16, textAlign: 'center' }}>
+                        <Typography variant="title-medium" weight="black" style={{ color: textColor, fontSize: 16, textAlign: 'center' }}>
                             {label}
                         </Typography>
                         {subtext && (
@@ -158,20 +158,74 @@ const HeroIdentity = memo(({ enriched, meta, alignment = 'center' }: any) => (
 /**
  * SUB-COMPONENT: HeroDescription
  */
-const HeroDescription = memo(({ enriched, meta, isExpanded, onToggle, alignment = 'center' }: any) => (
-    <Pressable
-        onPress={onToggle}
-        style={[styles.descriptionContainer, alignment === 'flex-start' && { alignItems: 'flex-start' }]}
-    >
-        <Typography variant="body" numberOfLines={isExpanded ? undefined : 3} style={[styles.descriptionText, alignment === 'flex-start' && { textAlign: 'left' }]}>
-            {enriched.description || meta?.description}
-        </Typography>
-        <ChevronDown
-            size={20} color="white"
-            style={[styles.descriptionChevron, { transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }]}
-        />
-    </Pressable>
-));
+const HeroDescription = memo(({ enriched, meta, isExpanded, onToggle, alignment = 'center' }: any) => {
+    const description = enriched.description || meta?.description || '';
+    const [layoutWidth, setLayoutWidth] = React.useState(0);
+    const [collapsedText, setCollapsedText] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        setCollapsedText(null);
+    }, [description, layoutWidth]);
+
+    const handleLayout = React.useCallback((e: any) => {
+        const w = Math.round(e?.nativeEvent?.layout?.width ?? 0);
+        if (w && w !== layoutWidth) {
+            setLayoutWidth(w);
+        }
+    }, [layoutWidth]);
+
+    const handleMeasureText = React.useCallback((e: any) => {
+        if (collapsedText !== null) return;
+
+        const lines = e?.nativeEvent?.lines as Array<{ text: string }> | undefined;
+        if (!lines || lines.length <= 3) {
+            setCollapsedText(description);
+            return;
+        }
+
+        const suffix = '... more';
+        const firstThree = lines.slice(0, 3).map((l) => l.text).join('');
+        const base = firstThree.trimEnd();
+        const cut = Math.max(0, base.length - (suffix.length + 10));
+        const clipped = base.slice(0, cut).trimEnd();
+
+        setCollapsedText(clipped ? `${clipped}${suffix}` : suffix);
+    }, [collapsedText, description]);
+
+    const showCollapsed = !isExpanded;
+    const displayText = isExpanded ? description : (collapsedText ?? description);
+    const isManualCollapsed = showCollapsed && collapsedText !== null && collapsedText !== description;
+
+    return (
+        <Pressable
+            onPress={onToggle}
+            onLayout={handleLayout}
+            style={[styles.descriptionContainer, alignment === 'flex-start' && { alignItems: 'flex-start' }]}
+        >
+            {showCollapsed && collapsedText === null && description.length > 0 && (
+                <Typography
+                    variant="body"
+                    style={[
+                        styles.descriptionText,
+                        styles.descriptionMeasureText,
+                        alignment === 'flex-start' && { textAlign: 'left' },
+                    ]}
+                    onTextLayout={handleMeasureText}
+                >
+                    {description}
+                </Typography>
+            )}
+            <Typography
+                variant="body"
+                numberOfLines={isExpanded ? undefined : 3}
+                ellipsizeMode={isManualCollapsed ? 'clip' : 'tail'}
+                style={[styles.descriptionText, alignment === 'flex-start' && { textAlign: 'left' }]}
+            >
+                {displayText}
+            </Typography>
+        </Pressable>
+    );
+});
 
 /**
  * MAIN COMPONENT: HeroSection
@@ -238,16 +292,16 @@ export const HeroSection = memo(({
                             />
                             {/* In Split mode, we move the action row here */}
                             <MetaActionRow
-                                isAuthenticated={isAuthenticated}
-                                isListed={isListed}
-                                isCollected={isCollected}
-                                isWatched={isWatched}
-                                isSeries={isSeries}
-                                userRating={userRating}
-                                onWatchlistToggle={onWatchlistToggle}
-                                onCollectionToggle={onCollectionToggle}
-                                onWatchedToggle={onWatchedToggle}
-                                onRatePress={onRatePress}
+                                isAuthenticated={!!isAuthenticated}
+                                isListed={!!isListed}
+                                isCollected={!!isCollected}
+                                isWatched={!!isWatched}
+                                isSeries={!!isSeries}
+                                userRating={userRating ?? null}
+                                onWatchlistToggle={onWatchlistToggle ?? (() => {})}
+                                onCollectionToggle={onCollectionToggle ?? (() => {})}
+                                onWatchedToggle={onWatchedToggle ?? (() => {})}
+                                onRatePress={onRatePress ?? (() => {})}
                                 palette={palette}
                                 style={{ marginTop: 24 }}
                             />
@@ -326,7 +380,7 @@ const styles = StyleSheet.create({
     metaText: { color: 'white', opacity: 0.9, fontSize: 14 },
     descriptionContainer: { width: '100%', alignItems: 'center' },
     descriptionText: { color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 22, fontSize: 14 },
-    descriptionChevron: { marginTop: 8 },
+    descriptionMeasureText: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0 },
     actionStack: { width: '100%', marginTop: 8 },
     watchBtn: { width: '100%', height: 68, borderRadius: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
     watchIconPill: { width: 60, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
