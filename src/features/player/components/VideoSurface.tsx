@@ -19,6 +19,13 @@ const CODEC_ERROR_PATTERNS = [
     'format.no_decoder',
     'decoding_failed',
     'exoplaybackexception',
+    // New patterns from logs
+    'failed.*query.*component',
+    'bad_index',
+    'media_quality.*unavailable',
+    'max.*input.*size',
+    'crypto.*error',
+    'drm.*error',
 ];
 
 const isCodecError = (errorString: string): boolean => {

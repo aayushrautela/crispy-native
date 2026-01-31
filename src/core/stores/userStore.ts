@@ -164,6 +164,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
         'introSkipMode', 'mobileNavbarStyle', 'omdbKey', 'tmdbKey',
         'openRouterKey', 'aiInsightsMode', 'aiModelType', 'aiCustomModelName',
         'accentColor', 'amoledMode', 'useMaterialYou', 'videoPlayerEngine',
+        'decoderMode', 'gpuMode',
         'audioLanguage', 'subtitleLanguage', 'subtitleSize', 'subtitlePosition',
         'subtitleColor', 'subtitleBackColor', 'subtitleBorderColor',
         'showRatingBadges', 'addonSearchEnabled', 'autoplayEnabled'

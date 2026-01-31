@@ -256,9 +256,15 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         MPVLib.setOptionString("cache-secs", "60")
         
         MPVLib.setOptionString("network-timeout", "60")
+        MPVLib.setOptionString("ytdl", "no")
         MPVLib.setOptionString("http-reconnect", "yes")
         MPVLib.setOptionString("stream-reconnect", "yes")
         MPVLib.setOptionString("tls-verify", "no")
+        
+        MPVLib.setOptionString("demuxer-lavf-o", "live_start_index=0,prefer_x_start=1,http_persistent=0")
+        MPVLib.setOptionString("demuxer-seekable-cache", "yes")
+        MPVLib.setOptionString("force-seekable", "yes")
+
         MPVLib.setOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         
         applyHttpHeadersAsOptions()
@@ -267,6 +273,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         MPVLib.setOptionString("sub-visibility", "yes")
         MPVLib.setOptionString("embeddedfonts", "yes")
         MPVLib.setOptionString("sub-ass-override", "force")
+        MPVLib.setOptionString("blend-subtitles", "no")
+        MPVLib.setOptionString("sub-use-margins", "yes")
+        MPVLib.setOptionString("sub-scale", "1.0")
+        MPVLib.setOptionString("sub-fix-timing", "yes")
         
         MPVLib.setOptionString("osc", "no")
         MPVLib.setOptionString("osd-level", "1")

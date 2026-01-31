@@ -8,8 +8,12 @@ interface SettingsTabProps {
     onSelectSpeed?: (speed: number) => void;
     resizeMode?: 'contain' | 'cover' | 'stretch';
     onSelectResizeMode?: (mode: 'contain' | 'cover' | 'stretch') => void;
-    currentEngine?: 'exo' | 'mpv';
-    // Add more settings as needed
+    
+    // Engine Settings
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    onSelectDecoderMode?: (mode: 'auto' | 'sw' | 'hw' | 'hw+') => void;
+    gpuMode?: 'gpu' | 'gpu-next';
+    onSelectGpuMode?: (mode: 'gpu' | 'gpu-next') => void;
 }
 
 const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
@@ -19,11 +23,27 @@ const RESIZE_MODES = [
     { label: 'Stretch', value: 'stretch' as const },
 ];
 
+const DECODER_MODES = [
+    { label: 'Auto', value: 'auto' as const },
+    { label: 'HW', value: 'hw' as const },
+    { label: 'HW+', value: 'hw+' as const },
+    { label: 'SW', value: 'sw' as const },
+];
+
+const GPU_MODES = [
+    { label: 'Default (GPU)', value: 'gpu' as const },
+    { label: 'GPU Next (High Quality)', value: 'gpu-next' as const },
+];
+
 export function SettingsTab({
     playbackSpeed = 1.0,
     onSelectSpeed,
     resizeMode = 'contain',
-    onSelectResizeMode
+    onSelectResizeMode,
+    decoderMode = 'auto',
+    onSelectDecoderMode,
+    gpuMode = 'gpu',
+    onSelectGpuMode
 }: SettingsTabProps) {
     const { theme } = useTheme();
     const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
@@ -95,6 +115,86 @@ export function SettingsTab({
                                     }}
                                 >
                                     {speed}x
+                                </Typography>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </View>
+
+            {/* Decoder Settings */}
+            <View style={styles.section}>
+                <Typography variant="title-medium" style={{ color: theme.colors.onSurface, marginBottom: 12 }}>
+                    Decoder Mode (MPV)
+                </Typography>
+                <Typography variant="body-small" style={{ color: theme.colors.outline, marginBottom: 8 }}>
+                    Controls hardware acceleration. Use 'Auto' usually. 'HW+' is mostly for Mediatek/Exynos.
+                </Typography>
+                <View style={styles.grid}>
+                    {DECODER_MODES.map((mode) => {
+                        const isSelected = mode.value === decoderMode;
+                        return (
+                            <Pressable
+                                key={mode.value}
+                                onPress={() => onSelectDecoderMode?.(mode.value)}
+                                style={[
+                                    styles.pill,
+                                    {
+                                        backgroundColor: isSelected
+                                            ? theme.colors.primary
+                                            : surfaceContainerHigh
+                                    }
+                                ]}
+                            >
+                                <Typography
+                                    variant="label-medium"
+                                    style={{
+                                        color: isSelected
+                                            ? theme.colors.onPrimary
+                                            : theme.colors.onSurface
+                                    }}
+                                >
+                                    {mode.label}
+                                </Typography>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </View>
+
+            {/* GPU Settings */}
+            <View style={styles.section}>
+                <Typography variant="title-medium" style={{ color: theme.colors.onSurface, marginBottom: 12 }}>
+                    GPU Renderer (MPV)
+                </Typography>
+                <Typography variant="body-small" style={{ color: theme.colors.outline, marginBottom: 8 }}>
+                    'GPU Next' offers higher quality scaling but uses more battery.
+                </Typography>
+                <View style={styles.grid}>
+                    {GPU_MODES.map((mode) => {
+                        const isSelected = mode.value === gpuMode;
+                        return (
+                            <Pressable
+                                key={mode.value}
+                                onPress={() => onSelectGpuMode?.(mode.value)}
+                                style={[
+                                    styles.pill,
+                                    {
+                                        backgroundColor: isSelected
+                                            ? theme.colors.primary
+                                            : surfaceContainerHigh
+                                    }
+                                ]}
+                            >
+                                <Typography
+                                    variant="label-medium"
+                                    style={{
+                                        color: isSelected
+                                            ? theme.colors.onPrimary
+                                            : theme.colors.onSurface
+                                    }}
+                                >
+                                    {mode.label}
                                 </Typography>
                             </Pressable>
                         );

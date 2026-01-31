@@ -128,6 +128,7 @@ export default function PlayerScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
+    const updateSettings = useUserStore((s) => s.updateSettings);
     const getStreams = useProviderStore((s) => s.getStreams);
 
     const [finalUrl, setFinalUrl] = useState<string | null>(null);
@@ -1142,6 +1143,10 @@ export default function PlayerScreen() {
                                 onSelectSpeed={setPlaybackRate}
                                 resizeMode={resizeMode}
                                 onSelectResizeMode={setResizeMode}
+                                decoderMode={settings.decoderMode}
+                                onSelectDecoderMode={(mode) => updateSettings({ decoderMode: mode })}
+                                gpuMode={settings.gpuMode}
+                                onSelectGpuMode={(mode) => updateSettings({ gpuMode: mode })}
                             />
                         )}
                         {activeTab === 'streams' && (

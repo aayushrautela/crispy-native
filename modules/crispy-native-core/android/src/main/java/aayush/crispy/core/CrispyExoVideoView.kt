@@ -165,7 +165,13 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                onError(mapOf("error" to (error.message ?: "ExoPlayer error")))
+                val errorCodeName = error.errorCodeName
+                val errorMessage = error.message ?: "ExoPlayer error"
+                val causeMessage = error.cause?.message ?: ""
+                
+                // Combine for maximum debuggability in JS regex checks
+                val fullError = "$errorCodeName: $errorMessage | $causeMessage"
+                onError(mapOf("error" to fullError))
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
