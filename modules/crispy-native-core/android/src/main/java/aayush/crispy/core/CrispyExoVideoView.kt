@@ -140,6 +140,22 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         )
         playerView.useController = false
         playerView.player = player
+
+        // Handle PiP window resizing: force PlayerView to update when container size changes
+        addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val w = right - left
+            val h = bottom - top
+            val oldW = oldRight - oldLeft
+            val oldH = oldBottom - oldTop
+            if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
+                // Force PlayerView to remeasure and update its internal surface
+                playerView.post {
+                    playerView.requestLayout()
+                    playerView.invalidate()
+                }
+            }
+        }
+
         addView(playerView)
 
         PlaybackRegistry.register(this)
