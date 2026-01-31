@@ -6,9 +6,8 @@ import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
-import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
 import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -42,7 +41,6 @@ const RATING_OPTIONS = [
 export default function DiscoverScreen() {
     const { manifests } = useUserStore();
     const { theme } = useTheme();
-    const router = useRouter();
     const { width } = useWindowDimensions();
 
     const [selectedType, setSelectedType] = useState('all');
@@ -162,11 +160,25 @@ export default function DiscoverScreen() {
         });
     }, [allItems, selectedGenre, selectedRating]);
 
+    const showSkeleton = loading && allItems.length === 0;
+
+    const skeletonItems = useMemo((): MetaPreview[] => {
+        const count = numColumns * 15;
+        return Array.from({ length: count }, (_, i) => ({
+            id: `discover-skeleton-${i}`,
+            type: 'movie',
+            name: 'Loading',
+            posterShape: 'poster',
+        }));
+    }, [numColumns]);
+
     const renderItem = useCallback(({ item }: { item: MetaPreview }) => (
         <View style={{ width: itemWidth, marginBottom: gap }}>
-            <CatalogCard item={item} width={itemWidth} />
+            {showSkeleton
+                ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
+                : <CatalogCard item={item} width={itemWidth} />}
         </View>
-    ), [itemWidth]);
+    ), [gap, itemWidth, showSkeleton]);
 
     const activeIndex = useMemo(() => {
         return TYPE_OPTIONS.findIndex(opt => opt.value === selectedType);
@@ -175,18 +187,21 @@ export default function DiscoverScreen() {
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <LoadingIndicator size="large" color={theme.colors.primary} />
-                </View>
-            ) : filteredItems.length > 0 ? (
+            {(!showSkeleton && !loading && filteredItems.length === 0) ? (
+                <EmptyState
+                    icon={Filter}
+                    title="No results found"
+                    description="Try adjusting your filters."
+                />
+            ) : (
                 <AnimatedFlashList
-                    data={filteredItems}
-                    keyExtractor={(item) => (item as MetaPreview).id}
+                    data={showSkeleton ? skeletonItems : filteredItems}
+                    keyExtractor={(item, index) => showSkeleton ? `discover-skel-${index}` : (item as MetaPreview).id}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={itemWidth * 1.5}
+                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72)}
+                    removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
                         paddingHorizontal: padding,
@@ -196,12 +211,6 @@ export default function DiscoverScreen() {
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
                 />
-            ) : (
-                <EmptyState
-                    icon={Filter}
-                    title="No results found"
-                    description="Try adjusting your filters."
-                />
             )}
 
             {/* Header */}
@@ -210,14 +219,21 @@ export default function DiscoverScreen() {
                 pointerEvents="box-none"
             >
                 <View style={styles.headerTop} pointerEvents="box-none">
-                    <Typography
-                        variant="display-large"
-                        weight="black"
-                        rounded
-                        style={{ fontSize: 40, lineHeight: 48, color: theme.colors.onSurface }}
-                    >
-                        Discover
-                    </Typography>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography
+                            variant="display-large"
+                            weight="black"
+                            rounded
+                            style={{ fontSize: 40, lineHeight: 48, color: theme.colors.onSurface }}
+                        >
+                            Discover
+                        </Typography>
+                        {loading && (
+                            <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                                <LoadingIndicator size="small" color={theme.colors.onSurfaceVariant} />
+                            </View>
+                        )}
+                    </View>
                 </View>
 
                 {/* Filters */}

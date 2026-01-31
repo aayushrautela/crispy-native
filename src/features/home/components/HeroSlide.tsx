@@ -3,10 +3,11 @@ import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { Typography } from '@/src/core/ui/Typography';
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Info, Play, Star } from 'lucide-react-native';
 import React from 'react';
-import { Dimensions, Image, ImageBackground, StyleSheet, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -21,7 +22,7 @@ interface HeroSlideProps {
 
 export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlideProps) => {
     const { theme } = useTheme();
-    const { heroHeight, isTablet } = useResponsive();
+    const { heroHeight } = useResponsive();
 
     // Animated Parallax Style
     const animatedStyle = useAnimatedStyle(() => {
@@ -46,10 +47,15 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                 { backgroundColor: theme.colors.surfaceVariant, height: heroHeight },
                 animatedStyle
             ]}>
-                <ImageBackground
-                    source={{ uri: item.background }}
-                    style={styles.backgroundImage}
-                >
+                <View style={styles.backgroundImage}>
+                    <ExpoImage
+                        recyclingKey={`${item.id}-hero-bg`}
+                        source={{ uri: item.background }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        transition={Platform.OS === 'android' ? 0 : 200}
+                        cachePolicy="memory-disk"
+                    />
                     <LinearGradient
                         colors={[
                             'rgba(0,0,0,0.5)',
@@ -65,7 +71,14 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             {/* Branding Section */}
                             <View style={styles.brandingSection}>
                                 {item.logo ? (
-                                    <Image source={{ uri: item.logo }} style={styles.logo} resizeMode="contain" />
+                                    <ExpoImage
+                                        recyclingKey={`${item.id}-hero-logo`}
+                                        source={{ uri: item.logo }}
+                                        style={styles.logo}
+                                        contentFit="contain"
+                                        transition={Platform.OS === 'android' ? 0 : 200}
+                                        cachePolicy="memory-disk"
+                                    />
                                 ) : (
                                     <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
                                         {item.name}
@@ -124,7 +137,7 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             </View>
                         </View>
                     </LinearGradient>
-                </ImageBackground>
+                </View>
             </Animated.View>
         </View>
     );
@@ -199,6 +212,4 @@ const styles = StyleSheet.create({
         paddingHorizontal: 0,
     },
 });
-
-
 

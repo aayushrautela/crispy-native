@@ -5,9 +5,8 @@ import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Screen } from '@/src/core/ui/layout/Screen';
-import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
-import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
 import {
     Bookmark,
@@ -168,14 +167,25 @@ export default function LibraryScreen() {
         });
     }, [items, selectedGenre, selectedSort]);
 
+    const showSkeleton = loading && items.length === 0;
+
+    const skeletonItems = useMemo((): any[] => {
+        const count = numColumns * 15;
+        return Array.from({ length: count }, (_, i) => ({
+            id: `library-skeleton-${i}`,
+            type: 'movie',
+            name: 'Loading',
+            posterShape: 'poster',
+        }));
+    }, [numColumns]);
+
     const renderItem = useCallback(({ item }: { item: any }) => (
         <View style={{ width: itemWidth, marginBottom: gap }}>
-            <CatalogCard
-                item={item}
-                width={itemWidth}
-            />
+            {showSkeleton
+                ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
+                : <CatalogCard item={item} width={itemWidth} />}
         </View>
-    ), [itemWidth]);
+    ), [gap, itemWidth, showSkeleton]);
 
     if (!traktAuth.accessToken) {
         return (
@@ -194,18 +204,21 @@ export default function LibraryScreen() {
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <LoadingIndicator size="large" color={theme.colors.primary} />
-                </View>
-            ) : filteredAndSortedItems.length > 0 ? (
+            {(!showSkeleton && !loading && filteredAndSortedItems.length === 0) ? (
+                <EmptyState
+                    icon={LibraryIcon}
+                    title="Library is empty"
+                    description="Try adjusting your filters or sync with Trakt."
+                />
+            ) : (
                 <AnimatedFlashList
-                    data={filteredAndSortedItems}
-                    keyExtractor={(item) => String((item as any).id)}
+                    data={showSkeleton ? skeletonItems : filteredAndSortedItems}
+                    keyExtractor={(item: any, index: number) => showSkeleton ? `library-skel-${index}` : String(item?.id ?? index)}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={itemWidth * 1.85}
+                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72)}
+                    removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
                         paddingHorizontal: padding,
@@ -214,12 +227,6 @@ export default function LibraryScreen() {
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
-                />
-            ) : (
-                <EmptyState
-                    icon={LibraryIcon}
-                    title="Library is empty"
-                    description="Try adjusting your filters or sync with Trakt."
                 />
             )}
 

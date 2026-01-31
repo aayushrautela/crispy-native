@@ -1,18 +1,14 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Typography } from '@/src/core/ui/Typography';
 import { useCatalogActions } from '@/src/features/catalog/context/CatalogActionsContext';
 import { useTraktEnrichment } from '@/src/hooks/useTraktEnrichment';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Star } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-
-const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
+import React, { useCallback } from 'react';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 function formatBadgeRating(value: unknown): string | null {
     const n = typeof value === 'number' ? value : Number(value);
@@ -31,7 +27,6 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
     const router = useRouter();
     const { theme } = useTheme();
     const settings = useUserStore(s => s.settings);
-    const [focused, setFocused] = useState(false);
     const { openActions } = useCatalogActions();
 
     // Always enrich Continue Watching items
@@ -40,6 +35,10 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
+
+    const imageSrc = displayItem.posterShape === 'landscape'
+        ? (displayItem.backdrop || displayItem.poster)
+        : (displayItem.poster);
 
     const handlePress = useCallback(() => {
         router.push({
@@ -52,72 +51,47 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
         openActions(item);
     }, [item, openActions]);
 
-    const animatedImageStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
-        };
-    });
-
     return (
         <View style={[styles.container, { width }]}>
-            <ExpressiveSurface
-                variant="filled"
-                rounding="lg"
-                style={[
+            <Pressable
+                onPress={handlePress}
+                onLongPress={handleLongPress}
+                accessibilityRole="button"
+                android_ripple={{ color: 'rgba(255,255,255,0.08)', borderless: false }}
+                style={({ pressed }) => [
                     styles.surface,
                     {
                         height,
-                    }
+                        backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant,
+                    },
+                    pressed && styles.surfacePressed,
                 ]}
-                onPress={handlePress}
-                onLongPress={handleLongPress}
-                onFocusChange={setFocused}
-                disableLayoutAnimation={true}
             >
-                <View style={[styles.imageContainer, { backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant }]}>
-                    {/* Placeholder / Fallback */}
-                    <View style={styles.absolutePlaceholder}>
-                        <Typography
-                            variant="label-small"
-                            weight="bold"
-                            style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}
-                            numberOfLines={3}
-                        >
-                            {displayItem.name}
-                        </Typography>
-                    </View>
-
-                    {(() => {
-                        const imageSrc = displayItem.posterShape === 'landscape'
-                            ? (displayItem.backdrop || displayItem.poster)
-                            : (displayItem.poster);
-
-                        if (imageSrc) {
-                            return (
-                                <AnimatedExpoImage
-                                    key={displayItem.id}
-                                    recyclingKey={imageSrc}
-                                    source={{ uri: imageSrc }}
-                                    style={[styles.image, animatedImageStyle]}
-                                    contentFit="cover"
-                                    transition={Platform.OS === 'android' ? 0 : 200}
-                                    cachePolicy="memory-disk"
-                                />
-                            );
-                        }
-                        return null;
-                    })()}
+                <View style={styles.imageContainer}>
+                    {imageSrc ? (
+                        <ExpoImage
+                            recyclingKey={displayItem.id}
+                            source={{ uri: imageSrc }}
+                            style={styles.image}
+                            contentFit="cover"
+                            transition={Platform.OS === 'android' ? 0 : 150}
+                            cachePolicy="memory-disk"
+                        />
+                    ) : null}
 
                     {/* Logo Overlay */}
-                    {(displayItem.posterShape === 'landscape' && displayItem.logo) && (
-                        <View style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 10 }}>
+                    {(displayItem.posterShape === 'landscape' && displayItem.logo) ? (
+                        <View style={styles.logoOverlay}>
                             <ExpoImage
+                                recyclingKey={`${displayItem.id}-logo`}
                                 source={{ uri: displayItem.logo }}
-                                style={{ width: '70%', height: '50%' }}
+                                style={styles.logo}
                                 contentFit="contain"
+                                transition={Platform.OS === 'android' ? 0 : 150}
+                                cachePolicy="memory-disk"
                             />
                         </View>
-                    )}
+                    ) : null}
 
                     {/* Rating Overlay */}
                     {(() => {
@@ -126,48 +100,43 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                         if (!ratingText) return null;
 
                         return (
-                        <View style={styles.ratingOverlay}>
-                            <Star size={10} color="#FFD700" fill="#FFD700" />
-                            <Typography
-                                variant="label-small"
-                                weight="black"
-                                style={{
-                                    color: 'white',
-                                    marginLeft: 4,
-                                    letterSpacing: 0,
-                                    paddingRight: 2,
-                                }}
-                            >
-                                {ratingText}
-                            </Typography>
-                        </View>
+                            <View style={styles.ratingOverlay}>
+                                <Star size={10} color="#FFD700" fill="#FFD700" />
+                                <Typography
+                                    variant="label-small"
+                                    weight="black"
+                                    style={{
+                                        color: 'white',
+                                        marginLeft: 4,
+                                        letterSpacing: 0,
+                                        paddingRight: 2,
+                                    }}
+                                >
+                                    {ratingText}
+                                </Typography>
+                            </View>
                         );
                     })()}
-                </View>
 
-                {/* Progress Bar - Exclusive to Continue Watching */}
-                {
-                    item.progressPercent !== undefined && item.progressPercent > 0 && (
-                        <View style={{
-                            position: 'absolute',
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            height: 4,
-                            backgroundColor: 'rgba(255,255,255,0.3)'
-                        }}>
-                            <View style={{
-                                height: '100%',
-                                width: `${item.progressPercent}%`,
-                                backgroundColor: theme.colors.primary
-                            }} />
+                    {/* Progress Bar - Exclusive to Continue Watching */}
+                    {item.progressPercent !== undefined && item.progressPercent > 0 ? (
+                        <View style={styles.progressTrack}>
+                            <View
+                                style={[
+                                    styles.progressFill,
+                                    {
+                                        width: `${item.progressPercent}%`,
+                                        backgroundColor: theme.colors.primary,
+                                    }
+                                ]}
+                            />
                         </View>
-                    )
-                }
-            </ExpressiveSurface >
+                    ) : null}
+                </View>
+            </Pressable>
 
             {/* Metadata */}
-            < View style={styles.metadata} >
+            <View style={styles.metadata}>
                 <Typography
                     variant="body-small"
                     weight="bold"
@@ -218,8 +187,8 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                         </View>
                     )}
                 </View>
-            </View >
-        </View >
+            </View>
+        </View>
     );
 };
 
@@ -238,6 +207,11 @@ const styles = StyleSheet.create({
     },
     surface: {
         overflow: 'hidden',
+        borderRadius: 12,
+    },
+    surfacePressed: {
+        transform: [{ scale: 0.985 }],
+        opacity: 0.92,
     },
     imageContainer: {
         flex: 1,
@@ -248,12 +222,17 @@ const styles = StyleSheet.create({
         height: '100%',
         zIndex: 1,
     },
-    absolutePlaceholder: {
-        ...StyleSheet.absoluteFillObject,
+    logoOverlay: {
+        position: 'absolute',
+        inset: 0,
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
-        zIndex: 0,
+        padding: 20,
+        zIndex: 10,
+    },
+    logo: {
+        width: '70%',
+        height: '50%',
     },
     ratingOverlay: {
         position: 'absolute',
@@ -280,5 +259,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 1,
         borderRadius: 4,
-    }
+    },
+    progressTrack: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        zIndex: 10,
+    },
+    progressFill: {
+        height: '100%',
+    },
 });
