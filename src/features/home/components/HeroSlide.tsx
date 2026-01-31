@@ -1,33 +1,50 @@
 import { Meta } from '@/src/core/hooks/useHeroItems';
-import { useResponsive } from '@/src/core/hooks/useResponsive';
-import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { Typography } from '@/src/core/ui/Typography';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Info, Play, Star } from 'lucide-react-native';
-import React from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import React, { memo } from 'react';
+import { Platform, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, { interpolate, SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Stable colors interface to avoid passing full theme object
+export interface HeroThemeColors {
+    primary: string;
+    surfaceVariant: string;
+    background: string;
+}
 
 interface HeroSlideProps {
     item: Meta;
     index: number;
     scrollX: SharedValue<number>;
+    width: number;
+    height: number;
+    themeColors: HeroThemeColors;
+    isFocused: boolean;
     onWatch: (item: Meta) => void;
     onInfo: (item: Meta) => void;
 }
 
-export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlideProps) => {
-    const { theme } = useTheme();
-    const { heroHeight } = useResponsive();
-
-    // Animated Parallax Style
+const HeroSlideComponent = ({ 
+    item, 
+    index, 
+    scrollX, 
+    width, 
+    height, 
+    themeColors, 
+    isFocused, 
+    onWatch, 
+    onInfo 
+}: HeroSlideProps) => {
+    
+    // Animated Parallax Style - Only subscribe to updates if this slide is near viewport
+    // Note: In a FlatList with removeClippedSubviews, off-screen views are unmounted,
+    // but for the ones in window, we want to optimize.
     const animatedStyle = useAnimatedStyle(() => {
-        const input = [(index - 1) * SCREEN_WIDTH, index * SCREEN_WIDTH, (index + 1) * SCREEN_WIDTH];
-        const opacity = interpolate(scrollX.value, input, [0.8, 1, 0.8]);
+        const input = [(index - 1) * width, index * width, (index + 1) * width];
+        const opacity = interpolate(scrollX.value, input, [0.8, 1, 0.8], 'clamp');
         return {
             opacity,
         };
@@ -35,26 +52,36 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
 
     const isUpcoming = React.useMemo(() => {
         if (!item.released) return false;
+        // Simple string comparison usually works for ISO dates, but new Date is safer
         const releaseDate = new Date(item.released);
         const now = new Date();
         return releaseDate > now;
     }, [item.released]);
 
+    // Pre-computed styles based on props
+    const containerStyle: ViewStyle = { width };
+    const cardStyle: ViewStyle = { 
+        backgroundColor: themeColors.surfaceVariant, 
+        height,
+        width 
+    };
+
     return (
-        <View style={styles.itemContainer}>
+        <View style={containerStyle}>
             <Animated.View style={[
                 styles.heroCard,
-                { backgroundColor: theme.colors.surfaceVariant, height: heroHeight },
+                cardStyle,
                 animatedStyle
             ]}>
                 <View style={styles.backgroundImage}>
                     <ExpoImage
-                        recyclingKey={`${item.id}-hero-bg`}
+                        recyclingKey={item.id}
                         source={{ uri: item.background }}
                         style={StyleSheet.absoluteFill}
                         contentFit="cover"
                         transition={Platform.OS === 'android' ? 0 : 200}
                         cachePolicy="memory-disk"
+                        priority={isFocused ? 'high' : 'normal'}
                     />
                     <LinearGradient
                         colors={[
@@ -62,7 +89,7 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             'transparent',
                             'transparent',
                             'rgba(0,0,0,0.4)',
-                            theme.colors.background
+                            themeColors.background
                         ]}
                         locations={[0, 0.2, 0.5, 0.8, 1]}
                         style={styles.gradient}
@@ -72,12 +99,12 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                             <View style={styles.brandingSection}>
                                 {item.logo ? (
                                     <ExpoImage
-                                        recyclingKey={`${item.id}-hero-logo`}
                                         source={{ uri: item.logo }}
                                         style={styles.logo}
                                         contentFit="contain"
                                         transition={Platform.OS === 'android' ? 0 : 200}
                                         cachePolicy="memory-disk"
+                                        priority={isFocused ? 'high' : 'low'}
                                     />
                                 ) : (
                                     <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
@@ -86,7 +113,7 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
                                 )}
                                 {isUpcoming && (
                                     <View style={styles.newTag}>
-                                        <Typography variant="label-large" weight="black" style={{ color: theme.colors.primary }}>#UPCOMING</Typography>
+                                        <Typography variant="label-large" weight="black" style={{ color: themeColors.primary }}>#UPCOMING</Typography>
                                     </View>
                                 )}
                             </View>
@@ -143,14 +170,24 @@ export const HeroSlide = ({ item, index, scrollX, onWatch, onInfo }: HeroSlidePr
     );
 };
 
+// Optimized equality check for React.memo
+const arePropsEqual = (prev: HeroSlideProps, next: HeroSlideProps) => {
+    return (
+        prev.item.id === next.item.id &&
+        prev.isFocused === next.isFocused &&
+        prev.width === next.width &&
+        prev.height === next.height &&
+        prev.themeColors.primary === next.themeColors.primary && // Shallow check colors
+        prev.themeColors.background === next.themeColors.background
+        // scrollX is a SharedValue ref, so it doesn't change
+        // onWatch/onInfo should be stable callbacks
+    );
+};
 
+export const HeroSlide = memo(HeroSlideComponent, arePropsEqual);
 
 const styles = StyleSheet.create({
-    itemContainer: {
-        width: SCREEN_WIDTH,
-    },
     heroCard: {
-        width: SCREEN_WIDTH,
         overflow: 'hidden',
     },
     backgroundImage: {
@@ -163,7 +200,7 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     content: {
-        maxWidth: 600, // Keeps text readable on wide tablets
+        maxWidth: 600, 
     },
     brandingSection: {
         marginBottom: 8,
@@ -212,4 +249,3 @@ const styles = StyleSheet.create({
         paddingHorizontal: 0,
     },
 });
-

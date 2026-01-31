@@ -117,7 +117,7 @@ export default function SearchScreen() {
                 </Typography>
             </View>
 
-            <View style={[styles.searchBar, { backgroundColor: theme.colors.surfaceContainerHigh }]}>
+            <View style={[styles.searchBar, { backgroundColor: theme.colors.surfaceVariant }]}>
                 <SearchIcon size={20} color={theme.colors.onSurfaceVariant} />
                 <TextInput
                     placeholder="Search for movies, TV shows..."
@@ -180,7 +180,7 @@ export default function SearchScreen() {
                 <View style={styles.loadingContainer}>
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                 </View>
-            ) : results?.tmdb?.length > 0 || results?.addonGroups?.length > 0 ? (
+            ) : (results?.tmdb && results.tmdb.length > 0) || (results?.addonGroups && results.addonGroups.length > 0) ? (
                 <Animated.FlatList
                     key={numColumns}
                     data={results?.tmdb || []}

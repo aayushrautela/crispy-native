@@ -1,25 +1,27 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect } from 'react';
-import { StyleSheet, View, ViewStyle } from 'react-native';
-import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withTiming
+import { StyleSheet, View, ViewProps, DimensionValue } from 'react-native';
+import Animated, { 
+    useSharedValue, 
+    useAnimatedStyle, 
+    withRepeat, 
+    withTiming, 
+    Easing 
 } from 'react-native-reanimated';
+import { useTheme } from '../ThemeContext';
 
-interface ShimmerProps {
-    width?: number | string;
-    height?: number | string;
-    style?: ViewStyle;
+interface ShimmerProps extends ViewProps {
+    width?: DimensionValue;
+    height?: DimensionValue;
     borderRadius?: number;
 }
 
-export const Shimmer = ({
-    width = '100%',
-    height = 20,
+export const Shimmer = ({ 
+    width, 
+    height, 
+    borderRadius = 8, 
     style,
-    borderRadius = 4
+    ...props 
 }: ShimmerProps) => {
     const translateX = useSharedValue(-1);
 

@@ -60,7 +60,7 @@ export const ContinueWatchingRow = () => {
                 style={[
                     styles.skeleton,
                     {
-                        backgroundColor: theme.colors.surfaceContainerHighest || theme.colors.surfaceVariant,
+                        backgroundColor: theme.colors.surfaceVariant,
                         width: CARD_WIDTH,
                         height: CARD_WIDTH / 1.77,
                         borderRadius: 12
@@ -72,7 +72,7 @@ export const ContinueWatchingRow = () => {
                 <View style={[styles.skeleton, { width: '40%', height: 16, borderRadius: 4, backgroundColor: theme.colors.surfaceVariant }]} />
             </View>
         </View>
-    ), [theme.colors.surfaceContainerHighest, theme.colors.surfaceVariant]);
+    ), [theme.colors.surfaceVariant]);
 
     if (!traktAuth?.accessToken || (!loading && items.length === 0)) {
         return null;
