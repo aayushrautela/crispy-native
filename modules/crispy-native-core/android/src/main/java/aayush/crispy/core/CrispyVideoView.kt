@@ -104,6 +104,13 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         // Some devices don't reliably deliver onSurfaceTextureSizeChanged during PiP transitions.
         // On layout changes, keep the SurfaceTexture buffer size and mpv surface size in sync.
         surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            // During interactive PiP resize, Android is already constantly resizing/scaling the
+            // TextureView. Re-applying SurfaceTexture buffer sizes + mpv android-surface-size on
+            // every intermediate layout step causes visible jitter on some devices.
+            //
+            // We instead re-sync once on PiP enter/exit (see onPipModeChanged).
+            if (isInPipMode) return@addOnLayoutChangeListener
+
             val w = right - left
             val h = bottom - top
             val oldW = oldRight - oldLeft
@@ -175,6 +182,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
+        // When in PiP, avoid fighting Android's resizer; we'll re-sync once on enter/exit.
+        if (isInPipMode) return
+
         if (width > 0 && height > 0) {
             surfaceTexture.setDefaultBufferSize(width, height)
         }
@@ -306,10 +316,12 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         lastAppliedSurfaceW = width
         lastAppliedSurfaceH = height
 
-        try {
-            surfaceView.surfaceTexture?.setDefaultBufferSize(width, height)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to set SurfaceTexture buffer size", e)
+        if (!isInPipMode) {
+            try {
+                surfaceView.surfaceTexture?.setDefaultBufferSize(width, height)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to set SurfaceTexture buffer size", e)
+            }
         }
 
         try {
@@ -399,6 +411,14 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onPipModeChanged(isPip: Boolean) {
         isInPipMode = isPip
         applyResizeMode(if (isPip) "contain" else requestedResizeMode)
+
+        // Re-sync surface size once when PiP mode toggles.
+        // This avoids continuous churn during interactive PiP resizing.
+        surfaceView.post {
+            val w = surfaceView.width
+            val h = surfaceView.height
+            if (w > 0 && h > 0) applySurfaceSize(w, h)
+        }
     }
 
     override fun pauseFromPipDismissed() {
