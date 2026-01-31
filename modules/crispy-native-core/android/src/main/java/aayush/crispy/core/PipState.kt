@@ -25,6 +25,9 @@ object PipState {
     @Volatile
     private var aspectRatio: Rational? = null
 
+    @Volatile
+    private var sourceRectHint: Rect? = null
+
     fun setAspectRatio(width: Double?, height: Double?) {
         if (width == null || height == null) return
         if (width <= 0 || height <= 0) return
@@ -35,6 +38,10 @@ object PipState {
     }
 
     fun getAspectRatio(): Rational? = aspectRatio
+
+    fun setSourceRectHint(rect: Rect?) {
+        sourceRectHint = rect
+    }
 
     fun shouldEnterOnUserLeave(): Boolean {
         // We only enter PiP when explicitly enabled by the player screen.
@@ -50,13 +57,9 @@ object PipState {
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
 
-            try {
-                val rect = Rect()
-                if (activity.window?.decorView?.getGlobalVisibleRect(rect) == true && !rect.isEmpty) {
-                    builder.setSourceRectHint(rect)
-                }
-            } catch (_: Exception) {
-                // ignore
+            // Use the specific source rect provided by the player view, if available.
+            sourceRectHint?.let {
+                builder.setSourceRectHint(it)
             }
 
             // Android 12+ can auto-enter PiP when the user goes home.
@@ -83,13 +86,9 @@ object PipState {
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
 
-            try {
-                val rect = Rect()
-                if (activity.window?.decorView?.getGlobalVisibleRect(rect) == true && !rect.isEmpty) {
-                    builder.setSourceRectHint(rect)
-                }
-            } catch (_: Exception) {
-                // ignore
+            // Use the specific source rect provided by the player view, if available.
+            sourceRectHint?.let {
+                builder.setSourceRectHint(it)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

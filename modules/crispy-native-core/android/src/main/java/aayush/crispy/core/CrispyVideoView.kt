@@ -331,6 +331,22 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
+    private fun updatePipParams() {
+        val rect = android.graphics.Rect()
+        if (getGlobalVisibleRect(rect) && !rect.isEmpty) {
+            PipState.setSourceRectHint(rect)
+            PipState.applyToActivity(appContext.currentActivity)
+        }
+    }
+
+    // Call this on layout changes to keep the PiP rect accurate
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (changed) {
+            updatePipParams()
+        }
+    }
+
     private fun syncPlaybackAndPip() {
         val playing = !isPaused
 
