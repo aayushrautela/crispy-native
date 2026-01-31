@@ -329,9 +329,11 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         pendingSurfaceH = height
         pendingForceSurfaceBuffer = pendingForceSurfaceBuffer || forceBufferResize
 
+        // Always apply immediately.
+        // Previously we had an 80ms delay here for PiP mode, but that caused
+        // visual artifacts (stretching) because the window resized before the buffer.
         uiHandler.removeCallbacks(surfaceSyncRunnable)
-        val delayMs = if (isInPipMode) 80L else 0L
-        if (delayMs == 0L) uiHandler.post(surfaceSyncRunnable) else uiHandler.postDelayed(surfaceSyncRunnable, delayMs)
+        uiHandler.post(surfaceSyncRunnable)
     }
 
     private fun applySurfaceSize(width: Int, height: Int, forceBufferResize: Boolean = false) {
