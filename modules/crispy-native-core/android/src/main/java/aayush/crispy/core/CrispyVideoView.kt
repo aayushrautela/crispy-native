@@ -2,6 +2,9 @@ package aayush.crispy.core
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Surface
@@ -29,6 +32,22 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private var lastAppliedSurfaceW: Int = 0
     private var lastAppliedSurfaceH: Int = 0
+
+    private val uiHandler = Handler(Looper.getMainLooper())
+
+    private var pendingSurfaceW: Int = 0
+    private var pendingSurfaceH: Int = 0
+    private var pendingForceSurfaceBuffer: Boolean = false
+    private val surfaceSyncRunnable = Runnable {
+        val w = pendingSurfaceW
+        val h = pendingSurfaceH
+        val forceBuffer = pendingForceSurfaceBuffer
+        pendingForceSurfaceBuffer = false
+        applySurfaceSize(w, h, forceBufferResize = forceBuffer)
+    }
+
+    private var lastPipParamsAppliedAtMs: Long = 0L
+    private var pipParamsRunnable: Runnable? = null
 
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
@@ -101,23 +120,18 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         surfaceView.surfaceTextureListener = this
         surfaceView.isOpaque = false
 
-        // Some devices don't reliably deliver onSurfaceTextureSizeChanged during PiP transitions.
         // On layout changes, keep the SurfaceTexture buffer size and mpv surface size in sync.
+        // In PiP, the system can dispatch rapid intermediate sizes; coalesce updates to avoid
+        // visible jitter and to prevent fights with the compositor.
         surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            // During interactive PiP resize, Android is already constantly resizing/scaling the
-            // TextureView. Re-applying SurfaceTexture buffer sizes + mpv android-surface-size on
-            // every intermediate layout step causes visible jitter on some devices.
-            //
-            // We instead re-sync once on PiP enter/exit (see onPipModeChanged).
-            if (isInPipMode) return@addOnLayoutChangeListener
-
             val w = right - left
             val h = bottom - top
             val oldW = oldRight - oldLeft
             val oldH = oldBottom - oldTop
             if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
             if (w == oldW && h == oldH) return@addOnLayoutChangeListener
-            applySurfaceSize(w, h)
+
+            scheduleSurfaceSizeSync(w, h, forceBufferResize = isInPipMode)
         }
 
         addView(surfaceView, android.view.ViewGroup.LayoutParams(
@@ -162,7 +176,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                 }
             })
 
-            applySurfaceSize(width, height)
+            applySurfaceSize(width, height, forceBufferResize = true)
             observeProperties()
             isMpvInitialized = true
 
@@ -182,17 +196,16 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-        // When in PiP, avoid fighting Android's resizer; we'll re-sync once on enter/exit.
-        if (isInPipMode) return
-
-        if (width > 0 && height > 0) {
-            surfaceTexture.setDefaultBufferSize(width, height)
-        }
-        applySurfaceSize(width, height)
+        if (width <= 0 || height <= 0) return
+        // Coalesce to avoid jitter during PiP interactive resize.
+        scheduleSurfaceSizeSync(width, height, forceBufferResize = true)
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
         Log.d(TAG, "Surface texture destroyed")
+        uiHandler.removeCallbacks(surfaceSyncRunnable)
+        pipParamsRunnable?.let { uiHandler.removeCallbacks(it) }
+        pipParamsRunnable = null
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
 
         PlaybackRegistry.unregister(this)
@@ -308,15 +321,30 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
-    private fun applySurfaceSize(width: Int, height: Int) {
+    private fun scheduleSurfaceSizeSync(width: Int, height: Int, forceBufferResize: Boolean) {
         if (!isMpvInitialized) return
         if (width <= 0 || height <= 0) return
-        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
+
+        pendingSurfaceW = width
+        pendingSurfaceH = height
+        pendingForceSurfaceBuffer = pendingForceSurfaceBuffer || forceBufferResize
+
+        uiHandler.removeCallbacks(surfaceSyncRunnable)
+        val delayMs = if (isInPipMode) 80L else 0L
+        if (delayMs == 0L) uiHandler.post(surfaceSyncRunnable) else uiHandler.postDelayed(surfaceSyncRunnable, delayMs)
+    }
+
+    private fun applySurfaceSize(width: Int, height: Int, forceBufferResize: Boolean = false) {
+        if (!isMpvInitialized) return
+        if (width <= 0 || height <= 0) return
+
+        val sameSize = (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH)
+        if (sameSize && !forceBufferResize) return
 
         lastAppliedSurfaceW = width
         lastAppliedSurfaceH = height
 
-        if (!isInPipMode) {
+        if (forceBufferResize || !isInPipMode) {
             try {
                 surfaceView.surfaceTexture?.setDefaultBufferSize(width, height)
             } catch (e: Exception) {
@@ -332,6 +360,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     private fun updatePipParams() {
+        if (isInPipMode) return
         val rect = android.graphics.Rect()
         if (getGlobalVisibleRect(rect) && !rect.isEmpty) {
             PipState.setSourceRectHint(rect)
@@ -339,11 +368,28 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
+    private fun schedulePipParamsUpdate() {
+        if (isInPipMode) return
+
+        val now = SystemClock.uptimeMillis()
+        val minIntervalMs = 200L
+        val elapsed = now - lastPipParamsAppliedAtMs
+        val delay = (minIntervalMs - elapsed).coerceAtLeast(0L)
+
+        pipParamsRunnable?.let { uiHandler.removeCallbacks(it) }
+        val r = Runnable {
+            lastPipParamsAppliedAtMs = SystemClock.uptimeMillis()
+            updatePipParams()
+        }
+        pipParamsRunnable = r
+        uiHandler.postDelayed(r, delay)
+    }
+
     // Call this on layout changes to keep the PiP rect accurate
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
         if (changed) {
-            updatePipParams()
+            schedulePipParamsUpdate()
         }
     }
 
@@ -429,11 +475,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         applyResizeMode(if (isPip) "contain" else requestedResizeMode)
 
         // Re-sync surface size once when PiP mode toggles.
-        // This avoids continuous churn during interactive PiP resizing.
         surfaceView.post {
             val w = surfaceView.width
             val h = surfaceView.height
-            if (w > 0 && h > 0) applySurfaceSize(w, h)
+            if (w > 0 && h > 0) scheduleSurfaceSizeSync(w, h, forceBufferResize = true)
         }
     }
 

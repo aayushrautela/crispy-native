@@ -611,36 +611,8 @@ export default function PlayerScreen() {
         });
     }, [paused, videoNaturalSize?.width, videoNaturalSize?.height]);
 
-    // Reliability: poll PiP state. Some devices/RN states can drop the activity event.
-    useEffect(() => {
-        if (Platform.OS !== 'android') return;
-        let cancelled = false;
-
-        const id = setInterval(() => {
-            void CrispyNativeCore.isInPiPMode().then((v: boolean) => {
-                if (cancelled) return;
-                if (v === isPipMode) return;
-
-                setIsPipMode(v);
-                if (v) {
-                    setShowControls(false);
-                    setActiveTab('none');
-                    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-                } else {
-                    // Match the native event behavior in case the activity callback is missed.
-                    setShowControls(true);
-                    setActiveTab('none');
-                    if (controlsTimer.current) clearTimeout(controlsTimer.current);
-                    controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
-                }
-            });
-        }, 800);
-
-        return () => {
-            cancelled = true;
-            clearInterval(id);
-        };
-    }, [isPipMode]);
+    // Note: avoid polling PiP state. Native PiP callbacks can be noisy during transitions,
+    // and polling can cause UI/state oscillation.
 
     const resetControlsTimer = useCallback(() => {
         if (isPipMode) return;

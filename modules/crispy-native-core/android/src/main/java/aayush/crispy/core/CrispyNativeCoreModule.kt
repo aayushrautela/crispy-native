@@ -131,7 +131,9 @@ class CrispyNativeCoreModule : Module() {
      */
     AsyncFunction("setPiPConfig") { enabled: Boolean, isPlaying: Boolean, width: Double?, height: Double? ->
       PipState.enabled = enabled
-      // JS-provided isPlaying is best-effort; native player views are the source of truth.
+      // JS-provided isPlaying is best-effort; native player views can still override this from
+      // actual playback callbacks, but we keep it in sync so auto-enter PiP works reliably.
+      PipState.isPlaying = isPlaying
       PipState.setAspectRatio(width, height)
       PipState.applyToActivity(appContext.currentActivity)
       return@AsyncFunction true
