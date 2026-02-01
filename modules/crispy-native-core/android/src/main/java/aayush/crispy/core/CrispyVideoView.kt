@@ -309,12 +309,12 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
-    private fun applySurfaceSize(width: Int, height: Int) {
+    private fun applySurfaceSize(width: Int, height: Int, forceBufferResize: Boolean = false) {
         if (!isMpvInitialized) return
         if (width <= 0 || height <= 0) return
 
         // Always update if dimensions changed - critical for PiP resizing
-        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
+        if (!forceBufferResize && width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
         lastAppliedSurfaceW = width
         lastAppliedSurfaceH = height
