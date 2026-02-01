@@ -122,7 +122,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     if (isLoading || !isVisible) {
         return (
             <View style={styles.loading}>
-                <LoadingIndicator color={theme.colors.primary} />
+                <LoadingIndicator size={48} color={theme.colors.primary} />
                 <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
                     Searching for streams...
                 </Typography>
