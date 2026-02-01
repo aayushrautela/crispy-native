@@ -15,13 +15,14 @@ interface StreamSelectorProps {
     onSelect: (stream: any) => void;
     hideHeader?: boolean;
     onStreamsLoaded?: (streams: any[]) => void;
+    isVisible?: boolean;
 }
 
-export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded }: StreamSelectorProps) => {
+export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded, isVisible = true }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
-    const { data: streams, isLoading } = useStreams(type, id);
+    const { data: streams, isLoading } = useStreams(type, id, isVisible);
 
     React.useEffect(() => {
         if (streams && onStreamsLoaded) {
@@ -118,7 +119,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         );
     };
 
-    if (isLoading) {
+    if (isLoading || !isVisible) {
         return (
             <View style={styles.loading}>
                 <LoadingIndicator color={theme.colors.primary} />

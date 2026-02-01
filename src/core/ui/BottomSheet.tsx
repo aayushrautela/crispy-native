@@ -14,6 +14,7 @@ interface BottomSheetProps {
     enableDynamicSizing?: boolean;
     maxHeight?: number;
     onDismiss?: () => void;
+    onChange?: (index: number) => void;
 }
 
 export type BottomSheetRef = BottomSheetModal;
@@ -26,7 +27,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     scrollable = true,
     enableDynamicSizing = true,
     maxHeight,
-    onDismiss
+    onDismiss,
+    onChange
 }, ref) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
@@ -104,6 +106,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
                 onDismiss?.();
             }}
             onAnimate={handleAnimate}
+            onChange={onChange}
         >
             <View style={styles.container}>
                 {title && (

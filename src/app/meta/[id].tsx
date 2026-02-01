@@ -39,6 +39,7 @@ export default function MetaDetailsScreen() {
     const [availableStreams, setAvailableStreams] = useState<any[]>([]);
     const [isMuted, setIsMuted] = useState(true);
     const [pendingSheetOpen, setPendingSheetOpen] = useState(false);
+    const [isStreamSheetVisible, setStreamSheetVisible] = useState(false);
 
     // Core Data Aggregator
     const { meta, enriched, seasonEpisodes, colors, isLoading, error } = useMetaAggregator(id as string, type as string, activeSeason);
@@ -205,6 +206,7 @@ export default function MetaDetailsScreen() {
             setSelectedEpisode({ episode: 1, name: 'Episode 1' });
             setPendingSheetOpen(true);
         } else {
+            setStreamSheetVisible(true);
             streamBottomSheetRef.current?.present();
         }
     }, [isSeries, selectedEpisode]);
@@ -221,6 +223,7 @@ export default function MetaDetailsScreen() {
     // Effect to handle sheet opening after state update (fixes race condition)
     useEffect(() => {
         if (pendingSheetOpen && selectedEpisode) {
+            setStreamSheetVisible(true);
             streamBottomSheetRef.current?.present();
             setPendingSheetOpen(false);
         }
@@ -395,13 +398,23 @@ export default function MetaDetailsScreen() {
                 </View>
             </Animated.ScrollView>
 
-            <CustomBottomSheet ref={streamBottomSheetRef} title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`} enableDynamicSizing maxHeight={SCREEN_WIDTH * 1.5} scrollable={false}>
+            <CustomBottomSheet
+                ref={streamBottomSheetRef}
+                title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`}
+                enableDynamicSizing={false}
+                snapPoints={['60%', '90%']}
+                scrollable={false}
+                onChange={(index) => {
+                    if (index === -1) setStreamSheetVisible(false);
+                }}
+            >
                 <StreamSelector
                     type={isSeries ? 'series' : 'movie'}
                     id={isSeries && selectedEpisode ? `${enriched.imdbId || id}:${activeSeason}:${selectedEpisode.episode}` : (enriched.imdbId || id) as string}
                     onSelect={handleStreamSelect}
                     hideHeader
                     onStreamsLoaded={setAvailableStreams}
+                    isVisible={isStreamSheetVisible}
                 />
             </CustomBottomSheet>
         </View>
