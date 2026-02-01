@@ -37,6 +37,7 @@ interface HeroSectionProps {
     onCollectionToggle?: () => void;
     onWatchedToggle?: () => void;
     onRatePress?: () => void;
+    watchState: any;
 }
 
 /**
@@ -233,7 +234,8 @@ const HeroDescription = memo(({ enriched, meta, isExpanded, onToggle, alignment 
 export const HeroSection = memo(({
     meta, enriched, colors, scrollY, onWatchPress, isMuted = true,
     isAuthenticated, isListed, isCollected, isWatched, isSeries, userRating,
-    onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress
+    onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress,
+    watchState
 }: HeroSectionProps) => {
     const { width, isTablet, isLandscape } = useResponsive();
     const { theme } = useTheme();
@@ -241,7 +243,7 @@ export const HeroSection = memo(({
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,
         watchButtonSubtext, pillColor, toggleTrailer, palette
-    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background });
+    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background, watchState });
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
     const isSplitLayout = isTablet && isLandscape;

@@ -2,7 +2,6 @@
 import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { TrailerService } from '@/src/core/services/TrailerService';
 import { generateMediaPalette } from '@/src/core/utils/colors';
-import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { Play, RotateCcw } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import Animated, { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
@@ -14,20 +13,24 @@ interface UseHeroStateProps {
     scrollY: Animated.SharedValue<number>;
     heroHeight: number;
     background: string;
+    watchState: {
+        state: 'watch' | 'continue' | 'rewatch';
+        progress?: number;
+        episode?: any;
+        lastWatchedAt?: string;
+        isLoading: boolean;
+    };
 }
 
-export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background }: UseHeroStateProps) => {
+export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background, watchState }: UseHeroStateProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [showTrailer, setShowTrailer] = useState(false);
     const [revealTrailer, setRevealTrailer] = useState(false);
     const [isPlaying, setIsPlaying] = useState(true);
 
-    // Watch state integration
-    const { state, progress, isLoading, episode, lastWatchedAt } = useTraktWatchState(
-        enriched.imdbId || meta?.id,
-        meta?.type
-    );
+    // Watch state is now passed in via props (Lifted State)
+    const { state, progress, isLoading, episode, lastWatchedAt } = watchState;
 
     // Visibility-based playback
     useAnimatedReaction(

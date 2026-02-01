@@ -17,6 +17,7 @@ import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
 import { useStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
+import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -55,16 +56,38 @@ export default function MetaDetailsScreen() {
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
 
+    // 1. Lifted Watch State
+    const watchState = useTraktWatchState(
+        (enriched.imdbId || id) as string,
+        // useTraktWatchState implementation uses loose string check, 'series' is fine or 'show'
+        isSeries ? 'show' : 'movie'
+    );
+
+    // 2. Auto-Select Season based on Watch State
+    useEffect(() => {
+        if (watchState.state === 'continue' && watchState.episode && isSeries) {
+            const epSeason = watchState.episode.season;
+            // Only switch if we are viewing a different season
+            if (epSeason && epSeason !== activeSeason) {
+                setActiveSeason(epSeason);
+            }
+        }
+    }, [watchState.state, watchState.episode?.season, isSeries]);
+
     // Stream Pre-fetching
     const preFetchId = useMemo(() => {
         const baseId = enriched.imdbId || id as string;
         if (isSeries) {
-            // Pre-fetch for Episode 1 of the currently active season
+            // Priority: Continue Watching Episode
+            if (watchState.state === 'continue' && watchState.episode) {
+                return `${baseId}:${watchState.episode.season}:${watchState.episode.number}`;
+            }
+            // Fallback: Episode 1 of active season
             // This ensures "Watch Now" (which defaults to S{Active}:E1) has data ready
             return `${baseId}:${activeSeason}:1`;
         }
         return baseId;
-    }, [enriched.imdbId, id, isSeries, activeSeason]);
+    }, [enriched.imdbId, id, isSeries, activeSeason, watchState.state, watchState.episode]);
 
     useStreams(isSeries ? 'series' : 'movie', preFetchId, true);
 
@@ -92,7 +115,8 @@ export default function MetaDetailsScreen() {
     const isListed = useMemo(() => {
         if (!meta) return false;
         const baseId = enriched.imdbId || id as string;
-        const traktType = isSeries ? 'show' : 'movie';
+        // Legacy: Context interface expects 'series' but implementation expects 'show'
+        const traktType = (isSeries ? 'show' : 'movie') as any;
         return isInWatchlist(baseId, traktType);
     }, [meta, enriched.imdbId, id, isSeries, isInWatchlist]);
 
@@ -105,21 +129,21 @@ export default function MetaDetailsScreen() {
     const userRating = useMemo(() => {
         if (!meta) return null;
         const baseId = enriched.imdbId || id as string;
-        const traktType = isSeries ? 'show' : 'movie';
+        const traktType = (isSeries ? 'show' : 'movie') as any;
         return getUserRating(baseId, traktType);
     }, [meta, enriched.imdbId, id, isSeries, getUserRating]);
 
     const isCollected = useMemo(() => {
         if (!meta) return false;
         const baseId = enriched.imdbId || id as string;
-        const traktType = isSeries ? 'show' : 'movie';
+        const traktType = (isSeries ? 'show' : 'movie') as any;
         return isInCollection(baseId, traktType);
     }, [meta, enriched.imdbId, id, isSeries, isInCollection]);
 
     const handleWatchlistToggle = useCallback(async () => {
         if (!isAuthenticated) return;
         const baseId = enriched.imdbId || id as string;
-        const traktType = isSeries ? 'show' : 'movie';
+        const traktType = (isSeries ? 'show' : 'movie') as any;
         if (isListed) await removeFromWatchlist(baseId, traktType);
         else await addToWatchlist(baseId, traktType);
     }, [isAuthenticated, enriched.imdbId, id, isSeries, isListed, removeFromWatchlist, addToWatchlist]);
@@ -127,7 +151,7 @@ export default function MetaDetailsScreen() {
     const handleCollectionToggle = useCallback(async () => {
         if (!isAuthenticated) return;
         const baseId = enriched.imdbId || id as string;
-        const traktType = isSeries ? 'show' : 'movie';
+        const traktType = (isSeries ? 'show' : 'movie') as any;
         if (isCollected) await removeFromCollection(baseId, traktType);
         else await addToCollection(baseId, traktType);
     }, [isAuthenticated, enriched.imdbId, id, isSeries, isCollected, removeFromCollection, addToCollection]);
@@ -201,15 +225,25 @@ export default function MetaDetailsScreen() {
     // Sub-component Callbacks
     const handleWatchPress = useCallback(() => {
         if (isSeries && !selectedEpisode) {
-            // If no episode selected, default to Episode 1 of active season
-            // This matches our pre-fetching logic
+            // Smart Resume: If "Continue" state, use that exact episode
+            if (watchState.state === 'continue' && watchState.episode) {
+                setSelectedEpisode({
+                    episode: watchState.episode.number,
+                    name: watchState.episode.title || `Episode ${watchState.episode.number}`,
+                    season: watchState.episode.season
+                });
+                setPendingSheetOpen(true);
+                return;
+            }
+
+            // Fallback: Episode 1 of active season
             setSelectedEpisode({ episode: 1, name: 'Episode 1' });
             setPendingSheetOpen(true);
         } else {
             setStreamSheetVisible(true);
             streamBottomSheetRef.current?.present();
         }
-    }, [isSeries, selectedEpisode]);
+    }, [isSeries, selectedEpisode, watchState]);
 
     const handlePersonPress = useCallback((personId: string) => {
         router.push(`/person/${personId}`);
@@ -234,7 +268,7 @@ export default function MetaDetailsScreen() {
     }, [isEpisodeWatched, enriched.imdbId, id, activeSeason]);
 
     const seasons = useMemo(() => {
-        if (enriched?.seasons?.length > 0) {
+        if (enriched?.seasons && enriched.seasons.length > 0) {
             return enriched.seasons
                 .filter(s => s.seasonNumber > 0)
                 .sort((a, b) => a.seasonNumber - b.seasonNumber)
@@ -299,6 +333,7 @@ export default function MetaDetailsScreen() {
                     onWatchPress={handleWatchPress}
                     isMuted={isMuted}
                     // Pass Trakt props for split layout
+                    watchState={watchState}
                     isAuthenticated={isAuthenticated}
                     isListed={isListed}
                     isCollected={isCollected}
@@ -336,12 +371,12 @@ export default function MetaDetailsScreen() {
                         initialRating={userRating ? userRating * 2 : 0}
                         onRate={(r) => {
                             const baseId = enriched.imdbId || id as string;
-                            const traktType = isSeries ? 'show' : 'movie';
+                            const traktType = (isSeries ? 'show' : 'movie') as any;
                             rateContent(baseId, traktType, r);
                         }}
                         onRemoveRating={() => {
                             const baseId = enriched.imdbId || id as string;
-                            const traktType = isSeries ? 'show' : 'movie';
+                            const traktType = (isSeries ? 'show' : 'movie') as any;
                             removeContentRating(baseId, traktType);
                         }}
                     />
@@ -358,7 +393,7 @@ export default function MetaDetailsScreen() {
                     )}
 
                     <View style={{ marginHorizontal: -20 }}>
-                        <CastSection cast={enriched.cast} theme={theme} colors={colors} palette={mediaPalette} onPersonPress={handlePersonPress} />
+                        <CastSection cast={enriched.cast || []} theme={theme} colors={colors} palette={mediaPalette} onPersonPress={handlePersonPress} />
                     </View>
 
                     <View style={{ marginHorizontal: -20 }}>
@@ -385,14 +420,14 @@ export default function MetaDetailsScreen() {
                         </View>
                     )}
 
-                    {enriched.collection?.parts?.length > 0 && (
+                    {enriched.collection?.parts && enriched.collection.parts.length > 0 && (
                         <View style={{ marginTop: 24, marginHorizontal: -20 }}>
                             <CatalogRow title={enriched.collection.name} items={enriched.collection.parts} textColor="white" />
                         </View>
                     )}
-                    {enriched.similar?.length > 0 && (
+                    {enriched.similar && enriched.similar.length > 0 && (
                         <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                            <CatalogRow title="More Like This" items={enriched.similar} textColor="white" />
+                            <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor="white" />
                         </View>
                     )}
                 </View>
