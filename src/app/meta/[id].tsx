@@ -15,6 +15,7 @@ import { RatingsSection } from '@/src/features/meta/components/RatingsSection';
 import { useAiInsights } from '@/src/features/meta/hooks/useAiInsights';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
+import { useStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
@@ -37,6 +38,7 @@ export default function MetaDetailsScreen() {
     const [selectedEpisode, setSelectedEpisode] = useState<any>(null);
     const [availableStreams, setAvailableStreams] = useState<any[]>([]);
     const [isMuted, setIsMuted] = useState(true);
+    const [pendingSheetOpen, setPendingSheetOpen] = useState(false);
 
     // Core Data Aggregator
     const { meta, enriched, seasonEpisodes, colors, isLoading, error } = useMetaAggregator(id as string, type as string, activeSeason);
@@ -51,6 +53,19 @@ export default function MetaDetailsScreen() {
     });
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
+
+    // Stream Pre-fetching
+    const preFetchId = useMemo(() => {
+        const baseId = enriched.imdbId || id as string;
+        if (isSeries) {
+            // Pre-fetch for Episode 1 of the currently active season
+            // This ensures "Watch Now" (which defaults to S{Active}:E1) has data ready
+            return `${baseId}:${activeSeason}:1`;
+        }
+        return baseId;
+    }, [enriched.imdbId, id, isSeries, activeSeason]);
+
+    useStreams(isSeries ? 'series' : 'movie', preFetchId, true);
 
     // Trakt Logic
     const {
@@ -184,8 +199,15 @@ export default function MetaDetailsScreen() {
 
     // Sub-component Callbacks
     const handleWatchPress = useCallback(() => {
-        streamBottomSheetRef.current?.present();
-    }, []);
+        if (isSeries && !selectedEpisode) {
+            // If no episode selected, default to Episode 1 of active season
+            // This matches our pre-fetching logic
+            setSelectedEpisode({ episode: 1, name: 'Episode 1' });
+            setPendingSheetOpen(true);
+        } else {
+            streamBottomSheetRef.current?.present();
+        }
+    }, [isSeries, selectedEpisode]);
 
     const handlePersonPress = useCallback((personId: string) => {
         router.push(`/person/${personId}`);
@@ -193,8 +215,16 @@ export default function MetaDetailsScreen() {
 
     const handleEpisodePress = useCallback((ep: any) => {
         setSelectedEpisode(ep);
-        streamBottomSheetRef.current?.present();
+        setPendingSheetOpen(true);
     }, []);
+
+    // Effect to handle sheet opening after state update (fixes race condition)
+    useEffect(() => {
+        if (pendingSheetOpen && selectedEpisode) {
+            streamBottomSheetRef.current?.present();
+            setPendingSheetOpen(false);
+        }
+    }, [pendingSheetOpen, selectedEpisode]);
 
     const handleIsEpisodeWatched = useCallback((epNum: number) => {
         return isEpisodeWatched((enriched.imdbId || id) as string, activeSeason, epNum);

@@ -1,11 +1,9 @@
-import { AddonService } from '@/src/core/services/AddonService';
-import { useUserStore } from '@/src/core/stores/userStore';
+import { useStreams } from '../hooks/useStreams';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import { useQuery } from '@tanstack/react-query';
 import { Cpu, Globe, Play } from 'lucide-react-native';
 import React from 'react';
 import { ListRenderItem, StyleSheet, View } from 'react-native';
@@ -21,45 +19,9 @@ interface StreamSelectorProps {
 
 export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded }: StreamSelectorProps) => {
     const { theme } = useTheme();
-    const { manifests } = useUserStore();
     const { bottom } = useSafeAreaInsets();
 
-    const { data: streams, isLoading } = useQuery({
-        queryKey: ['streams', type, id],
-        queryFn: async () => {
-            console.log(`[StreamSelector] Fetching streams for type: ${type}, id: ${id}`);
-            const addonUrls = Object.keys(manifests);
-
-            const streamAddons = addonUrls.filter(url => {
-                const m = manifests[url];
-                const supportsStreams = m?.resources?.some(r =>
-                    typeof r === 'string' ? r === 'stream' : r?.name === 'stream'
-                );
-                console.log(`[StreamSelector] Addon ${m?.name || url} supports streams: ${supportsStreams}`);
-                return supportsStreams;
-            });
-
-            if (streamAddons.length === 0) {
-                console.warn('[StreamSelector] No addons support "stream" resource');
-                return [];
-            }
-
-            const results = await Promise.allSettled(
-                streamAddons.map(url => {
-                    console.log(`[StreamSelector] Calling AddonService.getStreams for ${url}`);
-                    return AddonService.getStreams(url, type, id);
-                })
-            );
-
-            const fetchedStreams = results
-                .filter((r): r is PromiseFulfilledResult<{ streams: any[] }> => r.status === 'fulfilled')
-                .flatMap(r => r.value.streams || [])
-                .filter(Boolean);
-
-            console.log(`[StreamSelector] Found ${fetchedStreams.length} streams`);
-            return fetchedStreams;
-        },
-    });
+    const { data: streams, isLoading } = useStreams(type, id);
 
     React.useEffect(() => {
         if (streams && onStreamsLoaded) {
@@ -111,7 +73,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         );
     };
 
-    const renderItem: ListRenderItem<any> = ({ item, index }) => {
+    const renderItem: ListRenderItem<any> = ({ item, index }: { item: any, index: number }) => {
         if (!item) return null;
 
         const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
@@ -128,7 +90,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                     onPress={() => onSelect(item)}
                     style={styles.streamItem}
                 >
-                    <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceContainer }]}>
+                    <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceVariant }]}>
                         {isTorrent ? (
                             <Cpu size={22} color={theme.colors.primary} />
                         ) : isYT ? (
@@ -179,7 +141,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
 
             <BottomSheetFlatList
                 data={streams || []}
-                keyExtractor={(item, index) => `${item.url || index}-${index}`}
+                keyExtractor={(item: any, index: number) => `${item.url || index}-${index}`}
                 renderItem={renderItem}
                 ListEmptyComponent={
                     <View style={styles.empty}>
