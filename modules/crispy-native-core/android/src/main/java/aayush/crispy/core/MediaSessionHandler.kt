@@ -37,6 +37,7 @@ class MediaSessionHandler(
     private var currentTitle = "Crispy Player"
     private var currentArtist = ""
     private var currentArtwork: Bitmap? = null
+    private var currentArtworkUrl: String? = null
     private var currentDuration = 0L
     private var currentPosition = 0L
     private var isPlaying = false
@@ -97,8 +98,22 @@ class MediaSessionHandler(
 
     fun updateMetadata(title: String, artist: String, artworkUrl: String?) {
         android.util.Log.d(TAG, "updateMetadata called with: title='$title', artist='$artist', artworkUrl='$artworkUrl'")
+        
         currentTitle = title
         currentArtist = artist
+        
+        // Track the latest requested URL
+        val previousArtworkUrl = currentArtworkUrl
+        currentArtworkUrl = artworkUrl
+
+        // If artwork URL changed, clear old artwork to avoid mismatch during loading
+        if (previousArtworkUrl != artworkUrl) {
+            currentArtwork = null
+        }
+        
+        // Update notification immediately with new text
+        updateNotification()
+        updateMediaSessionMetadata()
 
         if (!artworkUrl.isNullOrEmpty()) {
             android.util.Log.d(TAG, "Starting image load for: $artworkUrl")
@@ -108,32 +123,36 @@ class MediaSessionHandler(
                 .allowHardware(false) 
                 .target(
                     onSuccess = { result ->
-                        android.util.Log.d(TAG, "Image load successful")
-                        if (result is BitmapDrawable) {
-                            currentArtwork = result.bitmap
+                        // Race condition check: Only apply if this is still the requested URL
+                        if (currentArtworkUrl == artworkUrl) {
+                            android.util.Log.d(TAG, "Image load successful for $artworkUrl")
+                            if (result is BitmapDrawable) {
+                                currentArtwork = result.bitmap
+                            } else {
+                                android.util.Log.w(TAG, "Image is not a BitmapDrawable, cannot use as largeIcon")
+                                currentArtwork = null
+                            }
+                            updateNotification()
+                            updateMediaSessionMetadata()
                         } else {
-                            android.util.Log.w(TAG, "Image is not a BitmapDrawable, cannot use as largeIcon")
-                             // detailed handling or conversion could be added here
-                             // For now, simple fallback
-                             currentArtwork = null
+                             android.util.Log.d(TAG, "Image load ignored (obsolete). Current: $currentArtworkUrl")
                         }
-                        updateNotification()
-                        updateMediaSessionMetadata()
                     },
                     onError = {
-                        android.util.Log.e(TAG, "Image load failed")
-                        currentArtwork = null
-                        updateNotification()
-                        updateMediaSessionMetadata()
+                        // Only update if this is still the current URL
+                        if (currentArtworkUrl == artworkUrl) {
+                            android.util.Log.e(TAG, "Image load failed for $artworkUrl")
+                            currentArtwork = null
+                            updateNotification()
+                            updateMediaSessionMetadata()
+                        }
                     }
                 )
                 .build()
             loader.enqueue(request)
         } else {
-            android.util.Log.d(TAG, "No artwork URL, clearing artwork")
-            currentArtwork = null
-            updateNotification()
-            updateMediaSessionMetadata()
+            // Logic handled above (currentArtwork = null), but explicit log doesn't hurt
+            android.util.Log.d(TAG, "No artwork URL provided")
         }
     }
 
