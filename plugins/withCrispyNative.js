@@ -1,10 +1,11 @@
-const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod, withAndroidManifest } = require('@expo/config-plugins');
+const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod, withAndroidManifest, withGradleProperties } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 /**
  * Unified Expo Config Plugin for Crispy Native Android.
- * Consolidates NDK fixes, AAR dependencies, ABI splits, and packaging options.
+ * Consolidates NDK fixes, AAR dependencies, ABI splits, packaging options,
+ * and fixes for Bridgeless mode compatibility.
  */
 const withCrispyNative = (config) => {
     // 1. Force NDK version in top-level build.gradle
@@ -19,10 +20,107 @@ const withCrispyNative = (config) => {
     // 4. Picture-in-Picture Support
     config = withAndroidManifestPiP(config);
 
+    // 5. Disable Bridgeless Mode (Fix for react-native-video / Legacy modules)
+    config = withBridgelessDisabled(config);
+
+    // 6. Add Audio Permissions & Media Receiver
+    config = withAudioConfig(config);
+
+    // 7. Add ProGuard Rules
+    config = withProGuardRules(config);
+
     return config;
 };
 
 // --- Sub-Plugins ---
+
+/**
+ * Disable Bridgeless mode to support legacy modules like react-native-video.
+ * Adds react.bridgelessEnabled=false to gradle.properties.
+ */
+const withBridgelessDisabled = (config) => {
+    return withGradleProperties(config, (config) => {
+        config.modResults.push({
+            type: 'property',
+            key: 'react.bridgelessEnabled',
+            value: 'false',
+        });
+        return config;
+    });
+};
+
+/**
+ * Add required Audio permissions and MediaButtonReceiver.
+ */
+const withAudioConfig = (config) => {
+    return withAndroidManifest(config, (config) => {
+        const androidManifest = config.modResults.manifest;
+
+        // 1. Add Permissions
+        const permissionsToAdd = [
+            'android.permission.RECORD_AUDIO',
+            'android.permission.MODIFY_AUDIO_SETTINGS',
+            'android.permission.BLUETOOTH_CONNECT',
+        ];
+
+        if (!androidManifest['uses-permission']) {
+            androidManifest['uses-permission'] = [];
+        }
+
+        permissionsToAdd.forEach((permission) => {
+            if (!androidManifest['uses-permission'].some((p) => p['$']['android:name'] === permission)) {
+                androidManifest['uses-permission'].push({
+                    $: { 'android:name': permission },
+                });
+            }
+        });
+
+        // 2. Add MediaButtonReceiver
+        const mainApplication = androidManifest.application[0];
+        if (!mainApplication.receiver) {
+            mainApplication.receiver = [];
+        }
+
+        const receiverName = 'androidx.media.session.MediaButtonReceiver';
+        if (!mainApplication.receiver.some((r) => r['$']['android:name'] === receiverName)) {
+            mainApplication.receiver.push({
+                $: {
+                    'android:name': receiverName,
+                    'android:exported': 'true',
+                },
+                'intent-filter': [
+                    {
+                        action: [{ $: { 'android:name': 'android.intent.action.MEDIA_BUTTON' } }],
+                    },
+                ],
+            });
+        }
+
+        return config;
+    });
+};
+
+/**
+ * Add ProGuard rules for ExoPlayer and Media3.
+ */
+const withProGuardRules = (config) => {
+    return withDangerousMod(config, [
+        'android',
+        async (config) => {
+            const file = path.join(config.modRequest.platformProjectRoot, 'app/proguard-rules.pro');
+            const contents = fs.readFileSync(file, 'utf8');
+            const newRules = `
+# ExoPlayer / react-native-video
+-keep class com.google.android.exoplayer2.** { *; }
+-keep class androidx.media3.** { *; }
+`;
+            if (!contents.includes('com.google.android.exoplayer2')) {
+                fs.writeFileSync(file, contents + newRules);
+            }
+            return config;
+        },
+    ]);
+};
 
 /**
  * Force NDK version in top-level build.gradle.
