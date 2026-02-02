@@ -117,7 +117,6 @@ class CrispyNativeCoreModule : Module() {
       PipState.enabled = true
       // Don't force isPlaying here; player views update this from actual playback.
       PipState.setAspectRatio(width, height)
-      PipState.applyToActivity(activity)
       return@AsyncFunction PipState.enterPiP(activity, width, height)
     }
 

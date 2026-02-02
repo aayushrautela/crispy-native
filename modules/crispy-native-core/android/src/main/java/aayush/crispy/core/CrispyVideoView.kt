@@ -156,6 +156,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             // Ensure media session + PiP gating reflect the actual initial state even if
             // the paused prop was applied before MPV finished initializing.
             syncPlaybackAndPip()
+            applyResizeMode(requestedResizeMode)
             
             pendingDataSource?.let { url ->
                 loadFile(url)
@@ -332,20 +333,14 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
             val rect = android.graphics.Rect()
             if (getGlobalVisibleRect(rect) && !rect.isEmpty) {
                 PipState.setSourceRectHint(rect)
-                PipState.applyToActivity(appContext.currentActivity)
             }
         }
     }
 
     private fun syncPlaybackAndPip() {
         val playing = !isPaused
-
-        // Media notification & headset controls
         mediaSessionHandler?.updatePlaybackState(playing)
-
-        // PiP gating is driven by the actual playback state.
         PipState.isPlaying = playing
-        PipState.applyToActivity(appContext.currentActivity)
     }
 
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
@@ -388,8 +383,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun setResizeMode(mode: String?) {
         requestedResizeMode = mode
-        // In PiP mode, always use "cover" to fill the small window
-        applyResizeMode(if (isInPipMode) "cover" else mode)
+        applyResizeMode(mode)
     }
 
     private fun applyResizeMode(mode: String?) {
@@ -422,10 +416,6 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
-        // Use "cover" mode in PiP: video fills the entire window (no black bars),
-        // aspect ratio is preserved (no distortion), edges may be cropped.
-        // This provides the best visual experience for small PiP windows.
-        applyResizeMode(if (isPip) "cover" else requestedResizeMode)
         
         // Force an immediate surface size sync. During PiP transitions, we need
         // to ensure MPV knows the exact window dimensions. Using force=true
@@ -527,10 +517,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                           hasLoadEventFired = true
                           onLoad(mapOf("duration" to value, "width" to width, "height" to height))
 
-                          // Keep shared state updated so MainActivity can use the correct ratio.
-                          PipState.setAspectRatio(width.toDouble(), height.toDouble())
-                          PipState.applyToActivity(appContext.currentActivity)
-                      }
+                           PipState.setAspectRatio(width.toDouble(), height.toDouble())
+                       }
                   }
               }
         }
@@ -543,7 +531,9 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         
         if (eventId == MPV_EVENT_FILE_LOADED && !isPaused) {
              MPVLib.setPropertyBoolean("pause", false)
-             syncPlaybackAndPip()
+             val playing = !isPaused
+             mediaSessionHandler?.updatePlaybackState(playing)
+             PipState.isPlaying = playing
         }
     }
 

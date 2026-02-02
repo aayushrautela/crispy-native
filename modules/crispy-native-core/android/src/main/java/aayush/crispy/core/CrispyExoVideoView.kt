@@ -192,11 +192,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 isPaused = !isPlaying
-
-                // Keep PiP gating in sync with actual playback.
                 PipState.isPlaying = isPlaying
-                PipState.applyToActivity(appContext.currentActivity)
-
                 mediaSessionHandler?.updatePlaybackState(isPlaying)
             }
 
@@ -204,7 +200,6 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
                 lastVideoSize = videoSize
                 if (videoSize.width > 0 && videoSize.height > 0) {
                     PipState.setAspectRatio(videoSize.width.toDouble(), videoSize.height.toDouble())
-                    PipState.applyToActivity(appContext.currentActivity)
                 }
                 emitLoadIfNeeded()
             }
@@ -236,7 +231,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     fun setResizeMode(mode: String?) {
         requestedResizeMode = mode
-        applyResizeMode(if (isInPipMode) "contain" else mode)
+        applyResizeMode(mode)
     }
 
     private fun applyResizeMode(mode: String?) {
@@ -288,7 +283,6 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             if (isPaused) player.pause() else player.play()
             mediaSessionHandler?.updatePlaybackState(!isPaused)
             PipState.isPlaying = !isPaused
-            PipState.applyToActivity(appContext.currentActivity)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to apply play/pause", e)
         }
@@ -441,7 +435,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     override fun onPipModeChanged(isPip: Boolean) {
         isInPipMode = isPip
-        applyResizeMode(if (isPip) "contain" else requestedResizeMode)
+        // Simplified: Do not force "contain" mode. Let the user's setting persist.
     }
 
     override fun pauseFromPipDismissed() {

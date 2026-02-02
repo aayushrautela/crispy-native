@@ -28,12 +28,6 @@ object PipState {
     @Volatile
     private var sourceRectHint: Rect? = null
 
-    @Volatile
-    private var lastAppliedActivityId: Int = 0
-
-    @Volatile
-    private var lastAppliedSignature: String? = null
-
     fun setAspectRatio(width: Double?, height: Double?) {
         if (width == null || height == null) return
         if (width <= 0 || height <= 0) return
@@ -60,13 +54,10 @@ object PipState {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         try {
-            val activityId = System.identityHashCode(activity)
-            val arSig = getAspectRatio()?.let { "${it.numerator}:${it.denominator}" } ?: "null"
-            val rectSig = sourceRectHint?.let { "${it.left},${it.top},${it.right},${it.bottom}" } ?: "null"
-            val autoEnterSig = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) shouldEnterOnUserLeave() else null
-            val signature = "enabled=$enabled;playing=$isPlaying;ar=$arSig;rect=$rectSig;auto=$autoEnterSig"
-
-            if (activityId == lastAppliedActivityId && signature == lastAppliedSignature) {
+            // SIMPLIFICATION: If we are already in PiP mode, do NOT update params.
+            // This prevents the "snap back" issue where the app forces the window
+            // back to the video aspect ratio after the user has manually resized it.
+            if (activity.isInPictureInPictureMode) {
                 return
             }
 
@@ -83,8 +74,6 @@ object PipState {
                 builder.setAutoEnterEnabled(shouldEnterOnUserLeave())
             }
 
-            lastAppliedActivityId = activityId
-            lastAppliedSignature = signature
             activity.setPictureInPictureParams(builder.build())
         } catch (e: Exception) {
             Log.w(TAG, "Failed to apply PiP params", e)
