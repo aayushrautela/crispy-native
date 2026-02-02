@@ -8,28 +8,10 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
-import android.content.res.Configuration
-import com.facebook.react.modules.core.DeviceEventManagerModule
-
-import aayush.crispy.core.PipState
-import aayush.crispy.core.PlaybackRegistry
 
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
-
-  private fun emitPipModeChanged(isInPip: Boolean) {
-      reactInstanceManager.currentReactContext
-          ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          ?.emit("onPipModeChanged", isInPip)
-  }
-
-  private fun emitPipWillEnter() {
-      reactInstanceManager.currentReactContext
-          ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          ?.emit("onPipWillEnter", true)
-  }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
@@ -62,29 +44,6 @@ class MainActivity : ReactActivity() {
           ){})
   }
 
-  override fun onUserLeaveHint() {
-      super.onUserLeaveHint()
-
-      // Only enter PiP when the player explicitly enables it.
-      if (!PipState.shouldEnterOnUserLeave()) return
-
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          try {
-              // Avoid re-enter attempts.
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode) return
-
-              // Give JS a chance to hide overlays immediately.
-              emitPipWillEnter()
-
-              // Ensure params (aspect ratio / auto-enter) are current.
-              PipState.applyToActivity(this)
-              PipState.enterPiP(this, null, null)
-          } catch (e: Exception) {
-              android.util.Log.e("MainActivity", "Failed to enter PiP", e)
-          }
-      }
-  }
-
   /**
     * Align the back button behavior with Android S
     * where moving root activities to background instead of finishing activities.
@@ -102,18 +61,5 @@ class MainActivity : ReactActivity() {
       // Use the default back button implementation on Android S
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
-  }
-
-  override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
-      super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-      emitPipModeChanged(isInPictureInPictureMode)
-      PlaybackRegistry.notifyPipModeChanged(isInPictureInPictureMode)
-  }
-
-  @Suppress("DEPRECATION")
-  override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
-      super.onPictureInPictureModeChanged(isInPictureInPictureMode)
-      emitPipModeChanged(isInPictureInPictureMode)
-      PlaybackRegistry.notifyPipModeChanged(isInPictureInPictureMode)
   }
 }

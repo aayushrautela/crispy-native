@@ -2,7 +2,6 @@ package aayush.crispy.core
 
 import android.content.Context
 import android.graphics.SurfaceTexture
-import android.util.AttributeSet
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -101,19 +100,11 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         surfaceView.surfaceTextureListener = this
         surfaceView.isOpaque = false
 
-        // On layout changes, immediately sync SurfaceTexture buffer to view size.
-        // This is critical for PiP where the window can be resized by the user.
-        surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            val w = right - left
-            val h = bottom - top
-            val oldW = oldRight - oldLeft
-            val oldH = oldBottom - oldTop
-            if (w <= 0 || h <= 0) return@addOnLayoutChangeListener
-            if (w == oldW && h == oldH) return@addOnLayoutChangeListener
-
-            // Apply immediately - no delay, no coalescing. Simple and reliable.
-            applySurfaceSize(w, h)
-        }
+        // NOTE: We intentionally do NOT use addOnLayoutChangeListener here.
+        // For PiP, the OS handles window resizing and the TextureView reports
+        // size changes via onSurfaceTextureSizeChanged. Using both causes race
+        // conditions where MPV receives stale dimensions, leading to the
+        // "video in corner" bug.
 
         addView(surfaceView, android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
@@ -132,10 +123,10 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "Surface texture available: ${width}x${height}")
         try {
-            // Critical for correct scaling: keep SurfaceTexture buffer aligned to the view size.
-            if (width > 0 && height > 0) {
-                surfaceTexture.setDefaultBufferSize(width, height)
-            }
+            // NOTE: We do NOT call setDefaultBufferSize here.
+            // The TextureView manages its own buffer size automatically.
+            // Manually setting it causes race conditions during PiP transitions
+            // where MPV renders into a mismatched buffer, causing the "corner" bug.
             surface = Surface(surfaceTexture)
             
             MPVLib.create(context.applicationContext)
@@ -157,7 +148,8 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
                 }
             })
 
-            applySurfaceSize(width, height, forceBufferResize = true)
+            // Tell MPV the initial surface size
+            updateMpvSurfaceSize(width, height)
             observeProperties()
             isMpvInitialized = true
 
@@ -178,8 +170,11 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
-        // Apply immediately when surface texture size changes (PiP resize)
-        applySurfaceSize(width, height)
+        Log.d(TAG, "Surface texture size changed: ${width}x${height} (isInPipMode=$isInPipMode)")
+        // This is the ONLY place we update MPV's surface size.
+        // The OS has resized the TextureView (e.g., during PiP transition),
+        // and we simply tell MPV the new dimensions. No manual buffer management.
+        updateMpvSurfaceSize(width, height)
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
@@ -309,28 +304,24 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         }
     }
 
-    private fun applySurfaceSize(width: Int, height: Int, forceBufferResize: Boolean = false) {
+    /**
+     * Update MPV's understanding of the surface dimensions.
+     * This is the single source of truth for surface sizing.
+     * Called only from onSurfaceTextureAvailable and onSurfaceTextureSizeChanged.
+     */
+    private fun updateMpvSurfaceSize(width: Int, height: Int, force: Boolean = false) {
         if (!isMpvInitialized) return
         if (width <= 0 || height <= 0) return
+        if (!force && width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
-        // Always update if dimensions changed - critical for PiP resizing
-        if (!forceBufferResize && width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
-
+        Log.d(TAG, "Updating MPV surface size: ${width}x${height}")
         lastAppliedSurfaceW = width
         lastAppliedSurfaceH = height
 
-        // Always set the buffer size to match view size - this is what makes video fill the PiP window
-        try {
-            surfaceView.surfaceTexture?.setDefaultBufferSize(width, height)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to set SurfaceTexture buffer size", e)
-        }
-
-        // Tell MPV the new surface dimensions
         try {
             MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to apply mpv android-surface-size", e)
+            Log.w(TAG, "Failed to set android-surface-size", e)
         }
     }
 
@@ -397,23 +388,28 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     fun setResizeMode(mode: String?) {
         requestedResizeMode = mode
-        applyResizeMode(if (isInPipMode) "contain" else mode)
+        // In PiP mode, always use "cover" to fill the small window
+        applyResizeMode(if (isInPipMode) "cover" else mode)
     }
 
     private fun applyResizeMode(mode: String?) {
         if (!isMpvInitialized) return
 
+        Log.d(TAG, "Applying resize mode: $mode (isInPipMode=$isInPipMode)")
         try {
             when (mode) {
                 "cover" -> {
+                    // Fill the entire surface, crop edges if needed, preserve aspect ratio
                     MPVLib.setPropertyDouble("panscan", 1.0)
                     MPVLib.setPropertyString("keepaspect", "yes")
                 }
                 "stretch" -> {
+                    // Fill the entire surface by stretching (distorts aspect ratio)
                     MPVLib.setPropertyDouble("panscan", 0.0)
                     MPVLib.setPropertyString("keepaspect", "no")
                 }
                 else -> {
+                    // "contain" - show entire video with black bars if needed
                     MPVLib.setPropertyDouble("panscan", 0.0)
                     MPVLib.setPropertyString("keepaspect", "yes")
                 }
@@ -424,9 +420,23 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     }
 
     override fun onPipModeChanged(isPip: Boolean) {
+        Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
-        applyResizeMode(if (isPip) "contain" else requestedResizeMode)
-        // Layout listener will handle surface size sync automatically
+        // Use "cover" mode in PiP: video fills the entire window (no black bars),
+        // aspect ratio is preserved (no distortion), edges may be cropped.
+        // This provides the best visual experience for small PiP windows.
+        applyResizeMode(if (isPip) "cover" else requestedResizeMode)
+        
+        // Force an immediate surface size sync. During PiP transitions, we need
+        // to ensure MPV knows the exact window dimensions. Using force=true
+        // bypasses the cache check since the TextureView size should already
+        // reflect the PiP window dimensions.
+        val w = surfaceView.width
+        val h = surfaceView.height
+        if (w > 0 && h > 0) {
+            Log.d(TAG, "PiP: forcing surface size sync to ${w}x${h}")
+            updateMpvSurfaceSize(w, h, force = true)
+        }
     }
 
     override fun pauseFromPipDismissed() {
