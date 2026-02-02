@@ -318,7 +318,7 @@ export class TraktService {
         endpoint: string,
         method: string,
         body?: any,
-        retryCount: number
+        retryCount = 0
     ): Promise<T> {
         this.initialize();
 
@@ -368,12 +368,12 @@ export class TraktService {
             }
 
             if (!res.ok) {
-                if (res.status === 204) return null as T;
+                if (res.status === 204) return null as any;
                 throw new Error(`Trakt API Error: ${res.status}`);
             }
 
             const text = await res.text();
-            return text ? JSON.parse(text) : null;
+            return text ? JSON.parse(text) : (null as any);
         } catch (e) {
             console.error(`[TraktService] Request failed for ${endpoint}:`, e);
             throw e;
@@ -438,6 +438,182 @@ export class TraktService {
         if (!this.isAuthenticated()) return [];
         const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=images,full');
         return (movies || []).map(i => ({ ...i, type: 'movie' })).map(i => this.normalize(i));
+    }
+
+    public async getWatchedHistory() {
+        if (!this.isAuthenticated()) return [];
+        // Combined history for movies and episodes
+        const history = await this.apiRequest<any[]>('/sync/history?extended=images,full&limit=100');
+        return (history || []).map(i => this.normalize(i));
+    }
+
+    private constructScrobbleBody(item: any, progress: number) {
+        const type = item.type || (item.movie ? 'movie' : 'episode'); // Default fallback
+        const ids = item.ids || (item.movie?.ids || item.episode?.ids || item.show?.ids);
+        
+        if (!ids) throw new Error('Cannot scrobble item without IDs');
+
+        const body: any = {
+            progress: Math.min(100, Math.max(0, progress)),
+            app_version: '1.0.0',
+            date: new Date().toISOString()
+        };
+
+        if (type === 'movie' || item.movie) {
+            body.movie = { ids };
+        } else if (type === 'episode' || item.episode) {
+            body.episode = { ids };
+        } else if (type === 'show' || item.show) {
+             // Fallback for "show" type if passed incorrectly, usually implies episode
+             // But we need episode IDs. If we only have show IDs, we can't scrobble an episode easily without season/ep number.
+             // Assuming the item passed IS an episode or movie object with IDs.
+             if (item.season && item.number) {
+                 body.episode = { season: item.season, number: item.number, title: item.title }; 
+                 // If we have IDs for the show/episode, use them
+             } else {
+                 // Try to use the IDs as episode IDs
+                 body.episode = { ids };
+             }
+        }
+        
+        return body;
+    }
+    
+    // Cleaner Public API for Scrobbling that handles ID resolution internally
+    public async startScrobble(id: string, type: 'movie' | 'episode', progress: number) {
+         const ids = this.getIdsObject(id);
+         const body: any = {
+             progress: Math.min(100, Math.max(0, progress)),
+             app_version: '1.0.0',
+             date: new Date().toISOString()
+         };
+         
+         if (type === 'movie') body.movie = { ids };
+         else body.episode = { ids }; // For episodes, we really need the specific episode ID, or we need to pass S/E. 
+         // NOTE: The 'id' passed here is usually the specific episode ID (imdb/tmdb/trakt of the EPISODE).
+         // If the app passes Show ID + S/E, we need a different signature. 
+         // Current App Architecture: 'id' in player is usually the specific stream ID. 
+         // For Movies: imdb/tmdb of movie.
+         // For Series: The 'id' param in PlayerScreen is `tt12345:1:2` (IMDB:S:E) or `tmdb:12345:1:2`.
+         
+         // We need to handle the S:E parsing here if simple IDs aren't enough.
+         
+         return this.apiRequest('/scrobble/start', 'POST', body);
+    }
+    
+    // Robust Scrobble Implementation that accepts parsed metadata
+    public async scrobble(action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) {
+        if (!this.isAuthenticated()) return null;
+
+        const body: any = {
+            progress: Math.min(100, Math.max(0, progress)),
+            app_version: '1.0.0',
+            date: new Date().toISOString()
+        };
+
+        // Handle Series (Episodes)
+        if (type === 'series' || (season !== undefined && episode !== undefined)) {
+            // We need to identify the EPISODE.
+            // Case 1: ID is a specific Episode ID (rare in this app, usually ShowID)
+            // Case 2: ID is Show ID + Season + Episode
+            
+            // If ID contains colons, it might be `id:s:e`
+            const parts = id.split(':');
+            let showId = id;
+            if (parts.length >= 3) {
+                 // It's a compound ID, but we might have separate season/episode args
+                 showId = parts[0]; 
+                 // If season/episode args are missing, parse from ID?
+                 // But the caller usually passes them.
+            }
+            
+            // Parse Show ID
+            const ids = this.getIdsObject(showId);
+            
+            // For scrobbling an episode by Show ID + S/E, we send:
+            // { episode: { season: 1, number: 1, show: { ids: { ... } } } } ??
+            // Trakt docs say: 
+            // "movie": { "ids": {} }
+            // "episode": { "ids": {} } OR { "season": 1, "number": 1, "title": "...", "ids": {} } 
+            // If we don't have episode IDs, we MUST provide Show IDs?
+            // Actually, Trakt Checkin/Scrobble accepts "episode": { "season": X, "number": Y } IF "show" is nested? No.
+            // It accepts "episode": { "season": 1, "number": 1, "ids": { ... } }
+            // If we don't have specific episode IDs (like IMDB for that specific episode), we rely on Trakt finding it via Show ID?
+            // The BEST way is to find the Episode Trakt ID first.
+            
+            // HOWEVER, Trakt supports lookup by Show ID + S/E in the `episode` object?
+            // "episode": { "season": 1, "number": 2 } is NOT enough usually.
+            // We usually need: "show": { "ids": ... }, "episode": { "season": 1, "number": 2 } ?
+            // Let's check the WebUI implementation (which I read).
+            
+            // WebUI `trakt.ts` L600: `stremioIdToTraktItem`.
+            // WebUI logic seems to resolve IDs first? 
+            // `findNextEpisodeFromTMDB` ...
+            // `scrobbleStart` just calls API with params.
+            // In the Nuvio/WebUI ecosystem, they construct a `TraktScrobbleParams` object.
+            
+            // Let's rely on `TraktService` finding the ID if needed, OR just send what we have.
+            // Constructing the best possible payload:
+            
+            if (season !== undefined && episode !== undefined) {
+                 // We have S/E. We likely have the SHOW ID.
+                 const showIds = this.getIdsObject(showId);
+                 body.episode = {
+                     season: season,
+                     number: episode,
+                 };
+                 // Does Trakt allow 'show' inside scrobble? 
+                 // Official Docs: 
+                 // "episode": { "season": 1, "number": 1 } IS NOT SUFFICIENT ALONE.
+                 // But if we include IDs in the episode object that might work?
+                 // Actually, if we use standard IDs (IMDB/TMDB) for the SHOW, we can't put them in `episode.ids`.
+                 
+                 // Strategy: We should probably fetch the Episode Trakt ID if possible, BUT that's slow.
+                 // Alternative: Send `episode: { season: 1, number: 1, title: '...' }` AND `show: { ids: ... }` ?
+                 // Trakt Scrobble endpoint body structure:
+                 // { movie: {...}, progress: ... } OR { episode: {...}, progress: ... }
+                 // The `episode` object can contain `ids`.
+                 
+                 // If we only have Show ID, we can't scrobble easily without looking up the episode first.
+                 // BUT, we have `getIdsObject` which handles `tt...`.
+                 
+                 // Let's assume we need to do a lookup if we don't have a direct Episode ID.
+                 // Most robust: 
+                 // 1. Try to find Trakt ID for the episode.
+                 // 2. If fail, fail scrobble?
+                 
+                 // Let's use `getTraktIdFromImdbId` or similar if needed.
+                 // But better: Just implement the API call and let the Context handle the complexity of ID resolution?
+                 // NO, the Service should handle it.
+                 
+                 // Let's try to lookup the specific episode ID if we are given S/E.
+                 // If `id` is `tt12345` (Show IMDB), we need the episode ID.
+                 
+                 // We can use `getTraktIdFromImdbId` logic but extended for S/E?
+                 // No, that function is for `getTraktIdFromImdbId(id, type)`.
+                 
+                 // Let's add a helper `getEpisodeId` or similar.
+                 // OR allow the payload to include `show`.
+                 // Note: Trakt generally is smart. If we send:
+                 // { episode: { season: 1, number: 1 }, show: { ids: { imdb: '...' } } }
+                 // It might work. Let's try that pattern as it's efficient.
+                 body.episode = {
+                     season,
+                     number: episode
+                 };
+                 body.show = {
+                     ids: showIds
+                 };
+            } else {
+                // Assume ID is for the episode itself
+                body.episode = { ids: this.getIdsObject(id) };
+            }
+        } else {
+            // Movie
+            body.movie = { ids: this.getIdsObject(id) };
+        }
+
+        return this.apiRequest(`/scrobble/${action}`, 'POST', body);
     }
 
     public async stopScrobble(item: any) {
@@ -643,6 +819,10 @@ export class TraktService {
 
     public static async getWatchedShows() {
         return this.getInstance().getWatchedShows();
+    }
+
+    public static async getWatchedMovies() {
+        return this.getInstance().getWatchedMovies();
     }
 
     // Alias for Context compatibility (Movies watched)

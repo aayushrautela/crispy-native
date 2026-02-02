@@ -153,6 +153,7 @@ export interface UserStoreState extends UserState {
     // Lifecycle
     reloadFromStorage: () => void;
     resetToDefaults: () => void;
+    reset: () => void;
 }
 
 // Helper to persist standard settings to StorageService (Side effects)
@@ -391,6 +392,11 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             });
             // Ensure defaults are persisted (Wipe custom data)
             StorageService.setUser('crispy-addons', defaults);
+        },
+        
+        // Alias for resetToDefaults or similar reset logic expected by SyncService
+        reset: () => {
+             get().reloadFromStorage();
         }
     };
 });

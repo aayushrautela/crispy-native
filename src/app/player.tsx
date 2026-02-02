@@ -9,6 +9,7 @@ import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SideSheet } from '@/src/core/ui/SideSheet';
 import { Typography } from '@/src/core/ui/Typography';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
+import { useTraktScrobbler } from '@/src/features/trakt/hooks/useTraktScrobbler';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
 import { AudioTab } from '@/src/features/player/components/tabs/AudioTab';
 import { InfoTab } from '@/src/features/player/components/tabs/InfoTab';
@@ -237,6 +238,42 @@ export default function PlayerScreen() {
         
         fetchIntro();
     }, [id, type, enriched.imdbId]);
+
+    // --- Trakt Scrobbling Integration ---
+    const { scrobbleId, scrobbleSeason, scrobbleEpisode } = useMemo(() => {
+        const parts = String(id).split(':');
+        // Handle tmdb:123:1:2 vs tt123:1:2 vs 123:1:2
+        let realId = parts[0];
+        let s: number | undefined;
+        let e: number | undefined;
+        
+        if (parts[0] === 'tmdb' || parts[0] === 'trakt') {
+             // Format: tmdb:123:1:2
+             realId = `${parts[0]}:${parts[1]}`;
+             if (type === 'series' && parts.length >= 4) {
+                 s = parseInt(parts[2], 10);
+                 e = parseInt(parts[3], 10);
+             }
+        } else {
+             // Format: tt123:1:2 or 123:1:2
+             if (type === 'series' && parts.length >= 3) {
+                 s = parseInt(parts[1], 10);
+                 e = parseInt(parts[2], 10);
+             }
+        }
+        return { scrobbleId: realId, scrobbleSeason: s, scrobbleEpisode: e };
+    }, [id, type]);
+
+    useTraktScrobbler({
+        id: scrobbleId,
+        type: type,
+        progress: progress.position,
+        duration: stableDuration || progress.duration,
+        paused: paused,
+        season: scrobbleSeason,
+        episode: scrobbleEpisode,
+        enabled: true // Hook checks authentication internally
+    });
 
     // Tracks State
     const [audioTracks, setAudioTracks] = useState<any[]>([]);

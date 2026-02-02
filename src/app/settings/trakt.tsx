@@ -10,15 +10,17 @@ import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
 import { SettingsGroup } from '../../core/ui/SettingsGroup';
 import { SettingsItem } from '../../core/ui/SettingsItem';
 import { Typography } from '../../core/ui/Typography';
+import { useTraktContext } from '../../features/trakt/context/TraktContext';
 
 export default function TraktScreen() {
     const { theme } = useTheme();
     const traktAuth = useUserStore(s => s.traktAuth);
     const updateTraktAuth = useUserStore(s => s.updateTraktAuth);
+    const { userProfile } = useTraktContext();
 
     const [traktCode, setTraktCode] = useState<TraktDeviceCodeResponse | null>(null);
     const [isTraktLoading, setIsTraktLoading] = useState(false);
-    const pollInterval = React.useRef<NodeJS.Timeout | null>(null);
+    const pollInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
     const isAuthenticated = !!traktAuth?.accessToken;
 
@@ -95,7 +97,7 @@ export default function TraktScreen() {
                                 {isAuthenticated ? 'Trakt Connected' : 'Trakt Disconnected'}
                             </Typography>
                             <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
-                                {isAuthenticated ? `Signed in as ${traktAuth?.user?.username || 'user'}` : 'Sync watch progress across devices'}
+                                {isAuthenticated ? `Signed in as ${userProfile?.username || 'User'}` : 'Sync watch progress across devices'}
                             </Typography>
                         </View>
                         <ExpressiveButton
@@ -117,12 +119,13 @@ export default function TraktScreen() {
                                 <Typography variant="display-medium" weight="black" style={styles.userCode}>
                                     {traktCode.user_code}
                                 </Typography>
-                                <ExpressiveButton
-                                    icon={Copy}
-                                    onPress={() => copyToClipboard(traktCode.user_code)}
-                                    variant="tonal"
-                                    style={{ width: 48, height: 48, borderRadius: 24, padding: 0 }}
-                                />
+                                    <ExpressiveButton
+                                        title=""
+                                        icon={Copy}
+                                        onPress={() => copyToClipboard(traktCode.user_code)}
+                                        variant="tonal"
+                                        style={{ width: 48, height: 48, borderRadius: 24, padding: 0 }}
+                                    />
                             </View>
 
                             <Typography variant="body-small" style={styles.instructions}>
