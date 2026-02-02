@@ -2,9 +2,12 @@ package aayush.crispy.core
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
+import android.view.ViewTreeObserver
 import dev.jdtech.mpv.MPVLib
 
 import com.facebook.react.bridge.LifecycleEventListener
@@ -14,10 +17,6 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
 class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, PipPlaybackTarget {
-
-    companion object {
-        private const val TAG = "CrispyVideoView"
-    }
 
     private val surfaceView = TextureView(context)
     private var isMpvInitialized = false
@@ -31,6 +30,17 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
 
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
+
+    // Handler for posting delayed surface updates during PiP transitions
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingPipSizeUpdate: Runnable? = null
+
+    companion object {
+        private const val TAG = "CrispyVideoView"
+        // Delays for PiP surface sync - accounts for layout/animation timing
+        private const val PIP_RESIZE_DELAY_MS = 32L
+        private const val PIP_RESIZE_RETRY_DELAY_MS = 100L
+    }
 
     // Media Session Handler
     private var mediaSessionHandler: MediaSessionHandler? = null
@@ -181,6 +191,11 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
         Log.d(TAG, "Surface texture destroyed")
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
+
+        // Clean up any pending PiP size updates
+        pendingPipSizeUpdate?.let { mainHandler.removeCallbacks(it) }
+        pendingPipSizeUpdate = null
+        mainHandler.removeCallbacksAndMessages(null)
 
         PlaybackRegistry.unregister(this)
 
@@ -417,16 +432,76 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
         
-        // Force an immediate surface size sync. During PiP transitions, we need
-        // to ensure MPV knows the exact window dimensions. Using force=true
-        // bypasses the cache check since the TextureView size should already
-        // reflect the PiP window dimensions.
-        val w = surfaceView.width
-        val h = surfaceView.height
-        if (w > 0 && h > 0) {
-            Log.d(TAG, "PiP: forcing surface size sync to ${w}x${h}")
-            updateMpvSurfaceSize(w, h, force = true)
+        // Cancel any pending size updates from previous transitions
+        pendingPipSizeUpdate?.let { mainHandler.removeCallbacks(it) }
+        pendingPipSizeUpdate = null
+        
+        // CRITICAL FIX: When onPipModeChanged fires, the view's layout has NOT completed yet.
+        // The surfaceView.width/height still report the OLD dimensions. This is why:
+        // 1. Entering PiP shows the video at wrong size
+        // 2. Moving the PiP window "fixes" it (triggers another layout pass)
+        //
+        // Solution: Wait for the layout to settle, then force a surface size sync.
+        // We use a two-phase approach for robustness:
+        // 1. Post to the message queue (waits for current layout pass)
+        // 2. Add a small delay to account for animation timing
+        // 3. Use ViewTreeObserver as backup for layout completion
+        
+        val sizeUpdateRunnable = object : Runnable {
+            private var retryCount = 0
+            private val maxRetries = 3
+            
+            override fun run() {
+                if (!isMpvInitialized) return
+                
+                val w = surfaceView.width
+                val h = surfaceView.height
+                
+                // Check if dimensions have actually changed from our last applied size
+                val sizeChanged = w != lastAppliedSurfaceW || h != lastAppliedSurfaceH
+                val sizeValid = w > 0 && h > 0
+                
+                if (sizeValid && sizeChanged) {
+                    Log.d(TAG, "PiP: delayed surface size sync to ${w}x${h}")
+                    updateMpvSurfaceSize(w, h, force = true)
+                    pendingPipSizeUpdate = null
+                } else if (retryCount < maxRetries) {
+                    // Dimensions haven't changed yet - the layout pass may still be pending.
+                    // Schedule a retry with exponential backoff.
+                    retryCount++
+                    val delay = PIP_RESIZE_RETRY_DELAY_MS * retryCount
+                    Log.d(TAG, "PiP: size unchanged (${w}x${h}), retry $retryCount in ${delay}ms")
+                    mainHandler.postDelayed(this, delay)
+                } else {
+                    // Max retries reached. Force an update anyway as a fallback.
+                    if (sizeValid) {
+                        Log.d(TAG, "PiP: max retries, forcing sync to ${w}x${h}")
+                        updateMpvSurfaceSize(w, h, force = true)
+                    }
+                    pendingPipSizeUpdate = null
+                }
+            }
         }
+        
+        pendingPipSizeUpdate = sizeUpdateRunnable
+        
+        // Use ViewTreeObserver to detect when layout is complete, with a delay fallback
+        surfaceView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                // Remove listener immediately - we only need one callback
+                surfaceView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                
+                // Post with a small delay to ensure any animations have settled
+                mainHandler.postDelayed(sizeUpdateRunnable, PIP_RESIZE_DELAY_MS)
+            }
+        })
+        
+        // Fallback: If ViewTreeObserver doesn't fire (rare edge case), ensure we still sync
+        mainHandler.postDelayed({
+            if (pendingPipSizeUpdate === sizeUpdateRunnable) {
+                sizeUpdateRunnable.run()
+            }
+        }, PIP_RESIZE_DELAY_MS + PIP_RESIZE_RETRY_DELAY_MS)
     }
 
     override fun pauseFromPipDismissed() {
