@@ -1,6 +1,8 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -29,6 +31,16 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var isInPipMode: Boolean = false
 
     private var isReleased: Boolean = false
+
+    // PiP resize debouncing - prevents rapid detach/reattach cycles during drag-resize
+    private val pipResizeHandler = Handler(Looper.getMainLooper())
+    private var pendingPipResize: Runnable? = null
+    private var pendingPipWidth: Int = 0
+    private var pendingPipHeight: Int = 0
+
+    // Tracks if we're in the middle of a surface reattach operation
+    @Volatile
+    private var isReattachingForPip: Boolean = false
 
     companion object {
         private const val TAG = "CrispyMpvVideoView"
@@ -216,6 +228,10 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         if (isReleased) return
         isReleased = true
 
+        // Cancel any pending PiP resize operations
+        pendingPipResize?.let { pipResizeHandler.removeCallbacks(it) }
+        pendingPipResize = null
+
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
         PlaybackRegistry.unregister(this)
 
@@ -358,26 +374,149 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
      * Update MPV's understanding of the surface dimensions.
      * This is the single source of truth for surface sizing.
      * Called from SurfaceHolder callbacks (surfaceChanged).
+     *
+     * In PiP mode, we use a debounced detach/reattach strategy to force the GPU context
+     * to rebuild at the new surface dimensions. This is necessary because MPV's GPU
+     * pipeline doesn't automatically reconfigure when the surface resizes - the
+     * `android-surface-size` property alone is insufficient.
      */
     private fun updateMpvSurfaceSize(width: Int, height: Int) {
         if (!isMpvInitialized) return
         if (width <= 0 || height <= 0) return
-        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
+        if (isReleased) return
+
+        // Skip if dimensions haven't changed
+        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "updateMpvSurfaceSize: skip unchanged ${width}x${height}")
+            }
+            return
+        }
 
         Log.d(TAG, "Updating MPV surface size: ${width}x${height}")
+
+        if (isInPipMode) {
+            // In PiP mode, use debounced detach/reattach to force GPU context rebuild.
+            // This prevents rapid cycling during drag-resize while ensuring the final
+            // size is always applied.
+            schedulePipSurfaceReattach(width, height)
+        } else {
+            // Normal mode: just update the property (layout changes trigger proper redraws)
+            applyMpvSurfaceSize(width, height)
+        }
+    }
+
+    /**
+     * Schedule a debounced surface reattach for PiP resize.
+     * Coalesces rapid resize events into a single operation for smoother UX.
+     */
+    private fun schedulePipSurfaceReattach(width: Int, height: Int) {
+        // Store the target dimensions
+        pendingPipWidth = width
+        pendingPipHeight = height
+
+        // Cancel any pending resize operation
+        pendingPipResize?.let { pipResizeHandler.removeCallbacks(it) }
+
+        val runnable = Runnable {
+            if (isReleased || !isMpvInitialized || !isInPipMode) {
+                pendingPipResize = null
+                return@Runnable
+            }
+
+            executePipSurfaceReattach(pendingPipWidth, pendingPipHeight)
+            pendingPipResize = null
+        }
+
+        pendingPipResize = runnable
+
+        // Debounce: wait 60ms before executing (roughly 1 frame at 16.6ms)
+        // This coalesces rapid resize events during drag while remaining responsive
+        pipResizeHandler.postDelayed(runnable, 60)
+    }
+
+    /**
+     * Execute the actual surface detach/reattach to force GPU context rebuild.
+     * This is the core fix for PiP resize not updating the video.
+     */
+    private fun executePipSurfaceReattach(width: Int, height: Int) {
+        // Capture surface to local val for thread safety
+        val currentSurface = surface
+        if (currentSurface == null || !currentSurface.isValid) {
+            Log.w(TAG, "executePipSurfaceReattach: surface is null or invalid, falling back to property-only update")
+            applyMpvSurfaceSize(width, height)
+            return
+        }
+
+        if (isReattachingForPip) {
+            Log.d(TAG, "executePipSurfaceReattach: already in progress, skipping")
+            return
+        }
+
+        isReattachingForPip = true
+
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "executePipSurfaceReattach: detach/reattach for ${width}x${height}")
+        }
+
+        try {
+            // Step 1: Detach current surface to tear down GPU context
+            try {
+                MPVLib.detachSurface()
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "executePipSurfaceReattach: detached successfully")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "executePipSurfaceReattach: detach failed", e)
+                // Continue anyway - reattach might still work
+            }
+
+            // Step 2: Reattach surface to rebuild GPU context at new dimensions
+            try {
+                MPVLib.attachSurface(currentSurface)
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "executePipSurfaceReattach: reattached successfully")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "executePipSurfaceReattach: reattach failed", e)
+                // Critical failure - try to recover by reattaching on next frame
+                pipResizeHandler.post {
+                    if (!isReleased && isMpvInitialized && surface?.isValid == true) {
+                        try {
+                            MPVLib.attachSurface(surface!!)
+                            Log.d(TAG, "executePipSurfaceReattach: recovery reattach succeeded")
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "executePipSurfaceReattach: recovery reattach also failed", e2)
+                        }
+                    }
+                }
+                isReattachingForPip = false
+                return
+            }
+
+            // Step 3: Apply the new surface size
+            applyMpvSurfaceSize(width, height)
+
+        } finally {
+            isReattachingForPip = false
+        }
+    }
+
+    /**
+     * Apply surface size to MPV. This is the low-level operation that sets the property
+     * and updates our tracking state.
+     */
+    private fun applyMpvSurfaceSize(width: Int, height: Int) {
+        if (!isMpvInitialized) return
+        if (width <= 0 || height <= 0) return
+
         lastAppliedSurfaceW = width
         lastAppliedSurfaceH = height
 
         try {
             MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
-
-            // In PiP mode, MPV's GPU context doesn't automatically redraw when the
-            // surface resizes. The OS resizes the PiP container, but MPV continues
-            // rendering at the old dimensions until something triggers a new frame.
-            // A zero-offset relative seek forces MPV to decode and render a fresh
-            // frame at the updated surface size without visible interruption.
-            if (isInPipMode) {
-                MPVLib.command(arrayOf("seek", "0", "relative"))
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "applyMpvSurfaceSize: set android-surface-size to ${width}x${height}")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to set android-surface-size", e)
@@ -491,6 +630,14 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         }
 
         if (!isPip) {
+            // Cancel any pending PiP resize operations when leaving PiP
+            pendingPipResize?.let { pipResizeHandler.removeCallbacks(it) }
+            pendingPipResize = null
+
+            // Reset tracking state for clean exit
+            lastAppliedSurfaceW = 0
+            lastAppliedSurfaceH = 0
+
             // Restore normal layout-driven sizing when leaving PiP.
             try {
                 surfaceView.holder.setSizeFromLayout()
