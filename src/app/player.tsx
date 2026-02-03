@@ -1180,10 +1180,6 @@ export default function PlayerScreen() {
                                 onSelectSpeed={setPlaybackRate}
                                 resizeMode={resizeMode}
                                 onSelectResizeMode={setResizeMode}
-                                decoderMode={settings.decoderMode}
-                                onSelectDecoderMode={(mode) => updateSettings({ decoderMode: mode })}
-                                gpuMode={settings.gpuMode}
-                                onSelectGpuMode={(mode) => updateSettings({ gpuMode: mode })}
                             />
                         )}
                         {activeTab === 'streams' && (
