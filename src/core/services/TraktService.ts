@@ -13,6 +13,18 @@ const TRAKT_CLIENT_ID = process.env.EXPO_PUBLIC_TRAKT_CLIENT_ID;
 const TRAKT_CLIENT_SECRET = process.env.EXPO_PUBLIC_TRAKT_CLIENT_SECRET;
 const TRAKT_REDIRECT_URI = 'crispy-native://auth/trakt';
 
+class TraktApiError extends Error {
+    public readonly status: number;
+    public readonly bodyText?: string;
+
+    constructor(status: number, message: string, bodyText?: string) {
+        super(message);
+        this.name = 'TraktApiError';
+        this.status = status;
+        this.bodyText = bodyText;
+    }
+}
+
 export interface TraktPlaybackItem {
     progress: number;
     paused_at: string;
@@ -34,6 +46,21 @@ export class TraktService {
     private lastApiCall: number = 0;
     private readonly MIN_API_INTERVAL = 500;
     private requestQueue: Promise<any> = Promise.resolve();
+
+    // Scrobble guards (modeled after Nuvio)
+    private readonly SCROBBLE_SYNC_DEBOUNCE_MS = 5000;
+    private readonly SCROBBLE_STOP_DEBOUNCE_MS = 30000;
+    private readonly SCROBBLE_START_DEBOUNCE_MS = 30000;
+    private readonly SCROBBLE_ERROR_BACKOFF_MS = 30000;
+    private readonly SCROBBLE_EXPIRY_MS = 46 * 60 * 1000;
+
+    private lastScrobbleSyncTimes: Map<string, number> = new Map();
+    private lastScrobbleStopTimes: Map<string, number> = new Map();
+    private lastScrobbleStartTimes: Map<string, number> = new Map();
+    private lastScrobbleErrorTimes: Map<string, number> = new Map();
+    private scrobbledItems: Set<string> = new Set();
+    private scrobbledTimestamps: Map<string, number> = new Map();
+    private currentlyWatching: Set<string> = new Set();
 
     private constructor() {
         this.initialize();
@@ -367,9 +394,22 @@ export class TraktService {
                 throw new Error('Session expired');
             }
 
+            // Handle scrobble conflicts gracefully (common when stopping multiple times)
+            if (res.status === 409) {
+                const conflictText = await res.text().catch(() => '');
+                // Returning null keeps callers from retry loops; scrobble() will record local state.
+                if (!conflictText) return null as any;
+                try {
+                    return JSON.parse(conflictText) as any;
+                } catch {
+                    return null as any;
+                }
+            }
+
             if (!res.ok) {
                 if (res.status === 204) return null as any;
-                throw new Error(`Trakt API Error: ${res.status}`);
+                const errText = await res.text().catch(() => '');
+                throw new TraktApiError(res.status, `Trakt API Error: ${res.status}`, errText);
             }
 
             const text = await res.text();
@@ -377,6 +417,66 @@ export class TraktService {
         } catch (e) {
             console.error(`[TraktService] Request failed for ${endpoint}:`, e);
             throw e;
+        }
+    }
+
+    private normalizeIdForKey(id: string): string {
+        const raw = String(id || '').trim();
+        if (!raw) return '';
+        if (raw.startsWith('tmdb:') || raw.startsWith('trakt:')) return raw;
+        if (raw.startsWith('imdb:')) {
+            const imdb = raw.replace('imdb:', '').trim();
+            if (!imdb) return '';
+            return imdb.startsWith('tt') ? imdb : `tt${imdb}`;
+        }
+        if (raw.startsWith('tt')) return raw;
+        if (!isNaN(Number(raw))) return `tmdb:${parseInt(raw, 10)}`;
+        return raw;
+    }
+
+    private getWatchingKey(type: 'movie' | 'series', id: string, season?: number, episode?: number): string {
+        if (type === 'series' && season !== undefined && episode !== undefined) {
+            return `episode:${this.normalizeIdForKey(id)}:${season}:${episode}`;
+        }
+        if (type === 'series') {
+            return `episode:${this.normalizeIdForKey(id)}`;
+        }
+        return `movie:${this.normalizeIdForKey(id)}`;
+    }
+
+    private isValidIdsObject(ids: any): boolean {
+        if (!ids || typeof ids !== 'object') return false;
+        if (typeof ids.trakt === 'number' && !Number.isNaN(ids.trakt)) return true;
+        if (typeof ids.tmdb === 'number' && !Number.isNaN(ids.tmdb)) return true;
+        if (typeof ids.tvdb === 'number' && !Number.isNaN(ids.tvdb)) return true;
+        if (typeof ids.imdb === 'string' && ids.imdb.trim().startsWith('tt')) return true;
+        if (typeof ids.slug === 'string' && ids.slug.trim().length > 0) return true;
+        return false;
+    }
+
+    private cleanupOldScrobbleState() {
+        const now = Date.now();
+
+        for (const [key, ts] of this.scrobbledTimestamps.entries()) {
+            if (now - ts > this.SCROBBLE_EXPIRY_MS) {
+                this.scrobbledTimestamps.delete(key);
+                this.scrobbledItems.delete(key);
+            }
+        }
+
+        // Keep maps from growing unbounded
+        const maxAge = 24 * 60 * 60 * 1000;
+        for (const [key, ts] of this.lastScrobbleSyncTimes.entries()) {
+            if (now - ts > maxAge) this.lastScrobbleSyncTimes.delete(key);
+        }
+        for (const [key, ts] of this.lastScrobbleStartTimes.entries()) {
+            if (now - ts > maxAge) this.lastScrobbleStartTimes.delete(key);
+        }
+        for (const [key, ts] of this.lastScrobbleStopTimes.entries()) {
+            if (now - ts > maxAge) this.lastScrobbleStopTimes.delete(key);
+        }
+        for (const [key, ts] of this.lastScrobbleErrorTimes.entries()) {
+            if (now - ts > maxAge) this.lastScrobbleErrorTimes.delete(key);
         }
     }
 
@@ -505,6 +605,61 @@ export class TraktService {
     public async scrobble(action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) {
         if (!this.isAuthenticated()) return null;
 
+        this.cleanupOldScrobbleState();
+
+        const now = Date.now();
+
+        const isEpisode = type === 'series' || (season !== undefined && episode !== undefined);
+
+        // Normalize episode target once, and use it for keying/debouncing.
+        let showId = id;
+        let s = season;
+        let e = episode;
+        if (isEpisode) {
+            const parts = String(id || '').split(':');
+            if (parts.length >= 3) {
+                const maybeEpisode = parseInt(parts[parts.length - 1], 10);
+                const maybeSeason = parseInt(parts[parts.length - 2], 10);
+                if (!Number.isNaN(maybeSeason) && !Number.isNaN(maybeEpisode)) {
+                    showId = parts.slice(0, -2).join(':');
+                    if (s === undefined) s = maybeSeason;
+                    if (e === undefined) e = maybeEpisode;
+                }
+            }
+        }
+
+        const watchingKey = isEpisode
+            ? this.getWatchingKey('series', showId, s, e)
+            : this.getWatchingKey('movie', id);
+
+        // Backoff after failures to prevent tight retry loops (e.g. 422 invalid payload)
+        const lastErr = this.lastScrobbleErrorTimes.get(watchingKey) || 0;
+        if (now - lastErr < this.SCROBBLE_ERROR_BACKOFF_MS) {
+            return null;
+        }
+
+        // If already scrobbled recently, avoid duplicate stop calls that often trigger 409 conflicts.
+        if (action === 'stop' && this.scrobbledItems.has(watchingKey)) {
+            const lastScrobbledAt = this.scrobbledTimestamps.get(watchingKey) || 0;
+            if (now - lastScrobbledAt < this.SCROBBLE_EXPIRY_MS) return null;
+        }
+
+        // Debounce start/updates/stops
+        if (action === 'start') {
+            const lastStart = this.lastScrobbleStartTimes.get(watchingKey) || 0;
+            if (now - lastStart < this.SCROBBLE_START_DEBOUNCE_MS) return null;
+        }
+
+        if (action === 'pause') {
+            const lastSync = this.lastScrobbleSyncTimes.get(watchingKey) || 0;
+            if (now - lastSync < this.SCROBBLE_SYNC_DEBOUNCE_MS) return null;
+        }
+
+        if (action === 'stop') {
+            const lastStop = this.lastScrobbleStopTimes.get(watchingKey) || 0;
+            if (now - lastStop < this.SCROBBLE_STOP_DEBOUNCE_MS) return null;
+        }
+
         const body: any = {
             progress: Math.min(100, Math.max(0, progress)),
             app_version: '1.0.0',
@@ -512,23 +667,10 @@ export class TraktService {
         };
 
         // Handle Series (Episodes)
-        if (type === 'series' || (season !== undefined && episode !== undefined)) {
+        if (isEpisode) {
             // We need to identify the EPISODE.
             // Case 1: ID is a specific Episode ID (rare in this app, usually ShowID)
             // Case 2: ID is Show ID + Season + Episode
-            
-            // If ID contains colons, it might be `id:s:e`
-            const parts = id.split(':');
-            let showId = id;
-            if (parts.length >= 3) {
-                 // It's a compound ID, but we might have separate season/episode args
-                 showId = parts[0]; 
-                 // If season/episode args are missing, parse from ID?
-                 // But the caller usually passes them.
-            }
-            
-            // Parse Show ID
-            const ids = this.getIdsObject(showId);
             
             // For scrobbling an episode by Show ID + S/E, we send:
             // { episode: { season: 1, number: 1, show: { ids: { ... } } } } ??
@@ -555,12 +697,17 @@ export class TraktService {
             // Let's rely on `TraktService` finding the ID if needed, OR just send what we have.
             // Constructing the best possible payload:
             
-            if (season !== undefined && episode !== undefined) {
+            if (s !== undefined && e !== undefined) {
                  // We have S/E. We likely have the SHOW ID.
                  const showIds = this.getIdsObject(showId);
+                 if (!this.isValidIdsObject(showIds) || s <= 0 || e <= 0) {
+                     this.lastScrobbleErrorTimes.set(watchingKey, now);
+                     console.warn('[TraktService] Invalid episode scrobble params', { id, showId, season: s, episode: e, showIds });
+                     return null;
+                 }
                  body.episode = {
-                     season: season,
-                     number: episode,
+                     season: s,
+                     number: e,
                  };
                  // Does Trakt allow 'show' inside scrobble? 
                  // Official Docs: 
@@ -598,22 +745,62 @@ export class TraktService {
                  // { episode: { season: 1, number: 1 }, show: { ids: { imdb: '...' } } }
                  // It might work. Let's try that pattern as it's efficient.
                  body.episode = {
-                     season,
-                     number: episode
+                     season: s,
+                     number: e
                  };
                  body.show = {
                      ids: showIds
                  };
             } else {
                 // Assume ID is for the episode itself
-                body.episode = { ids: this.getIdsObject(id) };
+                const episodeIds = this.getIdsObject(id);
+                if (!this.isValidIdsObject(episodeIds)) {
+                    this.lastScrobbleErrorTimes.set(watchingKey, now);
+                    console.warn('[TraktService] Invalid episode IDs for scrobble', { id, episodeIds });
+                    return null;
+                }
+                body.episode = { ids: episodeIds };
             }
         } else {
             // Movie
-            body.movie = { ids: this.getIdsObject(id) };
+            const movieIds = this.getIdsObject(id);
+            if (!this.isValidIdsObject(movieIds)) {
+                this.lastScrobbleErrorTimes.set(watchingKey, now);
+                console.warn('[TraktService] Invalid movie IDs for scrobble', { id, movieIds });
+                return null;
+            }
+            body.movie = { ids: movieIds };
         }
 
-        return this.apiRequest(`/scrobble/${action}`, 'POST', body);
+        // Nuvio-style: use /scrobble/stop for both pause + stop (Trakt infers pause vs scrobble by progress)
+        const endpointAction = action === 'pause' ? 'stop' : action;
+
+        try {
+            const res = await this.apiRequest(`/scrobble/${endpointAction}`, 'POST', body);
+
+            if (action === 'start') {
+                this.currentlyWatching.add(watchingKey);
+                this.lastScrobbleStartTimes.set(watchingKey, now);
+            }
+            if (action === 'pause') {
+                this.lastScrobbleSyncTimes.set(watchingKey, now);
+            }
+            if (action === 'stop') {
+                this.lastScrobbleStopTimes.set(watchingKey, now);
+                this.currentlyWatching.delete(watchingKey);
+
+                // If user stopped near completion, mark as scrobbled locally to avoid duplicate stop conflicts.
+                if (body.progress >= 80) {
+                    this.scrobbledItems.add(watchingKey);
+                    this.scrobbledTimestamps.set(watchingKey, now);
+                }
+            }
+
+            return res;
+        } catch (err) {
+            this.lastScrobbleErrorTimes.set(watchingKey, now);
+            throw err;
+        }
     }
 
     public async stopScrobble(item: any) {
@@ -621,13 +808,20 @@ export class TraktService {
     }
 
     private getIdsObject(id: string) {
-        if (id.startsWith('tmdb:')) return { tmdb: parseInt(id.replace('tmdb:', ''), 10) };
-        if (id.startsWith('trakt:')) return { trakt: parseInt(id.replace('trakt:', ''), 10) };
-        if (id.startsWith('tt')) return { imdb: id.replace('imdb:', '') }; // Handle both raw tt or imdb:tt
+        const raw = String(id || '').trim();
+        if (!raw) return {};
+        if (raw.startsWith('tmdb:')) return { tmdb: parseInt(raw.replace('tmdb:', ''), 10) };
+        if (raw.startsWith('trakt:')) return { trakt: parseInt(raw.replace('trakt:', ''), 10) };
+        if (raw.startsWith('imdb:')) {
+            const imdb = raw.replace('imdb:', '').trim();
+            if (!imdb) return {};
+            return { imdb: imdb.startsWith('tt') ? imdb : `tt${imdb}` };
+        }
+        if (raw.startsWith('tt')) return { imdb: raw };
         // Fallback for numeric strings that might be raw TMDB IDs (common in our app)
-        if (!isNaN(Number(id))) return { tmdb: parseInt(id, 10) };
+        if (!isNaN(Number(raw))) return { tmdb: parseInt(raw, 10) };
         // Fallback for everything else
-        return { imdb: id.replace('imdb:', '') };
+        return { imdb: raw.replace('imdb:', '') };
     }
 
     public async addToWatchlist(id: string, type: 'movie' | 'show') {

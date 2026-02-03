@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { TraktService } from '@/src/core/services/TraktService';
 
 interface UseTraktScrobblerProps {
@@ -27,15 +27,21 @@ export function useTraktScrobbler({
     const progressPercentage = duration > 0 ? (currentPositionSeconds / duration) * 100 : 0;
     
     // State to track scrobble status
+    // Track local session state (do NOT depend on network success)
     const isScrobblingRef = useRef(false);
     const lastScrobbleProgressRef = useRef(0);
     const lastScrobbleTimeRef = useRef(0);
+    const lastErrorTimeRef = useRef(0);
     const appStateRef = useRef(AppState.currentState);
 
     // Helper to send scrobble events
     const sendScrobble = useCallback(async (action: 'start' | 'pause' | 'stop') => {
         if (!enabled) return;
         if (!TraktService.getInstance().isAuthenticated()) return;
+
+        // Local backoff to prevent tight retry loops (service also guards)
+        const now = Date.now();
+        if (now - lastErrorTimeRef.current < 30 * 1000) return;
         
         // Don't spam 'pause' if we haven't started
         if (action === 'pause' && !isScrobblingRef.current) return;
@@ -45,7 +51,7 @@ export function useTraktScrobbler({
         
         // Minimum progress delta to avoid spamming updates (e.g. every second)
         // Only update every 5% or if action changes
-        const now = Date.now();
+        const startedNow = now;
         if (action === 'start' && isScrobblingRef.current) {
             // If already scrobbling, this is an update (keep alive)
             // Send update every 5% progress or 15 minutes?
@@ -58,7 +64,13 @@ export function useTraktScrobbler({
         }
 
         try {
-            console.log(`[TraktScrobbler] ${action.toUpperCase()} ${progressPercentage.toFixed(1)}%`);
+            // Mark session state optimistically so a failed request doesn't cause a render-loop spam.
+            if (action === 'start') isScrobblingRef.current = true;
+            if (action === 'stop') isScrobblingRef.current = false;
+
+            if (action === 'start' || action === 'stop') {
+                console.log(`[TraktScrobbler] ${action.toUpperCase()} ${progressPercentage.toFixed(1)}%`);
+            }
             await TraktService.getInstance().scrobble(
                 action, 
                 id, 
@@ -67,18 +79,16 @@ export function useTraktScrobbler({
                 season, 
                 episode
             );
-            
-            if (action === 'start') isScrobblingRef.current = true;
-            if (action === 'stop') isScrobblingRef.current = false;
-            
+
             lastScrobbleProgressRef.current = progressPercentage;
-            lastScrobbleTimeRef.current = now;
+            lastScrobbleTimeRef.current = startedNow;
         } catch (e) {
             console.warn('[TraktScrobbler] Failed to scrobble:', e);
+            lastErrorTimeRef.current = Date.now();
         }
     }, [id, type, progressPercentage, season, episode, enabled]);
 
-    // Effect: Handle Play/Pause and Initial Start
+    // Effect: Handle Play/Pause and keep-alive
     useEffect(() => {
         if (!enabled || duration === 0) return;
 
@@ -89,22 +99,23 @@ export function useTraktScrobbler({
             if (isScrobblingRef.current) {
                 sendScrobble('pause');
             }
-        } else {
-            // Playing
-            // Debounce "start" if we just sent it recently?
-            // Trakt recommends sending 'start' every 15 mins.
-            const timeSinceLast = Date.now() - lastScrobbleTimeRef.current;
-            const progressDelta = Math.abs(progressPercentage - lastScrobbleProgressRef.current);
-            
-            // If we are not scrobbling, start.
-            if (!isScrobblingRef.current) {
-                sendScrobble('start');
-            } else {
-                // Check if we need to send keep-alive
-                if (timeSinceLast > 15 * 60 * 1000 || progressDelta > 5) { // 15 mins or 5% change
-                     sendScrobble('start');
-                }
-            }
+            return;
+        }
+
+        // Playing
+        const timeSinceLast = Date.now() - lastScrobbleTimeRef.current;
+        const progressDelta = Math.abs(progressPercentage - lastScrobbleProgressRef.current);
+
+        // If we are not scrobbling, start.
+        if (!isScrobblingRef.current) {
+            sendScrobble('start');
+            return;
+        }
+
+        // Trakt recommends a keep-alive every ~15 minutes to keep "watching now" active.
+        // Also allow occasional updates if progress jumps (e.g. seeks).
+        if (timeSinceLast > 15 * 60 * 1000 || progressDelta > 5) {
+            sendScrobble('start');
         }
     }, [paused, enabled, duration, sendScrobble, progressPercentage]);
 
