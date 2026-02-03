@@ -36,12 +36,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     // Media Session Handler
     private var mediaSessionHandler: MediaSessionHandler? = null
-
-    // Cache latest metadata until MediaSessionHandler is ready
-    private var pendingTitle: String = ""
-    private var pendingArtist: String = ""
-    private var pendingArtworkUrl: String? = null
-    private var hasPendingMetadata: Boolean = false
+    private var latestMetadata: MediaMetadataState? = null
     
     // Decoder mode setting: 'auto', 'sw', 'hw', 'hw+' (default: auto)
     var decoderMode: String = "auto"
@@ -157,9 +152,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
                 })
 
                 // Apply any metadata received before the session was ready
-                if (hasPendingMetadata) {
-                    mediaSessionHandler?.updateMetadata(pendingTitle, pendingArtist, pendingArtworkUrl)
-                }
+                applyMetadataIfReady()
 
                 observeProperties()
 
@@ -221,6 +214,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
         mediaSessionHandler?.release()
         mediaSessionHandler = null
+        latestMetadata = null
 
         if (isMpvInitialized) {
             try {
@@ -391,13 +385,18 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         PipState.isPlaying = playing
     }
 
+    private fun applyMetadataIfReady() {
+        val metadata = latestMetadata ?: return
+        mediaSessionHandler?.updateMetadata(metadata.title, metadata.artist, metadata.artworkUrl)
+    }
+
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
+        val next = MediaMetadataState(title, artist, artworkUrl)
+        if (next == latestMetadata) return
+
         Log.d(TAG, "setMetadata called: $title by $artist (artwork: $artworkUrl)")
-        pendingTitle = title
-        pendingArtist = artist
-        pendingArtworkUrl = artworkUrl
-        hasPendingMetadata = true
-        mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
+        latestMetadata = next
+        applyMetadataIfReady()
     }
 
     fun setPaused(paused: Boolean) {

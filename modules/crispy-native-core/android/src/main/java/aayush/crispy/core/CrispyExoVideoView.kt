@@ -41,6 +41,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         .build()
 
     private var mediaSessionHandler: MediaSessionHandler? = null
+    private var latestMetadata: MediaMetadataState? = null
 
     private var isPaused: Boolean = true
     private var playInBackground: Boolean = false
@@ -178,6 +179,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             }
             override fun onSeekTo(pos: Long) { seek(pos / 1000.0) }
         })
+        applyMetadataIfReady()
 
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -304,8 +306,17 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         }
     }
 
+    private fun applyMetadataIfReady() {
+        val metadata = latestMetadata ?: return
+        mediaSessionHandler?.updateMetadata(metadata.title, metadata.artist, metadata.artworkUrl)
+    }
+
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
-        mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
+        val next = MediaMetadataState(title, artist, artworkUrl)
+        if (next == latestMetadata) return
+
+        latestMetadata = next
+        applyMetadataIfReady()
     }
 
     fun setAudioTrack(trackId: Int) {
@@ -436,6 +447,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         } finally {
             mediaSessionHandler?.release()
             mediaSessionHandler = null
+            latestMetadata = null
             (context as? ReactContext)?.removeLifecycleEventListener(lifecycleListener)
             PlaybackRegistry.unregister(this)
         }
