@@ -13,7 +13,7 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
-class CrispyMpvVideoView(context: Context, override val appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
+class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
 
     private val surfaceView = SurfaceView(context)
     private var isMpvInitialized = false
