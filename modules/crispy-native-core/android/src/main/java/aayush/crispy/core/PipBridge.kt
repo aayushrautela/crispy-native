@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import androidx.activity.ComponentActivity
@@ -23,6 +24,18 @@ import java.lang.ref.WeakReference
  * - When leaving PiP while the activity is stopped, the user dismissed PiP -> pause.
  */
 object PipBridge : Application.ActivityLifecycleCallbacks {
+    private const val TAG = "PipBridge"
+
+    private inline fun d(message: () -> String) {
+        if (BuildConfig.DEBUG) {
+            try {
+                Log.d(TAG, message())
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+    }
+
     private var reactContextRef: WeakReference<ReactContext>? = null
     private var currentActivityRef: WeakReference<Activity>? = null
 
@@ -79,11 +92,29 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
 
     private fun maybeNotifyWindowSize(activity: Activity, reason: String) {
         val (w, h) = computeWindowSize(activity)
-        if (w <= 0 || h <= 0) return
-        if (w == lastPipW && h == lastPipH) return
+
+        d {
+            val decor = activity.window?.decorView
+            val decorW = decor?.width ?: -1
+            val decorH = decor?.height ?: -1
+            val isPip = isInPip(activity)
+            "maybeNotifyWindowSize(reason=$reason) computed=${w}x${h} last=${lastPipW}x${lastPipH} decor=${decorW}x${decorH} isPip=$isPip"
+        }
+
+        if (w <= 0 || h <= 0) {
+            d { "maybeNotifyWindowSize skip: non-positive computed=${w}x${h} reason=$reason" }
+            return
+        }
+
+        if (w == lastPipW && h == lastPipH) {
+            d { "maybeNotifyWindowSize skip: unchanged computed=${w}x${h} reason=$reason" }
+            return
+        }
 
         lastPipW = w
         lastPipH = h
+
+        d { "maybeNotifyWindowSize notify: new=${w}x${h} reason=$reason" }
 
         // Nudge the view tree so RN/Expo can pick up the new bounds.
         try {
@@ -100,6 +131,11 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
     private fun startPipResizeTracking(activity: Activity) {
         if (pipResizeRunnable != null) return
 
+        d {
+            val isPip = isInPip(activity)
+            "startPipResizeTracking(activity=${activity.javaClass.simpleName}) isPip=$isPip"
+        }
+
         // Attach a layout listener to the decor view. When it does fire, we can react immediately.
         val root = activity.window?.decorView
         if (root != null) {
@@ -109,6 +145,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
                 val oldW = oldRight - oldLeft
                 val oldH = oldBottom - oldTop
                 if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
+                    d { "decorLayout ${oldW}x${oldH} -> ${w}x${h} (root=${root.width}x${root.height})" }
                     maybeNotifyWindowSize(activity, "decorLayout")
                 }
             }
@@ -127,6 +164,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
 
                 val a = currentActivityRef?.get()
                 if (!started || a == null || !isInPip(a)) {
+                    d { "pipPoll stop: started=$started activity=${a?.javaClass?.simpleName} isInPip=${a?.let { isInPip(it) } ?: false}" }
                     stopPipResizeTracking()
                     return
                 }
@@ -137,6 +175,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
 
                 val changed = (lastPipW != beforeW || lastPipH != beforeH)
                 if (changed) {
+                    d { "pipPoll changed: ${beforeW}x${beforeH} -> ${lastPipW}x${lastPipH}" }
                     stableTicks = 0
                     intervalMs = 50L
                 } else {
@@ -144,6 +183,10 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
                     // After the window is stable for a bit, reduce poll frequency.
                     if (stableTicks >= 20) {
                         intervalMs = 250L
+                    }
+
+                    if (stableTicks == 1 || stableTicks == 20 || stableTicks % 40 == 0) {
+                        d { "pipPoll stable: ticks=$stableTicks intervalMs=$intervalMs last=${lastPipW}x${lastPipH}" }
                     }
                 }
 
@@ -158,6 +201,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
     }
 
     private fun stopPipResizeTracking() {
+        d { "stopPipResizeTracking() last=${lastPipW}x${lastPipH}" }
         pipResizeRunnable?.let { pipHandler.removeCallbacks(it) }
         pipResizeRunnable = null
         lastPipW = 0
@@ -261,6 +305,8 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
 
     private fun handlePipChanged(isPipNow: Boolean, allowInitialEmit: Boolean) {
         val prev = lastIsPip
+
+        d { "handlePipChanged(prev=$prev now=$isPipNow allowInitialEmit=$allowInitialEmit stopped=$currentActivityStopped)" }
 
         if (prev == null) {
             lastIsPip = isPipNow

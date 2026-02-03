@@ -182,7 +182,13 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         if (isReleased) return
         if (width <= 0 || height <= 0) return
 
-        Log.d(TAG, "Surface changed: ${width}x${height} (isInPipMode=$isInPipMode)")
+        if (BuildConfig.DEBUG) {
+            val frame = try { holder.surfaceFrame } catch (_: Exception) { null }
+            val frameStr = if (frame != null) "${frame.width()}x${frame.height()}" else "n/a"
+            Log.d(TAG, "Surface changed: ${width}x${height} frame=$frameStr view=${surfaceView.width}x${surfaceView.height} (isInPipMode=$isInPipMode)")
+        } else {
+            Log.d(TAG, "Surface changed: ${width}x${height} (isInPipMode=$isInPipMode)")
+        }
         // This is our single source of truth for render sizing.
         // SurfaceView reliably triggers this callback on PiP resize.
         updateMpvSurfaceSize(width, height)
@@ -469,6 +475,12 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
 
+        if (BuildConfig.DEBUG) {
+            val frame = try { surfaceView.holder.surfaceFrame } catch (_: Exception) { null }
+            val frameStr = if (frame != null) "${frame.width()}x${frame.height()}" else "n/a"
+            Log.d(TAG, "PiP mode changed: view=${surfaceView.width}x${surfaceView.height} measured=${surfaceView.measuredWidth}x${surfaceView.measuredHeight} frame=$frameStr")
+        }
+
         if (!isPip) {
             // Restore normal layout-driven sizing when leaving PiP.
             try {
@@ -492,6 +504,16 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
+        if (BuildConfig.DEBUG) {
+            val hasSurface = surface != null
+            val frame = try { surfaceView.holder.surfaceFrame } catch (_: Exception) { null }
+            val frameStr = if (frame != null) "${frame.width()}x${frame.height()}" else "n/a"
+            Log.d(
+                TAG,
+                "onPipWindowSizeChanged requested=${width}x${height} isReleased=$isReleased isInPipMode=$isInPipMode isMpvInitialized=$isMpvInitialized hasSurface=$hasSurface view=${surfaceView.width}x${surfaceView.height} measured=${surfaceView.measuredWidth}x${surfaceView.measuredHeight} frame=$frameStr"
+            )
+        }
+
         if (isReleased) return
         if (!isInPipMode) return
         if (!isMpvInitialized) return
@@ -501,6 +523,12 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         try {
             // Force the Surface buffer size to match the PiP window bounds.
             surfaceView.holder.setFixedSize(width, height)
+
+            if (BuildConfig.DEBUG) {
+                val frame = try { surfaceView.holder.surfaceFrame } catch (_: Exception) { null }
+                val frameStr = if (frame != null) "${frame.width()}x${frame.height()}" else "n/a"
+                Log.d(TAG, "setFixedSize(${width}x${height}) applied; frame now=$frameStr")
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to set fixed Surface size", e)
         }
@@ -512,6 +540,10 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
                 lp.width = width
                 lp.height = height
                 surfaceView.layoutParams = lp
+
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "Pinned SurfaceView layoutParams to ${width}x${height}")
+                }
             }
         } catch (_: Exception) {
             // ignore
@@ -519,6 +551,10 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
         surfaceView.requestLayout()
         surfaceView.invalidate()
+
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "post-resize view=${surfaceView.width}x${surfaceView.height} measured=${surfaceView.measuredWidth}x${surfaceView.measuredHeight}")
+        }
         updateMpvSurfaceSize(width, height)
     }
 

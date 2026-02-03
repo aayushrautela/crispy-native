@@ -154,12 +154,24 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             val oldW = oldRight - oldLeft
             val oldH = oldBottom - oldTop
             if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        TAG,
+                        "container onLayoutChange ${oldW}x${oldH} -> ${w}x${h} (isInPipMode=$isInPipMode) playerView=${playerView.width}x${playerView.height} measured=${playerView.measuredWidth}x${playerView.measuredHeight}"
+                    )
+                }
                 // Update tracked dimensions
                 lastAppliedW = w
                 lastAppliedH = h
                 
                 // Force PlayerView to remeasure and update its internal surface
                 playerView.post {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(
+                            TAG,
+                            "container layoutChange -> requestLayout/invalidate (playerView lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height})"
+                        )
+                    }
                     playerView.requestLayout()
                     playerView.invalidate()
                 }
@@ -458,6 +470,13 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
 
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "onPipModeChanged(isPip=$isPip) container=${width}x${height} measured=${measuredWidth}x${measuredHeight} playerView=${playerView.width}x${playerView.height} measured=${playerView.measuredWidth}x${playerView.measuredHeight}"
+            )
+        }
+
         if (!isPip) {
             // Restore normal layout-driven sizing when leaving PiP.
             try {
@@ -478,6 +497,13 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                TAG,
+                "onPipWindowSizeChanged requested=${width}x${height} isInPipMode=$isInPipMode container=${this.width}x${this.height} playerView=${playerView.width}x${playerView.height} lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height}"
+            )
+        }
+
         if (!isInPipMode) return
         if (width <= 0 || height <= 0) return
 
@@ -490,6 +516,10 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
                     lp.width = width
                     lp.height = height
                     playerView.layoutParams = lp
+
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "pinned PlayerView layoutParams to ${width}x${height}")
+                    }
                 }
             } catch (_: Exception) {
                 // ignore
@@ -500,12 +530,32 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
                 val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
                 playerView.measure(wSpec, hSpec)
                 playerView.layout(0, 0, width, height)
+
+                if (BuildConfig.DEBUG) {
+                    Log.d(
+                        TAG,
+                        "manual measure/layout -> playerView=${playerView.width}x${playerView.height} measured=${playerView.measuredWidth}x${playerView.measuredHeight} container=${this@CrispyExoVideoView.width}x${this@CrispyExoVideoView.height}"
+                    )
+
+                    val childCount = playerView.childCount
+                    for (i in 0 until childCount) {
+                        val c = playerView.getChildAt(i)
+                        Log.d(
+                            TAG,
+                            "  child[$i]=${c.javaClass.simpleName} ${c.width}x${c.height} measured=${c.measuredWidth}x${c.measuredHeight}"
+                        )
+                    }
+                }
             } catch (_: Exception) {
                 // ignore
             }
 
             playerView.requestLayout()
             playerView.invalidate()
+
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "post requestLayout/invalidate -> playerView lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height}")
+            }
         }
     }
 
