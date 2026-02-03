@@ -1,8 +1,6 @@
 package aayush.crispy.core
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -31,10 +29,6 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var isInPipMode: Boolean = false
 
     private var isReleased: Boolean = false
-
-    // Debounce handler for PiP resize
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var pendingPipResize: Runnable? = null
 
     companion object {
         private const val TAG = "CrispyMpvVideoView"
@@ -213,10 +207,6 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         if (isReleased) return
         isReleased = true
 
-        // Cancel pending PiP resize
-        pendingPipResize?.let { mainHandler.removeCallbacks(it) }
-        pendingPipResize = null
-
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
         PlaybackRegistry.unregister(this)
 
@@ -356,58 +346,21 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     /**
-     * Check if Activity is in PiP mode. Queries directly to avoid async race conditions.
-     */
-    private fun inPipMode(): Boolean {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) return false
-        return try {
-            appContext.currentActivity?.isInPictureInPictureMode == true
-        } catch (_: Exception) {
-            isInPipMode
-        }
-    }
-
-    /**
-     * Update MPV surface size. In PiP, uses debounced detach/reattach to force GPU rebuild.
+     * Update MPV surface size. Called only from surfaceChanged.
+     * This matches crispy-android's approach: just set the property and let Android handle the rest.
      */
     private fun updateMpvSurfaceSize(width: Int, height: Int) {
         if (!isMpvInitialized || isReleased) return
         if (width <= 0 || height <= 0) return
         if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
-        Log.d(TAG, "updateMpvSurfaceSize: ${width}x${height} (pip=${inPipMode()})")
+        lastAppliedSurfaceW = width
+        lastAppliedSurfaceH = height
 
-        if (inPipMode()) {
-            // Debounce: cancel pending, schedule new
-            pendingPipResize?.let { mainHandler.removeCallbacks(it) }
-            
-            val targetW = width
-            val targetH = height
-            pendingPipResize = Runnable {
-                pendingPipResize = null
-                if (isReleased || !isMpvInitialized) return@Runnable
-                
-                val s = surface
-                if (s != null && s.isValid) {
-                    // Detach/reattach forces GPU context rebuild
-                    try { MPVLib.detachSurface() } catch (_: Exception) {}
-                    try { MPVLib.attachSurface(s) } catch (_: Exception) {}
-                }
-                
-                lastAppliedSurfaceW = targetW
-                lastAppliedSurfaceH = targetH
-                try {
-                    MPVLib.setPropertyString("android-surface-size", "${targetW}x${targetH}")
-                } catch (_: Exception) {}
-            }
-            mainHandler.postDelayed(pendingPipResize!!, 50)
-        } else {
-            // Normal mode: just set property
-            lastAppliedSurfaceW = width
-            lastAppliedSurfaceH = height
-            try {
-                MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
-            } catch (_: Exception) {}
+        try {
+            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to set android-surface-size", e)
         }
     }
 
@@ -510,51 +463,14 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "onPipModeChanged: $isPip")
         isInPipMode = isPip
-
-        if (!isPip) {
-            // Cancel pending resize
-            pendingPipResize?.let { mainHandler.removeCallbacks(it) }
-            pendingPipResize = null
-            lastAppliedSurfaceW = 0
-            lastAppliedSurfaceH = 0
-
-            // Restore layout-driven sizing
-            try { surfaceView.holder.setSizeFromLayout() } catch (_: Exception) {}
-            
-            // Modify LayoutParams in-place (avoid ClassCastException)
-            try {
-                surfaceView.layoutParams?.let { lp ->
-                    lp.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    lp.height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-                    surfaceView.layoutParams = lp
-                }
-            } catch (_: Exception) {}
-
-            surfaceView.requestLayout()
-        }
+        // Let Android handle surface lifecycle - no proactive intervention needed
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
-        Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height}")
-        if (isReleased || !isMpvInitialized || surface == null) return
-        if (width <= 0 || height <= 0) return
-
-        // Set fixed surface size
-        try { surfaceView.holder.setFixedSize(width, height) } catch (_: Exception) {}
-
-        // Pin view size
-        try {
-            surfaceView.layoutParams?.let { lp ->
-                if (lp.width != width || lp.height != height) {
-                    lp.width = width
-                    lp.height = height
-                    surfaceView.layoutParams = lp
-                }
-            }
-        } catch (_: Exception) {}
-
-        surfaceView.requestLayout()
-        updateMpvSurfaceSize(width, height)
+        // NO-OP: Let Android handle surface lifecycle naturally via surfaceChanged.
+        // Proactive intervention here causes race conditions and breaks video rendering.
+        // This matches crispy-android's approach which works correctly.
+        Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height} (ignored - trusting surfaceChanged)")
     }
 
     override fun pauseFromPipDismissed() {
