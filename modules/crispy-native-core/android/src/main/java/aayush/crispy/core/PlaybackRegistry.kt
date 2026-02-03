@@ -11,6 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 interface PipPlaybackTarget {
     fun onPipModeChanged(isPip: Boolean)
+    fun onPipWindowSizeChanged(width: Int, height: Int) {}
     fun pauseFromPipDismissed()
 }
 
@@ -33,6 +34,17 @@ object PlaybackRegistry {
             cleanup()
             for (ref in targets) {
                 ref.get()?.onPipModeChanged(isPip)
+            }
+        }
+    }
+
+    fun notifyPipWindowSizeChanged(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+
+        mainHandler.post {
+            cleanup()
+            for (ref in targets) {
+                ref.get()?.onPipWindowSizeChanged(width, height)
             }
         }
     }

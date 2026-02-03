@@ -2,6 +2,7 @@ package aayush.crispy.core
 
 import android.content.Context
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -456,11 +457,56 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
+
+        if (!isPip) {
+            // Restore normal layout-driven sizing when leaving PiP.
+            try {
+                playerView.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
         
         // The layout change listener in init{} handles all surface resizing.
         // This callback is for tracking PiP state only.
         // We still request a layout to ensure the listener fires for enter/exit transitions.
         playerView.requestLayout()
+        playerView.invalidate()
+    }
+
+    override fun onPipWindowSizeChanged(width: Int, height: Int) {
+        if (!isInPipMode) return
+        if (width <= 0 || height <= 0) return
+
+        // In PiP resizing, the view hierarchy can lag behind the window bounds.
+        // Pin PlayerView to the reported PiP window size to force an immediate remeasure.
+        mainHandler.post {
+            try {
+                val lp = playerView.layoutParams
+                if (lp != null && (lp.width != width || lp.height != height)) {
+                    lp.width = width
+                    lp.height = height
+                    playerView.layoutParams = lp
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
+
+            try {
+                val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+                val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+                playerView.measure(wSpec, hSpec)
+                playerView.layout(0, 0, width, height)
+            } catch (_: Exception) {
+                // ignore
+            }
+
+            playerView.requestLayout()
+            playerView.invalidate()
+        }
     }
 
     override fun pauseFromPipDismissed() {

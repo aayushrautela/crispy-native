@@ -2,8 +2,13 @@ package aayush.crispy.core
 
 import android.app.Activity
 import android.app.Application
+import android.graphics.Point
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Bundle
+import android.view.View
+import android.view.WindowInsets
 import androidx.activity.ComponentActivity
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -33,6 +38,145 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
     @Volatile
     private var started: Boolean = false
 
+    // PiP resize tracking
+    // Some devices (Pixel included) can update PiP window bounds without promptly re-laying out
+    // the view hierarchy or dispatching timely surface resize callbacks. To keep playback stable,
+    // we treat the *window size* as the source of truth and notify native playback targets.
+    private val pipHandler = Handler(Looper.getMainLooper())
+    private var pipResizeRunnable: Runnable? = null
+    private var pipRootViewRef: WeakReference<View>? = null
+    private var pipRootLayoutListener: View.OnLayoutChangeListener? = null
+    private var lastPipW: Int = 0
+    private var lastPipH: Int = 0
+
+    private fun computeWindowSize(activity: Activity): Pair<Int, Int> {
+        // Returns the content size in pixels.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val metrics = activity.windowManager.currentWindowMetrics
+                val bounds = metrics.bounds
+                val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                )
+
+                val w = (bounds.width() - insets.left - insets.right).coerceAtLeast(0)
+                val h = (bounds.height() - insets.top - insets.bottom).coerceAtLeast(0)
+                return w to h
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
+        return try {
+            val out = Point()
+            @Suppress("DEPRECATION")
+            activity.windowManager.defaultDisplay.getSize(out)
+            out.x to out.y
+        } catch (_: Exception) {
+            0 to 0
+        }
+    }
+
+    private fun maybeNotifyWindowSize(activity: Activity, reason: String) {
+        val (w, h) = computeWindowSize(activity)
+        if (w <= 0 || h <= 0) return
+        if (w == lastPipW && h == lastPipH) return
+
+        lastPipW = w
+        lastPipH = h
+
+        // Nudge the view tree so RN/Expo can pick up the new bounds.
+        try {
+            activity.window?.decorView?.requestLayout()
+            activity.window?.decorView?.invalidate()
+        } catch (_: Exception) {
+            // ignore
+        }
+
+        PlaybackRegistry.notifyPipWindowSizeChanged(w, h)
+        emit("onPipWindowSizeChanged", mapOf("width" to w, "height" to h, "reason" to reason))
+    }
+
+    private fun startPipResizeTracking(activity: Activity) {
+        if (pipResizeRunnable != null) return
+
+        // Attach a layout listener to the decor view. When it does fire, we can react immediately.
+        val root = activity.window?.decorView
+        if (root != null) {
+            val listener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                val w = right - left
+                val h = bottom - top
+                val oldW = oldRight - oldLeft
+                val oldH = oldBottom - oldTop
+                if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
+                    maybeNotifyWindowSize(activity, "decorLayout")
+                }
+            }
+            pipRootViewRef = WeakReference(root)
+            pipRootLayoutListener = listener
+            root.addOnLayoutChangeListener(listener)
+        }
+
+        // Fallback poll: bounded work while in PiP, only notifies on actual size changes.
+        val runnable = object : Runnable {
+            private var stableTicks = 0
+            private var intervalMs = 50L
+
+            override fun run() {
+                if (pipResizeRunnable !== this) return
+
+                val a = currentActivityRef?.get()
+                if (!started || a == null || !isInPip(a)) {
+                    stopPipResizeTracking()
+                    return
+                }
+
+                val beforeW = lastPipW
+                val beforeH = lastPipH
+                maybeNotifyWindowSize(a, "poll")
+
+                val changed = (lastPipW != beforeW || lastPipH != beforeH)
+                if (changed) {
+                    stableTicks = 0
+                    intervalMs = 50L
+                } else {
+                    stableTicks++
+                    // After the window is stable for a bit, reduce poll frequency.
+                    if (stableTicks >= 20) {
+                        intervalMs = 250L
+                    }
+                }
+
+                pipHandler.postDelayed(this, intervalMs)
+            }
+        }
+
+        pipResizeRunnable = runnable
+        // Emit immediately to sync state as soon as we enter PiP.
+        maybeNotifyWindowSize(activity, "start")
+        pipHandler.post(runnable)
+    }
+
+    private fun stopPipResizeTracking() {
+        pipResizeRunnable?.let { pipHandler.removeCallbacks(it) }
+        pipResizeRunnable = null
+        lastPipW = 0
+        lastPipH = 0
+
+        val root = pipRootViewRef?.get()
+        val listener = pipRootLayoutListener
+        if (root != null && listener != null) {
+            try {
+                root.removeOnLayoutChangeListener(listener)
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
+        pipRootViewRef = null
+        pipRootLayoutListener = null
+    }
+
     fun start(reactContext: ReactContext) {
         if (started) return
         started = true
@@ -50,6 +194,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
         }
 
         detachPipListener()
+        stopPipResizeTracking()
         reactContextRef = null
         currentActivityRef = null
         lastIsPip = null
@@ -125,6 +270,7 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
                 emit("onPipWillEnter", null)
                 emit("onPipModeChanged", true)
                 PlaybackRegistry.notifyPipModeChanged(true)
+                currentActivityRef?.get()?.let { startPipResizeTracking(it) }
             }
             return
         }
@@ -137,6 +283,12 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
 
         emit("onPipModeChanged", isPipNow)
         PlaybackRegistry.notifyPipModeChanged(isPipNow)
+
+        if (isPipNow) {
+            currentActivityRef?.get()?.let { startPipResizeTracking(it) }
+        } else {
+            stopPipResizeTracking()
+        }
 
         if (!isPipNow && prev && currentActivityStopped) {
             PlaybackRegistry.pauseAllFromPipDismissed()
