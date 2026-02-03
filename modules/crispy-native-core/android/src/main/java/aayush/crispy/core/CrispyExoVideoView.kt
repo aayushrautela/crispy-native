@@ -3,7 +3,6 @@ package aayush.crispy.core
 import android.content.Context
 import android.util.Log
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -28,9 +27,6 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     companion object {
         private const val TAG = "CrispyExoVideoView"
         private const val PROGRESS_INTERVAL_MS = 500L
-        // Delays for PiP surface sync - accounts for layout/animation timing
-        private const val PIP_RESIZE_DELAY_MS = 32L
-        private const val PIP_RESIZE_RETRY_DELAY_MS = 100L
     }
 
     private val playerView = PlayerView(context)
@@ -56,10 +52,9 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
 
-    // Track last applied dimensions for PiP resize detection
+    // Track last applied dimensions for layout change detection
     private var lastAppliedW: Int = 0
     private var lastAppliedH: Int = 0
-    private var pendingPipSizeUpdate: Runnable? = null
 
     // Track mapping for index-based selection from JS
     private data class TrackRef(
@@ -433,11 +428,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     private fun release() {
         try {
-            // Clean up any pending PiP size updates
-            pendingPipSizeUpdate?.let { mainHandler.removeCallbacks(it) }
-            pendingPipSizeUpdate = null
             mainHandler.removeCallbacksAndMessages(null)
-            
             playerView.player = null
             player.release()
         } catch (_: Exception) {
@@ -454,98 +445,10 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
         
-        // Cancel any pending size updates from previous transitions
-        pendingPipSizeUpdate?.let { mainHandler.removeCallbacks(it) }
-        pendingPipSizeUpdate = null
-        
-        // CRITICAL FIX: When onPipModeChanged fires, the view's layout has NOT completed yet.
-        // The PlayerView's dimensions still report the OLD size. This is why:
-        // 1. Entering PiP shows the video at wrong size
-        // 2. Moving the PiP window "fixes" it (triggers another layout pass)
-        //
-        // Solution: Wait for the layout to settle, then force PlayerView to re-layout.
-        // For ExoPlayer, we need to:
-        // 1. Wait for layout completion
-        // 2. Force the PlayerView to resize its internal video surface
-        // 3. Trigger AspectRatioFrameLayout recalculation
-        
-        val sizeUpdateRunnable = object : Runnable {
-            private var retryCount = 0
-            private val maxRetries = 3
-            
-            override fun run() {
-                val w = playerView.width
-                val h = playerView.height
-                
-                // Check if dimensions have actually changed from our last sync
-                val sizeChanged = w != lastAppliedW || h != lastAppliedH
-                val sizeValid = w > 0 && h > 0
-                
-                if (sizeValid && sizeChanged) {
-                    Log.d(TAG, "PiP: forcing PlayerView resize to ${w}x${h}")
-                    lastAppliedW = w
-                    lastAppliedH = h
-                    
-                    // Force ExoPlayer's PlayerView to recalculate its internal surface size.
-                    // The key is to ensure the AspectRatioFrameLayout inside PlayerView
-                    // re-measures itself with the new container dimensions.
-                    playerView.apply {
-                        // Force a full measure/layout pass
-                        requestLayout()
-                        
-                        // Post invalidation to ensure the surface updates after layout
-                        post {
-                            invalidate()
-                            // If there's a video loaded, trigger aspect ratio recalculation
-                            player?.videoSize?.let { vs ->
-                                if (vs.width > 0 && vs.height > 0) {
-                                    // Re-apply resize mode to force internal recalculation
-                                    resizeMode = resizeMode
-                                }
-                            }
-                        }
-                    }
-                    pendingPipSizeUpdate = null
-                } else if (retryCount < maxRetries) {
-                    // Dimensions haven't changed yet - the layout pass may still be pending.
-                    // Schedule a retry with exponential backoff.
-                    retryCount++
-                    val delay = PIP_RESIZE_RETRY_DELAY_MS * retryCount
-                    Log.d(TAG, "PiP: size unchanged (${w}x${h}), retry $retryCount in ${delay}ms")
-                    mainHandler.postDelayed(this, delay)
-                } else {
-                    // Max retries reached. Force layout anyway as a fallback.
-                    if (sizeValid) {
-                        Log.d(TAG, "PiP: max retries, forcing layout at ${w}x${h}")
-                        lastAppliedW = w
-                        lastAppliedH = h
-                        playerView.requestLayout()
-                        playerView.post { playerView.invalidate() }
-                    }
-                    pendingPipSizeUpdate = null
-                }
-            }
-        }
-        
-        pendingPipSizeUpdate = sizeUpdateRunnable
-        
-        // Use ViewTreeObserver to detect when layout is complete, with a delay fallback
-        playerView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                // Remove listener immediately - we only need one callback
-                playerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                
-                // Post with a small delay to ensure any animations have settled
-                mainHandler.postDelayed(sizeUpdateRunnable, PIP_RESIZE_DELAY_MS)
-            }
-        })
-        
-        // Fallback: If ViewTreeObserver doesn't fire (rare edge case), ensure we still sync
-        mainHandler.postDelayed({
-            if (pendingPipSizeUpdate === sizeUpdateRunnable) {
-                sizeUpdateRunnable.run()
-            }
-        }, PIP_RESIZE_DELAY_MS + PIP_RESIZE_RETRY_DELAY_MS)
+        // The layout change listener in init{} handles all surface resizing.
+        // This callback is for tracking PiP state only.
+        // We still request a layout to ensure the listener fires for enter/exit transitions.
+        playerView.requestLayout()
     }
 
     override fun pauseFromPipDismissed() {
