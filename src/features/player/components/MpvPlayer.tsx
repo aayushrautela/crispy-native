@@ -1,4 +1,4 @@
-import { CrispyVideoView } from '@/modules/crispy-native-core';
+import { CrispyMpvVideoView } from '@/modules/crispy-native-core';
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
@@ -140,7 +140,7 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
     };
 
     return (
-        <CrispyVideoView
+        <CrispyMpvVideoView
             ref={nativeRef as any}
             style={[styles.container, props.style]}
             source={props.source}

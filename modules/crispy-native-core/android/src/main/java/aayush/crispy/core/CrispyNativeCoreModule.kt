@@ -145,82 +145,82 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- VIDEO PLAYER VIEW ---
-    View(CrispyVideoView::class) {
-      Prop("source") { view: CrispyVideoView, url: String? ->
+    View(CrispyMpvVideoView::class) {
+      Prop("source") { view: CrispyMpvVideoView, url: String? ->
         view.setSource(url)
       }
 
-      Prop("headers") { view: CrispyVideoView, headers: Map<String, String>? ->
+      Prop("headers") { view: CrispyMpvVideoView, headers: Map<String, String>? ->
         view.setHeaders(headers)
       }
 
-      Prop("paused") { view: CrispyVideoView, paused: Boolean ->
+      Prop("paused") { view: CrispyMpvVideoView, paused: Boolean ->
         view.setPaused(paused)
       }
 
-      Prop("resizeMode") { view: CrispyVideoView, mode: String? ->
+      Prop("resizeMode") { view: CrispyMpvVideoView, mode: String? ->
         view.setResizeMode(mode)
       }
 
-      Prop("decoderMode") { view: CrispyVideoView, mode: String ->
+      Prop("decoderMode") { view: CrispyMpvVideoView, mode: String ->
         view.decoderMode = mode
       }
 
-      Prop("gpuMode") { view: CrispyVideoView, mode: String ->
+      Prop("gpuMode") { view: CrispyMpvVideoView, mode: String ->
         view.gpuMode = mode
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
 
-      AsyncFunction("seek") { view: CrispyVideoView, positionSec: Double ->
+      AsyncFunction("seek") { view: CrispyMpvVideoView, positionSec: Double ->
         view.seek(positionSec)
       }
 
-      AsyncFunction("setAudioTrack") { view: CrispyVideoView, trackId: Int ->
+      AsyncFunction("setAudioTrack") { view: CrispyMpvVideoView, trackId: Int ->
         view.setAudioTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleTrack") { view: CrispyVideoView, trackId: Int ->
+      AsyncFunction("setSubtitleTrack") { view: CrispyMpvVideoView, trackId: Int ->
         view.setSubtitleTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleSize") { view: CrispyVideoView, size: Int ->
+      AsyncFunction("setSubtitleSize") { view: CrispyMpvVideoView, size: Int ->
         view.setSubtitleSize(size)
       }
 
-      AsyncFunction("setSubtitleColor") { view: CrispyVideoView, color: String ->
+      AsyncFunction("setSubtitleColor") { view: CrispyMpvVideoView, color: String ->
         view.setSubtitleColor(color)
       }
 
-      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyVideoView, color: String, opacity: Float ->
+      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyMpvVideoView, color: String, opacity: Float ->
         view.setSubtitleBackgroundColor(color, opacity)
       }
 
-      AsyncFunction("setSubtitleBorderSize") { view: CrispyVideoView, size: Int ->
+      AsyncFunction("setSubtitleBorderSize") { view: CrispyMpvVideoView, size: Int ->
         view.setSubtitleBorderSize(size)
       }
 
-      AsyncFunction("setSubtitleBorderColor") { view: CrispyVideoView, color: String ->
+      AsyncFunction("setSubtitleBorderColor") { view: CrispyMpvVideoView, color: String ->
         view.setSubtitleBorderColor(color)
       }
 
-      AsyncFunction("setSubtitlePosition") { view: CrispyVideoView, pos: Int ->
+      AsyncFunction("setSubtitlePosition") { view: CrispyMpvVideoView, pos: Int ->
         view.setSubtitlePosition(pos)
       }
 
-      AsyncFunction("setSubtitleDelay") { view: CrispyVideoView, delay: Double ->
+      AsyncFunction("setSubtitleDelay") { view: CrispyMpvVideoView, delay: Double ->
         view.setSubtitleDelay(delay)
       }
 
-      AsyncFunction("setSubtitleBold") { view: CrispyVideoView, bold: Boolean ->
+      AsyncFunction("setSubtitleBold") { view: CrispyMpvVideoView, bold: Boolean ->
         view.setSubtitleBold(bold)
       }
 
-      AsyncFunction("setSubtitleItalic") { view: CrispyVideoView, italic: Boolean ->
+      AsyncFunction("setSubtitleItalic") { view: CrispyMpvVideoView, italic: Boolean ->
         view.setSubtitleItalic(italic)
       }
 
-      Prop("metadata") { view: CrispyVideoView, metadata: Map<String, Any>? ->
+      Prop("metadata") { view: CrispyMpvVideoView, metadata: Map<String, Any>? ->
         metadata?.let {
           val title = it["title"] as? String ?: ""
           val artist = (it["artist"] as? String) ?: (it["subtitle"] as? String) ?: ""
@@ -229,11 +229,11 @@ class CrispyNativeCoreModule : Module() {
         }
       }
 
-      Prop("playInBackground") { view: CrispyVideoView, playInBackground: Boolean ->
+      Prop("playInBackground") { view: CrispyMpvVideoView, playInBackground: Boolean ->
         view.setPlayInBackground(playInBackground)
       }
 
-      AsyncFunction("setMetadata") { view: CrispyVideoView, title: String, artist: String, artworkUrl: String? ->
+      AsyncFunction("setMetadata") { view: CrispyMpvVideoView, title: String, artist: String, artworkUrl: String? ->
         view.setMetadata(title, artist, artworkUrl)
       }
     }

@@ -48,6 +48,11 @@ type NativeView<P> = React.ForwardRefExoticComponent<React.PropsWithoutRef<P> & 
 
 export const CrispyVideoView = requireNativeViewManager('CrispyNativeCore') as NativeView<CrispyVideoViewProps>;
 
+// MPV view (native: CrispyMpvVideoView). Keep CrispyVideoView export for backwards compatibility.
+export const CrispyMpvVideoView = CrispyVideoView;
+export type CrispyMpvVideoViewProps = CrispyVideoViewProps;
+export type CrispyMpvVideoViewRef = CrispyVideoViewRef;
+
 export interface CrispyExoVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;

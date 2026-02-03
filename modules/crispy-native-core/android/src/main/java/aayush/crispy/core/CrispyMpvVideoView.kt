@@ -15,7 +15,7 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
-class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, PipPlaybackTarget {
+class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, PipPlaybackTarget {
 
     private val surfaceView = TextureView(context)
     private var isMpvInitialized = false
@@ -34,7 +34,7 @@ class CrispyVideoView(context: Context, appContext: AppContext) : ExpoView(conte
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
-        private const val TAG = "CrispyVideoView"
+        private const val TAG = "CrispyMpvVideoView"
     }
 
     // Media Session Handler
