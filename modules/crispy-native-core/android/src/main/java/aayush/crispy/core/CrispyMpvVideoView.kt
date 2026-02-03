@@ -36,6 +36,12 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     // Media Session Handler
     private var mediaSessionHandler: MediaSessionHandler? = null
+
+    // Cache latest metadata until MediaSessionHandler is ready
+    private var pendingTitle: String = ""
+    private var pendingArtist: String = ""
+    private var pendingArtworkUrl: String? = null
+    private var hasPendingMetadata: Boolean = false
     
     // Decoder mode setting: 'auto', 'sw', 'hw', 'hw+' (default: auto)
     var decoderMode: String = "auto"
@@ -149,6 +155,11 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
                         seek(pos / 1000.0)
                     }
                 })
+
+                // Apply any metadata received before the session was ready
+                if (hasPendingMetadata) {
+                    mediaSessionHandler?.updateMetadata(pendingTitle, pendingArtist, pendingArtworkUrl)
+                }
 
                 observeProperties()
 
@@ -382,6 +393,10 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     fun setMetadata(title: String, artist: String, artworkUrl: String?) {
         Log.d(TAG, "setMetadata called: $title by $artist (artwork: $artworkUrl)")
+        pendingTitle = title
+        pendingArtist = artist
+        pendingArtworkUrl = artworkUrl
+        hasPendingMetadata = true
         mediaSessionHandler?.updateMetadata(title, artist, artworkUrl)
     }
 
