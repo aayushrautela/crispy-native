@@ -1,12 +1,10 @@
 package aayush.crispy.core
 
 import android.content.Context
-import android.graphics.SurfaceTexture
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import dev.jdtech.mpv.MPVLib
 
 import com.facebook.react.bridge.LifecycleEventListener
@@ -15,9 +13,9 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
-class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), TextureView.SurfaceTextureListener, MPVLib.EventObserver, PipPlaybackTarget {
+class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
 
-    private val surfaceView = TextureView(context)
+    private val surfaceView = SurfaceView(context)
     private var isMpvInitialized = false
     private var pendingDataSource: String? = null
     private var isPaused: Boolean = true
@@ -30,8 +28,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
 
-    // Handler for posting surface updates after layout completes
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var isReleased: Boolean = false
 
     companion object {
         private const val TAG = "CrispyMpvVideoView"
@@ -97,39 +94,17 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
             }
         }
         override fun onHostDestroy() {
-            mediaSessionHandler?.release()
+            // Host is being destroyed; ensure we release native resources.
+            release()
         }
     }
 
     init {
-        surfaceView.surfaceTextureListener = this
-        surfaceView.isOpaque = false
-
-        // CRITICAL: onSurfaceTextureSizeChanged does NOT reliably fire during PiP window resizing.
-        // Android only calls it when the surface is "invalidated" (e.g., when moving the PiP window).
-        // We MUST use addOnLayoutChangeListener to detect actual size changes.
-        // The previous "race condition" issue was caused by updating MPV synchronously during layout.
-        // Fix: Post the update to ensure the layout pass has completed.
-        surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            val w = right - left
-            val h = bottom - top
-            val oldW = oldRight - oldLeft
-            val oldH = oldBottom - oldTop
-            
-            // Only process if size actually changed and we're initialized
-            if (isMpvInitialized && w > 0 && h > 0 && (w != oldW || h != oldH)) {
-                Log.d(TAG, "Layout changed: ${oldW}x${oldH} -> ${w}x${h} (isInPipMode=$isInPipMode)")
-                
-                // Post to ensure the layout pass is fully complete before updating MPV.
-                // This prevents the race condition where MPV receives dimensions before
-                // the TextureView's internal buffers are resized.
-                mainHandler.post {
-                    if (isMpvInitialized && surfaceView.width == w && surfaceView.height == h) {
-                        updateMpvSurfaceSize(w, h, force = true)
-                    }
-                }
-            }
-        }
+        // Use SurfaceView for production-grade PiP resizing.
+        // TextureView frequently fails to resize its internal buffer until the PiP window is moved
+        // on some OEM builds. SurfaceView receives reliable surfaceChanged callbacks on PiP resize.
+        surfaceView.holder.addCallback(this)
+        surfaceView.holder.setSizeFromLayout()
 
         addView(surfaceView, android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
@@ -145,85 +120,119 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         PlaybackRegistry.register(this)
     }
 
-    override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-        Log.d(TAG, "Surface texture available: ${width}x${height}")
+    override fun surfaceCreated(holder: SurfaceHolder) {
+        Log.d(TAG, "Surface created")
+        if (isReleased) return
+
+        surface = holder.surface
+        lastAppliedSurfaceW = 0
+        lastAppliedSurfaceH = 0
+
         try {
-            // NOTE: We do NOT call setDefaultBufferSize here.
-            // The TextureView manages its own buffer size automatically.
-            // Manually setting it causes race conditions during PiP transitions
-            // where MPV renders into a mismatched buffer, causing the "corner" bug.
-            surface = Surface(surfaceTexture)
-            
-            MPVLib.create(context.applicationContext)
-            initOptions()
-            MPVLib.init()
-            MPVLib.attachSurface(surface!!)
-            MPVLib.addObserver(this)
-            
-            // Initialize Media Session
-            mediaSessionHandler = MediaSessionHandler(context, object : MediaSessionHandler.MediaSessionCallbacks {
-                override fun onPlay() { setPaused(false) }
-                override fun onPause() { setPaused(true) }
-                override fun onStop() { 
-                    setPaused(true)
-                    seek(0.0)
-                }
-                override fun onSeekTo(pos: Long) {
-                    seek(pos / 1000.0)
-                }
-            })
+            if (!isMpvInitialized) {
+                MPVLib.create(context.applicationContext)
+                initOptions()
+                MPVLib.init()
+                MPVLib.attachSurface(surface!!)
+                MPVLib.addObserver(this)
+                isMpvInitialized = true
 
-            // Tell MPV the initial surface size
-            updateMpvSurfaceSize(width, height)
-            observeProperties()
-            isMpvInitialized = true
+                // Initialize Media Session
+                mediaSessionHandler = MediaSessionHandler(context, object : MediaSessionHandler.MediaSessionCallbacks {
+                    override fun onPlay() { setPaused(false) }
+                    override fun onPause() { setPaused(true) }
+                    override fun onStop() {
+                        setPaused(true)
+                        seek(0.0)
+                    }
+                    override fun onSeekTo(pos: Long) {
+                        seek(pos / 1000.0)
+                    }
+                })
 
-            // Ensure media session + PiP gating reflect the actual initial state even if
-            // the paused prop was applied before MPV finished initializing.
-            syncPlaybackAndPip()
-            applyResizeMode(requestedResizeMode)
-            
-            pendingDataSource?.let { url ->
-                loadFile(url)
-                pendingDataSource = null
+                observeProperties()
+
+                // Ensure media session + PiP gating reflect the actual initial state even if
+                // the paused prop was applied before MPV finished initializing.
                 syncPlaybackAndPip()
+                applyResizeMode(requestedResizeMode)
+
+                pendingDataSource?.let { url ->
+                    loadFile(url)
+                    pendingDataSource = null
+                    syncPlaybackAndPip()
+                }
+            } else {
+                // Surface recreated (e.g., activity relaunch / view reattach). Rebind without
+                // destroying MPV to avoid losing playback state.
+                MPVLib.attachSurface(surface!!)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MPV", e)
-            onError(mapOf("error" to "MPV initialization failed: ${e.message}"))
+            Log.e(TAG, "Failed to initialize/attach MPV surface", e)
+            onError(mapOf("error" to "MPV surface init failed: ${e.message}"))
         }
     }
 
-    override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        if (isReleased) return
         if (width <= 0 || height <= 0) return
-        Log.d(TAG, "Surface texture size changed: ${width}x${height} (isInPipMode=$isInPipMode)")
-        // This is the ONLY place we update MPV's surface size.
-        // The OS has resized the TextureView (e.g., during PiP transition),
-        // and we simply tell MPV the new dimensions. No manual buffer management.
+
+        Log.d(TAG, "Surface changed: ${width}x${height} (isInPipMode=$isInPipMode)")
+        // This is our single source of truth for render sizing.
+        // SurfaceView reliably triggers this callback on PiP resize.
         updateMpvSurfaceSize(width, height)
     }
 
-    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-        Log.d(TAG, "Surface texture destroyed")
-        (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
-
-        // Clean up handler callbacks
-        mainHandler.removeCallbacksAndMessages(null)
-
-        PlaybackRegistry.unregister(this)
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+        Log.d(TAG, "Surface destroyed")
+        surface = null
 
         if (isMpvInitialized) {
-            MPVLib.removeObserver(this)
-            MPVLib.detachSurface()
-            MPVLib.destroy()
-            isMpvInitialized = false
+            try {
+                MPVLib.detachSurface()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to detach MPV surface", e)
+            }
         }
-        surface?.release()
-        surface = null
-        return true
     }
 
-    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {}
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        release()
+    }
+
+    private fun release() {
+        if (isReleased) return
+        isReleased = true
+
+        (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
+        PlaybackRegistry.unregister(this)
+
+        mediaSessionHandler?.release()
+        mediaSessionHandler = null
+
+        if (isMpvInitialized) {
+            try {
+                MPVLib.removeObserver(this)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to remove MPV observer", e)
+            }
+            try {
+                MPVLib.detachSurface()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to detach MPV surface", e)
+            }
+            try {
+                MPVLib.destroy()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to destroy MPV", e)
+            } finally {
+                isMpvInitialized = false
+            }
+        }
+
+        surface = null
+    }
 
     private fun initOptions() {
         MPVLib.setOptionString("profile", "fast")
@@ -336,12 +345,12 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     /**
      * Update MPV's understanding of the surface dimensions.
      * This is the single source of truth for surface sizing.
-     * Called only from onSurfaceTextureAvailable and onSurfaceTextureSizeChanged.
+     * Called from SurfaceHolder callbacks (surfaceChanged).
      */
-    private fun updateMpvSurfaceSize(width: Int, height: Int, force: Boolean = false) {
-        if (!isMpvInitialized) return
-        if (width <= 0 || height <= 0) return
-        if (!force && width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
+     private fun updateMpvSurfaceSize(width: Int, height: Int) {
+         if (!isMpvInitialized) return
+         if (width <= 0 || height <= 0) return
+        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
         Log.d(TAG, "Updating MPV surface size: ${width}x${height}")
         lastAppliedSurfaceW = width
@@ -444,11 +453,6 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
-        
-        // The layout change listener in init{} handles all surface resizing.
-        // This callback is for tracking PiP state only.
-        // We still request a layout to ensure the listener fires for enter/exit transitions.
-        surfaceView.requestLayout()
     }
 
     override fun pauseFromPipDismissed() {
