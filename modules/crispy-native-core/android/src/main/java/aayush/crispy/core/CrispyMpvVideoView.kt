@@ -1,10 +1,13 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
 import dev.jdtech.mpv.MPVLib
 
 import com.facebook.react.bridge.LifecycleEventListener
@@ -13,7 +16,7 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
-class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
+class CrispyMpvVideoView(context: Context, private val appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
 
     private val surfaceView = SurfaceView(context)
     private var isMpvInitialized = false
@@ -29,6 +32,16 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var isInPipMode: Boolean = false
 
     private var isReleased: Boolean = false
+
+    // PiP resize watcher
+    // Some OEMs do not dispatch timely surfaceChanged callbacks while the PiP window is resized.
+    // We watch the host window bounds and proactively resize the Surface buffer + MPV viewport.
+    private val pipHandler = Handler(Looper.getMainLooper())
+    private var pipResizePoll: Runnable? = null
+    private var pipRootView: View? = null
+    private var pipRootLayoutListener: View.OnLayoutChangeListener? = null
+    private var lastKnownPipW: Int = 0
+    private var lastKnownPipH: Int = 0
 
     companion object {
         private const val TAG = "CrispyMpvVideoView"
@@ -97,6 +110,109 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         override fun onHostDestroy() {
             // Host is being destroyed; ensure we release native resources.
             release()
+        }
+    }
+
+    private fun computeBestSurfaceSizePx(): Pair<Int, Int> {
+        // Prefer the actual view size when available.
+        val w1 = width
+        val h1 = height
+        if (w1 > 0 && h1 > 0) return w1 to h1
+
+        val w2 = surfaceView.width
+        val h2 = surfaceView.height
+        if (w2 > 0 && h2 > 0) return w2 to h2
+
+        val activity = appContext.currentActivity
+        val decor = activity?.window?.decorView
+        val w3 = decor?.width ?: 0
+        val h3 = decor?.height ?: 0
+        if (w3 > 0 && h3 > 0) return w3 to h3
+
+        return 0 to 0
+    }
+
+    private fun syncPipSurfaceSize(reason: String) {
+        if (isReleased) return
+        if (!isInPipMode) return
+        if (!isMpvInitialized) return
+        if (surface == null) return
+
+        val (w, h) = computeBestSurfaceSizePx()
+        if (w <= 0 || h <= 0) return
+        if (w == lastKnownPipW && h == lastKnownPipH) return
+
+        lastKnownPipW = w
+        lastKnownPipH = h
+        Log.d(TAG, "PiP resize sync ($reason): ${w}x${h}")
+
+        try {
+            // Force the underlying Surface buffer size to match the PiP window.
+            // This makes MPV render at the correct size even when Android delays surfaceChanged.
+            surfaceView.holder.setFixedSize(w, h)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to set fixed Surface size", e)
+        }
+
+        updateMpvSurfaceSize(w, h)
+    }
+
+    private fun startPipResizeWatcher() {
+        if (pipResizePoll != null) return
+
+        // Attach a layout listener to the host decorView; this typically receives resize callbacks
+        // even when the Surface does not.
+        val activity = appContext.currentActivity
+        val decor = activity?.window?.decorView
+        if (decor != null) {
+            val listener = View.OnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                val w = right - left
+                val h = bottom - top
+                val oldW = oldRight - oldLeft
+                val oldH = oldBottom - oldTop
+                if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
+                    syncPipSurfaceSize("decorLayout")
+                }
+            }
+            pipRootView = decor
+            pipRootLayoutListener = listener
+            decor.addOnLayoutChangeListener(listener)
+        }
+
+        // Poll as a fallback for devices that do not deliver layout callbacks during PiP resize.
+        val poll = object : Runnable {
+            override fun run() {
+                if (pipResizePoll !== this) return
+                if (isReleased || !isInPipMode) return
+                syncPipSurfaceSize("poll")
+                pipHandler.postDelayed(this, 100L)
+            }
+        }
+        pipResizePoll = poll
+        pipHandler.post(poll)
+
+        // Immediate sync on start.
+        syncPipSurfaceSize("start")
+    }
+
+    private fun stopPipResizeWatcher() {
+        pipResizePoll?.let { pipHandler.removeCallbacks(it) }
+        pipResizePoll = null
+
+        val root = pipRootView
+        val listener = pipRootLayoutListener
+        if (root != null && listener != null) {
+            root.removeOnLayoutChangeListener(listener)
+        }
+        pipRootView = null
+        pipRootLayoutListener = null
+        lastKnownPipW = 0
+        lastKnownPipH = 0
+
+        try {
+            surfaceView.holder.setSizeFromLayout()
+        } catch (_: Exception) {
+            // ignore
         }
     }
 
@@ -208,6 +324,8 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private fun release() {
         if (isReleased) return
         isReleased = true
+
+        stopPipResizeWatcher()
 
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
         PlaybackRegistry.unregister(this)
@@ -467,6 +585,12 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
+
+        if (isPip) {
+            startPipResizeWatcher()
+        } else {
+            stopPipResizeWatcher()
+        }
     }
 
     override fun pauseFromPipDismissed() {
