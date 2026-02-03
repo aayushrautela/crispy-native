@@ -359,9 +359,9 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
      * This is the single source of truth for surface sizing.
      * Called from SurfaceHolder callbacks (surfaceChanged).
      */
-     private fun updateMpvSurfaceSize(width: Int, height: Int) {
-         if (!isMpvInitialized) return
-         if (width <= 0 || height <= 0) return
+    private fun updateMpvSurfaceSize(width: Int, height: Int) {
+        if (!isMpvInitialized) return
+        if (width <= 0 || height <= 0) return
         if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
 
         Log.d(TAG, "Updating MPV surface size: ${width}x${height}")
@@ -370,6 +370,15 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
         try {
             MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
+
+            // In PiP mode, MPV's GPU context doesn't automatically redraw when the
+            // surface resizes. The OS resizes the PiP container, but MPV continues
+            // rendering at the old dimensions until something triggers a new frame.
+            // A zero-offset relative seek forces MPV to decode and render a fresh
+            // frame at the updated surface size without visible interruption.
+            if (isInPipMode) {
+                MPVLib.command(arrayOf("seek", "0", "relative"))
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to set android-surface-size", e)
         }
