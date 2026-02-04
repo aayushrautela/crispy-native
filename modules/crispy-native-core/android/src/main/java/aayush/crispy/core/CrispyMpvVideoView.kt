@@ -89,6 +89,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
             }
         }
         override fun onHostResume() {
+            reattachSurfaceIfPossible()
             if(resumeOnForeground) {
                 Log.d(TAG, "App foregrounded — resuming MPV")
                 setPaused(false)
@@ -98,6 +99,37 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
         override fun onHostDestroy() {
             // Host is being destroyed; ensure we release native resources.
             release()
+        }
+    }
+
+    private fun reattachSurfaceIfPossible() {
+        if (!isMpvInitialized || isReleased) return
+
+        val holderSurface = surfaceView.holder.surface
+        if (!holderSurface.isValid) return
+
+        surface = holderSurface
+
+        try {
+            MPVLib.attachSurface(holderSurface)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to reattach MPV surface", e)
+            return
+        }
+
+        lastAppliedSurfaceW = 0
+        lastAppliedSurfaceH = 0
+
+        val width = surfaceView.width
+        val height = surfaceView.height
+        if (width > 0 && height > 0) {
+            updateMpvSurfaceSize(width, height)
+        } else {
+            surfaceView.post {
+                if (!isReleased && isMpvInitialized) {
+                    updateMpvSurfaceSize(surfaceView.width, surfaceView.height)
+                }
+            }
         }
     }
 
