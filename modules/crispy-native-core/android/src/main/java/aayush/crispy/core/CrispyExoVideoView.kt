@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.SurfaceView
+import android.view.TextureView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -57,6 +59,13 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     // Track last applied dimensions for layout change detection
     private var lastAppliedW: Int = 0
     private var lastAppliedH: Int = 0
+
+    // PiP resize -> surface buffer sizing (debounced)
+    private var pipPendingW: Int = 0
+    private var pipPendingH: Int = 0
+    private var pipResizeRunnable: Runnable? = null
+    private var cachedSurfaceView: SurfaceView? = null
+    private var cachedTextureView: TextureView? = null
 
     // Track mapping for index-based selection from JS
     private data class TrackRef(
@@ -470,6 +479,11 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
         isInPipMode = isPip
 
+        pipResizeRunnable?.let { mainHandler.removeCallbacks(it) }
+        pipResizeRunnable = null
+        pipPendingW = 0
+        pipPendingH = 0
+
         if (BuildConfig.DEBUG) {
             Log.d(
                 TAG,
@@ -487,6 +501,30 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             } catch (_: Exception) {
                 // ignore
             }
+
+            // Restore normal surface sizing after forcing fixed sizes in PiP.
+            resolveSurfaceView()?.let { sv ->
+                try {
+                    sv.holder.setSizeFromLayout()
+                } catch (_: Exception) {
+                    // ignore
+                }
+            }
+
+            resolveTextureView()?.let { tv ->
+                // Best-effort: reset texture buffer to the current view size after layout.
+                playerView.post {
+                    val w = playerView.width
+                    val h = playerView.height
+                    if (w > 0 && h > 0) {
+                        try {
+                            tv.surfaceTexture?.setDefaultBufferSize(w, h)
+                        } catch (_: Exception) {
+                            // ignore
+                        }
+                    }
+                }
+            }
         }
         
         // The layout change listener in init{} handles all surface resizing.
@@ -500,63 +538,111 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         if (BuildConfig.DEBUG) {
             Log.d(
                 TAG,
-                "onPipWindowSizeChanged requested=${width}x${height} isInPipMode=$isInPipMode container=${this.width}x${this.height} playerView=${playerView.width}x${playerView.height} lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height}"
+                "onPipWindowSizeChanged requested=${width}x${height} isInPipMode=$isInPipMode container=${this.width}x${this.height} playerView=${playerView.width}x${playerView.height}"
             )
         }
 
         if (!isInPipMode) return
         if (width <= 0 || height <= 0) return
 
-        // In PiP resizing, the view hierarchy can lag behind the window bounds.
-        // Pin PlayerView to the reported PiP window size to force an immediate remeasure.
-        mainHandler.post {
+        schedulePipSurfaceResize(width, height, reason = "onPipWindowSizeChanged")
+    }
+
+    private fun schedulePipSurfaceResize(width: Int, height: Int, reason: String) {
+        if (!isInPipMode) return
+        if (width <= 0 || height <= 0) return
+
+        pipPendingW = width
+        pipPendingH = height
+
+        pipResizeRunnable?.let { mainHandler.removeCallbacks(it) }
+
+        val runnable = Runnable {
+            val w = pipPendingW
+            val h = pipPendingH
+            if (!isInPipMode) return@Runnable
+            if (w <= 0 || h <= 0) return@Runnable
+
+            applyPipSurfaceSizeNow(w, h, reason)
+        }
+
+        pipResizeRunnable = runnable
+        // Debounce: interactive PiP resize can emit many intermediate bounds.
+        mainHandler.postDelayed(runnable, 150L)
+    }
+
+    private fun applyPipSurfaceSizeNow(width: Int, height: Int, reason: String) {
+        // SurfaceView is preferred for HDR, but handle TextureView too for safety.
+        val sv = resolveSurfaceView()
+        if (sv != null) {
             try {
-                val lp = playerView.layoutParams
-                if (lp != null && (lp.width != width || lp.height != height)) {
-                    lp.width = width
-                    lp.height = height
-                    playerView.layoutParams = lp
-
-                    if (BuildConfig.DEBUG) {
-                        Log.d(TAG, "pinned PlayerView layoutParams to ${width}x${height}")
-                    }
-                }
-            } catch (_: Exception) {
-                // ignore
+                sv.holder.setFixedSize(width, height)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to setFixedSize(${width}x${height}) reason=$reason", e)
             }
-
-            try {
-                val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
-                val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
-                playerView.measure(wSpec, hSpec)
-                playerView.layout(0, 0, width, height)
-
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        TAG,
-                        "manual measure/layout -> playerView=${playerView.width}x${playerView.height} measured=${playerView.measuredWidth}x${playerView.measuredHeight} container=${this@CrispyExoVideoView.width}x${this@CrispyExoVideoView.height}"
-                    )
-
-                    val childCount = playerView.childCount
-                    for (i in 0 until childCount) {
-                        val c = playerView.getChildAt(i)
-                        Log.d(
-                            TAG,
-                            "  child[$i]=${c.javaClass.simpleName} ${c.width}x${c.height} measured=${c.measuredWidth}x${c.measuredHeight}"
-                        )
-                    }
+        } else {
+            val tv = resolveTextureView()
+            if (tv != null) {
+                try {
+                    tv.surfaceTexture?.setDefaultBufferSize(width, height)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to setDefaultBufferSize(${width}x${height}) reason=$reason", e)
                 }
-            } catch (_: Exception) {
-                // ignore
-            }
-
-            playerView.requestLayout()
-            playerView.invalidate()
-
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "post requestLayout/invalidate -> playerView lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height}")
             }
         }
+
+        try {
+            playerView.requestLayout()
+            playerView.invalidate()
+        } catch (_: Exception) {
+            // ignore
+        }
+    }
+
+    private fun resolveSurfaceView(): SurfaceView? {
+        val cached = cachedSurfaceView
+        if (cached != null && cached.isAttachedToWindow) return cached
+        val found = findSurfaceView(playerView)
+        cachedSurfaceView = found
+        return found
+    }
+
+    private fun resolveTextureView(): TextureView? {
+        val cached = cachedTextureView
+        if (cached != null && cached.isAttachedToWindow) return cached
+        val found = findTextureView(playerView)
+        cachedTextureView = found
+        return found
+    }
+
+    private fun findSurfaceView(root: View?): SurfaceView? {
+        when (root) {
+            null -> return null
+            is SurfaceView -> return root
+            is ViewGroup -> {
+                for (i in 0 until root.childCount) {
+                    val child = root.getChildAt(i)
+                    val found = findSurfaceView(child)
+                    if (found != null) return found
+                }
+            }
+        }
+        return null
+    }
+
+    private fun findTextureView(root: View?): TextureView? {
+        when (root) {
+            null -> return null
+            is TextureView -> return root
+            is ViewGroup -> {
+                for (i in 0 until root.childCount) {
+                    val child = root.getChildAt(i)
+                    val found = findTextureView(child)
+                    if (found != null) return found
+                }
+            }
+        }
+        return null
     }
 
     override fun pauseFromPipDismissed() {

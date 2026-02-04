@@ -66,7 +66,22 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
         // In PiP mode, we want the raw window bounds without subtracting insets,
         // since PiP windows don't have system bars overlaying them.
         val isPip = isInPip(activity)
-        
+
+        // Some devices update the PiP bounds without keeping currentWindowMetrics perfectly in sync.
+        // The decor view size tends to reflect what the system is actually composing.
+        if (isPip) {
+            try {
+                val decor = activity.window?.decorView
+                val w = decor?.width ?: 0
+                val h = decor?.height ?: 0
+                if (w > 0 && h > 0) {
+                    return w to h
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val metrics = activity.windowManager.currentWindowMetrics

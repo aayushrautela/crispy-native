@@ -1,6 +1,8 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -28,6 +30,11 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
     private var pipTransitionPending: Boolean = false  // True during initial PiP entry until surface stabilizes
+
+    private val pipResizeHandler = Handler(Looper.getMainLooper())
+    private var pipResizeRunnable: Runnable? = null
+    private var pendingPipW: Int = 0
+    private var pendingPipH: Int = 0
 
     private var isReleased: Boolean = false
 
@@ -135,9 +142,10 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
 
     init {
-        // Use SurfaceView for production-grade PiP resizing.
-        // TextureView frequently fails to resize its internal buffer until the PiP window is moved
-        // on some OEM builds. SurfaceView receives reliable surfaceChanged callbacks on PiP resize.
+        // Use SurfaceView (HDR-friendly, Surface-based rendering).
+        // Note: In PiP interactive resizing, Android can update window bounds without dispatching
+        // timely surfaceChanged callbacks. We use PipBridge window-size notifications to force the
+        // surface buffer size (setFixedSize) and update MPV's android-surface-size.
         surfaceView.holder.addCallback(this)
         surfaceView.holder.setSizeFromLayout()
 
@@ -248,6 +256,11 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private fun release() {
         if (isReleased) return
         isReleased = true
+
+        pipResizeRunnable?.let { pipResizeHandler.removeCallbacks(it) }
+        pipResizeRunnable = null
+        pendingPipW = 0
+        pendingPipH = 0
 
         (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
         PlaybackRegistry.unregister(this)
@@ -388,8 +401,8 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     /**
-     * Update MPV surface size. Called only from surfaceChanged.
-     * This matches crispy-android's approach: just set the property and let Android handle the rest.
+     * Update MPV window/surface size.
+     * Called from surfaceChanged and from PiP window-size notifications.
      */
     private fun updateMpvSurfaceSize(width: Int, height: Int) {
         if (!isMpvInitialized || isReleased) return
@@ -510,19 +523,62 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
             pipTransitionPending = true
         } else {
             pipTransitionPending = false
+
+            // Restore normal layout-driven sizing when leaving PiP.
+            try {
+                surfaceView.holder.setSizeFromLayout()
+            } catch (_: Exception) {
+                // ignore
+            }
         }
+    }
+
+    private fun schedulePipSurfaceResize(width: Int, height: Int, reason: String) {
+        if (isReleased) return
+        if (width <= 0 || height <= 0) return
+
+        pendingPipW = width
+        pendingPipH = height
+
+        pipResizeRunnable?.let { pipResizeHandler.removeCallbacks(it) }
+
+        val runnable = Runnable {
+            val w = pendingPipW
+            val h = pendingPipH
+            if (isReleased) return@Runnable
+            if (w <= 0 || h <= 0) return@Runnable
+            if (!isInPipMode) return@Runnable
+
+            // Force the SurfaceView buffer size to match the PiP window bounds.
+            // This produces consistent results even when surfaceChanged does not fire during
+            // in-place PiP resize.
+            try {
+                surfaceView.holder.setFixedSize(w, h)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to setFixedSize(${w}x${h}) reason=$reason", e)
+            }
+
+            updateMpvSurfaceSize(w, h)
+
+            if (pipTransitionPending) {
+                pipTransitionPending = false
+            }
+        }
+
+        pipResizeRunnable = runnable
+        // Debounce: avoid buffer churn while the user drags PiP resize handles.
+        pipResizeHandler.postDelayed(runnable, 150L)
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
         Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height} isInPipMode=$isInPipMode pipTransitionPending=$pipTransitionPending")
-        
-        // During initial PiP entry (pipTransitionPending=true), ignore this callback.
-        // The surface is still transitioning and surfaceChanged gives us the correct size.
-        // Once transition completes, subsequent resizes (pinch zoom) only fire this callback -
-        // surfaceChanged is NOT called for in-place resizes. So we must update MPV here.
-        if (isInPipMode && !pipTransitionPending && width > 0 && height > 0) {
-            updateMpvSurfaceSize(width, height)
-        }
+
+        if (!isInPipMode) return
+        if (width <= 0 || height <= 0) return
+
+        // In-place PiP resizes can update window bounds without dispatching surfaceChanged.
+        // Force a buffer resize from the window bounds.
+        schedulePipSurfaceResize(width, height, reason = "onPipWindowSizeChanged")
     }
 
     override fun pauseFromPipDismissed() {
