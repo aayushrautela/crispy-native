@@ -1,718 +1,387 @@
 package aayush.crispy.core
 
+import android.content.ComponentName
 import android.content.Context
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import dev.jdtech.mpv.MPVLib
-
+import android.view.ViewGroup
 import com.facebook.react.bridge.LifecycleEventListener
 import com.facebook.react.bridge.ReactContext
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import aayush.crispy.core.pip.PipController
+import aayush.crispy.core.player.MpvEngine
+import aayush.crispy.core.player.MpvPlaybackService
 
-class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(context, appContext), SurfaceHolder.Callback, MPVLib.EventObserver, PipPlaybackTarget {
+/**
+ * SurfaceView-based MPV renderer.
+ *
+ * This view is intentionally "dumb": it does not own MPVLib lifecycle.
+ * All playback state lives inside [MpvPlaybackService].
+ */
+class CrispyMpvVideoView(
+  context: Context,
+  private val appContext: AppContext
+) : ExpoView(context, appContext), SurfaceHolder.Callback, MpvEngine.Listener {
 
-    private val surfaceView = SurfaceView(context)
-    private var isMpvInitialized = false
-    private var pendingDataSource: String? = null
-    private var isPaused: Boolean = true
-    private var surface: Surface? = null
-    private var httpHeaders: Map<String, String>? = null
+  companion object {
+    private const val TAG = "CrispyMpvVideoView"
+  }
 
-    private var lastAppliedSurfaceW: Int = 0
-    private var lastAppliedSurfaceH: Int = 0
+  // --- Events ---
+  val onLoad by EventDispatcher<Map<String, Any>>()
+  val onProgress by EventDispatcher<Map<String, Any>>()
+  val onEnd by EventDispatcher<Unit>()
+  val onError by EventDispatcher<Map<String, String>>()
+  val onTracksChanged by EventDispatcher<Map<String, Any>>()
 
-    private var requestedResizeMode: String? = null
-    private var isInPipMode: Boolean = false
+  // --- Surface ---
+  private val surfaceView: SurfaceView = SurfaceView(context)
+  private var lastSurface: Surface? = null
+  private var lastSurfaceW: Int = 0
+  private var lastSurfaceH: Int = 0
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var deferredReleaseRunnable: Runnable? = null
+  private var lastLayoutW: Int = 0
+  private var lastLayoutH: Int = 0
+  private var lastWasInPipMode: Boolean = false
 
-    private var isReleased: Boolean = false
+  // --- Service binding ---
+  private var playbackService: MpvPlaybackService? = null
+  private var isBound: Boolean = false
+  private var isReleased: Boolean = false
 
-    companion object {
-        private const val TAG = "CrispyMpvVideoView"
+  private val serviceConnection = object : ServiceConnection {
+    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+      val binder = service as? MpvPlaybackService.LocalBinder
+      val svc = binder?.getService()
+      if (svc == null) {
+        Log.w(TAG, "Service connected with null binder")
+        return
+      }
+
+      playbackService = svc
+      isBound = true
+
+      svc.registerClient()
+
+      // Register listener first to get immediate snapshot events.
+      svc.addListener(this@CrispyMpvVideoView)
+
+      // Apply the latest props/state.
+      applyAllStateToService(svc)
+
+      // Attach surface if it already exists.
+      val surface = lastSurface
+      if (surface != null) {
+        svc.attachSurface(surface, lastSurfaceW, lastSurfaceH)
+      }
     }
 
-    // Media Session Handler
-    private var mediaSessionHandler: MediaSessionHandler? = null
-    private var latestMetadata: MediaMetadataState? = null
-    
-    // Decoder mode setting: 'auto', 'sw', 'hw', 'hw+' (default: auto)
-    var decoderMode: String = "auto"
-    
-    // GPU mode setting: 'gpu', 'gpu-next' (default: gpu)
-    var gpuMode: String = "gpu"
-    
-    // Flag to track if onLoad has been fired
-    private var hasLoadEventFired: Boolean = false
+    override fun onServiceDisconnected(name: ComponentName?) {
+      playbackService = null
+      isBound = false
+    }
+  }
 
-    // Event dispatchers for Expo Module
-    val onLoad by EventDispatcher<Map<String, Any>>()
-    val onProgress by EventDispatcher<Map<String, Any>>()
-    val onEnd by EventDispatcher<Unit>()
-    val onError by EventDispatcher<Map<String, String>>()
-    val onTracksChanged by EventDispatcher<Map<String, Any>>()
+  // --- Props/state from JS ---
+  private var pendingSource: String? = null
+  private var pendingHeaders: Map<String, String>? = null
+  private var pendingPaused: Boolean = true
+  private var requestedResizeMode: String? = null
+  private var playInBackground: Boolean = false
 
-    private var playInBackground: Boolean = false
-
-    fun setPlayInBackground(playInBackground: Boolean) {
-        this.playInBackground = playInBackground
+  var decoderMode: String = "auto"
+    set(value) {
+      field = value
+      playbackService?.setDecoderMode(value)
     }
 
-    private var resumeOnForeground = false
-    private val lifeCycleListener = object : LifecycleEventListener {
-        override fun onHostPause() {
-            val activity = appContext.currentActivity
-            val isInPip = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                activity?.isInPictureInPictureMode == true
-            } else {
-                false
-            }
-
-            if (isInPip) {
-                Log.d(TAG, "App backgrounded but in PiP — keeping MPV playing")
-                return
-            }
-
-            // If background play is enabled, don't pause
-            if (playInBackground) {
-                 Log.d(TAG, "App backgrounded but playInBackground is true — keeping MPV playing")
-                 return
-            }
-
-            resumeOnForeground = !isPaused
-            if(resumeOnForeground) {
-                Log.d(TAG, "App backgrounded — pausing MPV")
-                setPaused(true)
-            }
-        }
-        override fun onHostResume() {
-            reattachSurfaceIfPossible()
-            if(resumeOnForeground) {
-                Log.d(TAG, "App foregrounded — resuming MPV")
-                setPaused(false)
-                resumeOnForeground = false
-            }
-        }
-        override fun onHostDestroy() {
-            // Host is being destroyed; ensure we release native resources.
-            release()
-        }
+  var gpuMode: String = "gpu"
+    set(value) {
+      field = value
+      playbackService?.setGpuMode(value)
     }
 
-    private fun reattachSurfaceIfPossible() {
-        if (!isMpvInitialized || isReleased) return
+  private var latestTitle: String = ""
+  private var latestArtist: String = ""
+  private var latestArtworkUrl: String? = null
 
-        val holderSurface = surfaceView.holder.surface
-        if (!holderSurface.isValid) return
+  // Background pause/resume behavior (mirrors old behavior, but delegates to the service).
+  private var resumeOnForeground: Boolean = false
+  private val lifecycleListener = object : LifecycleEventListener {
+    override fun onHostResume() {
+      if (resumeOnForeground) {
+        resumeOnForeground = false
+        setPaused(false)
+      }
 
-        surface = holderSurface
-
-        try {
-            MPVLib.attachSurface(holderSurface)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to reattach MPV surface", e)
-            return
-        }
-
-        lastAppliedSurfaceW = 0
-        lastAppliedSurfaceH = 0
-
-        val width = surfaceView.width
-        val height = surfaceView.height
-        if (width > 0 && height > 0) {
-            updateMpvSurfaceSize(width, height)
-        } else {
-            surfaceView.post {
-                if (!isReleased && isMpvInitialized) {
-                    updateMpvSurfaceSize(surfaceView.width, surfaceView.height)
-                }
-            }
-        }
+      // Some OEMs do not re-trigger surface callbacks on PiP expand; re-attach if needed.
+      val svc = playbackService
+      val surface = lastSurface
+      if (svc != null && surface != null) {
+        svc.attachSurface(surface, lastSurfaceW, lastSurfaceH)
+      }
     }
 
+    override fun onHostPause() {
+      if (PipController.isInPiPMode()) return
+      if (playInBackground) return
 
-    init {
-        // Use SurfaceView (HDR-friendly, Surface-based rendering).
-        // In PiP interactive resizing, Android can update window bounds without dispatching
-        // timely surfaceChanged callbacks. We force the SurfaceView buffer/layer size on
-        // window-size notifications and update MPV's android-surface-size.
-        surfaceView.holder.addCallback(this)
-        surfaceView.holder.setSizeFromLayout()
-
-        addView(surfaceView, android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT, 
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-        
-        // Keep screen on during playback
-        setKeepScreenOn(true)
-
-        // Register lifecycle listener properly
-        (context as? ReactContext)?.addLifecycleEventListener(lifeCycleListener)
-
-        PlaybackRegistry.register(this)
-    }
-
-    override fun surfaceCreated(holder: SurfaceHolder) {
-        Log.d(TAG, "Surface created")
-        if (isReleased) return
-
-        surface = holder.surface
-        lastAppliedSurfaceW = 0
-        lastAppliedSurfaceH = 0
-
-        try {
-            if (!isMpvInitialized) {
-                MPVLib.create(context.applicationContext)
-                initOptions()
-                MPVLib.init()
-                MPVLib.attachSurface(surface!!)
-                MPVLib.addObserver(this)
-                isMpvInitialized = true
-
-                // Initialize Media Session
-                mediaSessionHandler = MediaSessionHandler(context, object : MediaSessionHandler.MediaSessionCallbacks {
-                    override fun onPlay() { setPaused(false) }
-                    override fun onPause() { setPaused(true) }
-                    override fun onStop() {
-                        setPaused(true)
-                        seek(0.0)
-                    }
-                    override fun onSeekTo(pos: Long) {
-                        seek(pos / 1000.0)
-                    }
-                })
-
-                // Apply any metadata received before the session was ready
-                applyMetadataIfReady()
-
-                observeProperties()
-
-                // Ensure media session + PiP gating reflect the actual initial state even if
-                // the paused prop was applied before MPV finished initializing.
-                syncPlaybackAndPip()
-                applyResizeMode(requestedResizeMode)
-
-                pendingDataSource?.let { url ->
-                    loadFile(url)
-                    pendingDataSource = null
-                    syncPlaybackAndPip()
-                }
-            } else {
-                // Surface recreated (e.g., activity relaunch / view reattach). Rebind without
-                // destroying MPV to avoid losing playback state.
-                MPVLib.attachSurface(surface!!)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize/attach MPV surface", e)
-            onError(mapOf("error" to "MPV surface init failed: ${e.message}"))
-        }
-    }
-
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        if (isReleased) return
-        if (width <= 0 || height <= 0) return
-
-        isInPipFromActivityOrNull()?.let { isInPipMode = it }
-
-        Log.d(TAG, "surfaceChanged: ${width}x${height} isInPipMode=$isInPipMode")
-        updateMpvSurfaceSize(width, height)
-    }
-
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-        Log.d(TAG, "Surface destroyed")
-        surface = null
-
-        if (isMpvInitialized) {
-            try {
-                MPVLib.detachSurface()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to detach MPV surface", e)
-            }
-        }
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-
-        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
-        deferredReleaseRunnable = null
-
-        // If we were temporarily detached (PiP transitions / navigation), ensure the surface is
-        // rebound so we don't end up with a black frame.
-        reattachSurfaceIfPossible()
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        if (isReleased) return
-
-        // Detach immediately to avoid rendering into a surface that's no longer visible.
-        if (isMpvInitialized) {
-            try {
-                MPVLib.detachSurface()
-            } catch (_: Exception) {
-                // ignore
-            }
-        }
-        surface = null
-
-        // Defer release to tolerate temporary detaches.
-        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
-        val runnable = Runnable {
-            if (!isReleased) {
-                release()
-            }
-        }
-        deferredReleaseRunnable = runnable
-        mainHandler.postDelayed(runnable, 2000L)
-    }
-
-    private fun release() {
-        if (isReleased) return
-        isReleased = true
-
-        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
-        deferredReleaseRunnable = null
-
-        (context as? ReactContext)?.removeLifecycleEventListener(lifeCycleListener)
-        PlaybackRegistry.unregister(this)
-
-        mediaSessionHandler?.release()
-        mediaSessionHandler = null
-        latestMetadata = null
-
-        if (isMpvInitialized) {
-            try {
-                MPVLib.removeObserver(this)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to remove MPV observer", e)
-            }
-            try {
-                MPVLib.detachSurface()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to detach MPV surface", e)
-            }
-            try {
-                MPVLib.destroy()
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to destroy MPV", e)
-            } finally {
-                isMpvInitialized = false
-            }
-        }
-
-        surface = null
-    }
-
-    private fun initOptions() {
-        MPVLib.setOptionString("profile", "fast")
-        MPVLib.setOptionString("vo", gpuMode)
-        MPVLib.setOptionString("gpu-context", "android")
-        MPVLib.setOptionString("opengl-es", "yes")
-        
-        val hwdecValue = when (decoderMode) {
-            "auto" -> "auto-copy"
-            "sw" -> "no"
-            "hw" -> "mediacodec-copy"
-            "hw+" -> "mediacodec"
-            else -> "auto-copy"
-        }
-        MPVLib.setOptionString("hwdec", hwdecValue)
-        MPVLib.setOptionString("target-colorspace-hint", "yes")
-        
-        // HDR and Dolby Vision support (ported from Nuvio)
-        MPVLib.setOptionString("target-prim", "auto")
-        MPVLib.setOptionString("target-trc", "auto")
-        MPVLib.setOptionString("tone-mapping", "auto")
-        MPVLib.setOptionString("hdr-compute-peak", "auto")
-        MPVLib.setOptionString("vd-lavc-o", "strict=-2")
-        MPVLib.setOptionString("vd-lavc-film-grain", "cpu")
-        
-        MPVLib.setOptionString("ao", "audiotrack,opensles")
-        
-        val cacheMegs = 100
-        MPVLib.setOptionString("demuxer-max-bytes", "${cacheMegs * 1024 * 1024}")
-        MPVLib.setOptionString("demuxer-max-back-bytes", "${(cacheMegs / 2) * 1024 * 1024}")
-        MPVLib.setOptionString("cache", "yes")
-        MPVLib.setOptionString("cache-secs", "60")
-        
-        MPVLib.setOptionString("network-timeout", "60")
-        MPVLib.setOptionString("ytdl", "no")
-        MPVLib.setOptionString("http-reconnect", "yes")
-        MPVLib.setOptionString("stream-reconnect", "yes")
-        MPVLib.setOptionString("tls-verify", "no")
-        
-        MPVLib.setOptionString("demuxer-lavf-o", "live_start_index=0,prefer_x_start=1,http_persistent=0")
-        MPVLib.setOptionString("demuxer-seekable-cache", "yes")
-        MPVLib.setOptionString("force-seekable", "yes")
-
-        MPVLib.setOptionString("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
-        applyHttpHeadersAsOptions()
-        
-        MPVLib.setOptionString("sub-auto", "fuzzy")
-        MPVLib.setOptionString("sub-visibility", "yes")
-        MPVLib.setOptionString("embeddedfonts", "yes")
-        MPVLib.setOptionString("sub-ass-override", "force")
-        MPVLib.setOptionString("blend-subtitles", "no")
-        MPVLib.setOptionString("sub-use-margins", "yes")
-        MPVLib.setOptionString("sub-scale", "1.0")
-        MPVLib.setOptionString("sub-fix-timing", "yes")
-        
-        MPVLib.setOptionString("osc", "no")
-        MPVLib.setOptionString("osd-level", "1")
-        MPVLib.setOptionString("terminal", "no")
-        MPVLib.setOptionString("input-default-bindings", "no")
-    }
-
-    private fun observeProperties() {
-        // MPV format constants (manually defined to match MPVLib source)
-        val MPV_FORMAT_NONE = 0
-        val MPV_FORMAT_FLAG = 3
-        val MPV_FORMAT_INT64 = 4
-        val MPV_FORMAT_DOUBLE = 5
-
-        MPVLib.observeProperty("time-pos", MPV_FORMAT_DOUBLE)
-        MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
-        MPVLib.observeProperty("eof-reached", MPV_FORMAT_FLAG)
-        MPVLib.observeProperty("pause", MPV_FORMAT_FLAG)
-        MPVLib.observeProperty("track-list", MPV_FORMAT_NONE)
-        MPVLib.observeProperty("width", MPV_FORMAT_INT64)
-        MPVLib.observeProperty("height", MPV_FORMAT_INT64)
-    }
-
-    private fun loadFile(url: String) {
-        Log.d(TAG, "Loading file: $url")
-        hasLoadEventFired = false
-        MPVLib.command(arrayOf("loadfile", url))
-        MPVLib.setPropertyBoolean("pause", isPaused)
-    }
-
-    // Public API for Expo Module
-    fun setSource(url: String?) {
-        if (url == null) return
-        if (isMpvInitialized) {
-            loadFile(url)
-        } else {
-            pendingDataSource = url
-        }
-    }
-
-    fun setHeaders(headers: Map<String, String>?) {
-        this.httpHeaders = headers
-        if (isMpvInitialized) {
-            applyHttpHeadersAsOptions()
-        }
-    }
-
-    private fun applyHttpHeadersAsOptions() {
-        httpHeaders?.let { headers: Map<String, String> ->
-            val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
-            MPVLib.setOptionString("http-header-fields", headerString)
-        }
-    }
-
-    /**
-     * Update MPV window/surface size.
-     * Called from surfaceChanged and from PiP window-size notifications.
-     */
-    private fun updateMpvSurfaceSize(width: Int, height: Int) {
-        if (!isMpvInitialized || isReleased) return
-        if (width <= 0 || height <= 0) return
-        if (width == lastAppliedSurfaceW && height == lastAppliedSurfaceH) return
-
-        lastAppliedSurfaceW = width
-        lastAppliedSurfaceH = height
-
-        try {
-            MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to set android-surface-size", e)
-        }
-    }
-
-    // Keep source rect hint updated for smooth PiP transition animation
-    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        super.onLayout(changed, left, top, right, bottom)
-        if (changed && !isInPipMode) {
-            val rect = android.graphics.Rect()
-            if (getGlobalVisibleRect(rect) && !rect.isEmpty) {
-                PipState.setSourceRectHint(rect)
-            }
-        }
-    }
-
-    private fun syncPlaybackAndPip() {
-        val playing = !isPaused
-        mediaSessionHandler?.updatePlaybackState(playing)
-        PipState.isPlaying = playing
-    }
-
-    private fun applyMetadataIfReady() {
-        val metadata = latestMetadata ?: return
-        mediaSessionHandler?.updateMetadata(metadata.title, metadata.artist, metadata.artworkUrl)
-    }
-
-    fun setMetadata(title: String, artist: String, artworkUrl: String?) {
-        val next = MediaMetadataState(title, artist, artworkUrl)
-        if (next == latestMetadata) return
-
-        Log.d(TAG, "setMetadata called: $title by $artist (artwork: $artworkUrl)")
-        latestMetadata = next
-        applyMetadataIfReady()
-    }
-
-    fun setPaused(paused: Boolean) {
-        this.isPaused = paused
-        if (isMpvInitialized) {
-            MPVLib.setPropertyBoolean("pause", paused)
-            syncPlaybackAndPip()
-        }
-    }
-
-    fun seek(positionSec: Double) {
-        if (isMpvInitialized) {
-            MPVLib.command(arrayOf("seek", positionSec.toString(), "absolute"))
-        }
-    }
-
-    fun setAudioTrack(trackId: Int) {
-        if (isMpvInitialized) {
-            if (trackId == -1) MPVLib.setPropertyString("aid", "no")
-            else MPVLib.setPropertyInt("aid", trackId)
-        }
-    }
-
-    fun setSubtitleTrack(trackId: Int) {
-        if (isMpvInitialized) {
-            if (trackId == -1) {
-                MPVLib.setPropertyString("sid", "no")
-                MPVLib.setPropertyString("sub-visibility", "no")
-            } else {
-                MPVLib.setPropertyInt("sid", trackId)
-                MPVLib.setPropertyString("sub-visibility", "yes")
-            }
-        }
-    }
-
-    fun setResizeMode(mode: String?) {
-        requestedResizeMode = mode
-        applyResizeMode(mode)
-    }
-
-    private fun applyResizeMode(mode: String?) {
-        if (!isMpvInitialized) return
-
-        Log.d(TAG, "Applying resize mode: $mode (isInPipMode=$isInPipMode)")
-        try {
-            when (mode) {
-                "cover" -> {
-                    // Fill the entire surface, crop edges if needed, preserve aspect ratio
-                    MPVLib.setPropertyDouble("panscan", 1.0)
-                    MPVLib.setPropertyString("keepaspect", "yes")
-                }
-                "stretch" -> {
-                    // Fill the entire surface by stretching (distorts aspect ratio)
-                    MPVLib.setPropertyDouble("panscan", 0.0)
-                    MPVLib.setPropertyString("keepaspect", "no")
-                }
-                else -> {
-                    // "contain" - show entire video with black bars if needed
-                    MPVLib.setPropertyDouble("panscan", 0.0)
-                    MPVLib.setPropertyString("keepaspect", "yes")
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to set resize mode", e)
-        }
-    }
-
-    override fun onPipModeChanged(isPip: Boolean) {
-        Log.d(TAG, "onPipModeChanged: $isPip")
-        isInPipMode = isPip
-
-        if (!isPip) {
-            // Restore normal layout-driven sizing when leaving PiP.
-            try {
-                surfaceView.holder.setSizeFromLayout()
-            } catch (_: Exception) {
-                // ignore
-            }
-
-            // PiP exit doesn't necessarily trigger a React lifecycle resume.
-            // Rebind the surface to avoid black video after returning to fullscreen.
-            surfaceView.post { reattachSurfaceIfPossible() }
-        }
-    }
-
-    override fun onPipWindowSizeChanged(width: Int, height: Int) {
-        isInPipFromActivityOrNull()?.let { isInPipMode = it }
-
-        Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height} isInPipMode=$isInPipMode")
-
-        if (!isInPipMode) return
-        if (width <= 0 || height <= 0) return
-
-        // Keep this lightweight: with non-seamless PiP resize enabled, SurfaceView should
-        // receive real surfaceChanged events. We only nudge layout as a fallback.
-        try {
-            surfaceView.requestLayout()
-            surfaceView.invalidate()
-        } catch (_: Exception) {
-            // ignore
-        }
-    }
-
-    private fun isInPipFromActivityOrNull(): Boolean? {
-        val activity = appContext.currentActivity ?: return null
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            activity.isInPictureInPictureMode
-        } else {
-            false
-        }
-    }
-
-    override fun pauseFromPipDismissed() {
+      // Only pause if we were actively playing.
+      if (!pendingPaused) {
+        resumeOnForeground = true
         setPaused(true)
+      }
     }
 
-    // Subtitle Styling (Ported from Nuvio)
-    fun setSubtitleSize(size: Int) {
-        if (isMpvInitialized) MPVLib.setPropertyInt("sub-font-size", size)
+    override fun onHostDestroy() {
+      release()
+    }
+  }
+
+  init {
+    surfaceView.layoutParams = ViewGroup.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT
+    )
+    surfaceView.holder.addCallback(this)
+    surfaceView.holder.setSizeFromLayout()
+    surfaceView.keepScreenOn = true
+    addView(surfaceView)
+
+    (context as? ReactContext)?.addLifecycleEventListener(lifecycleListener)
+    PipController.registerPlayerView(surfaceView)
+
+    bindPlaybackService()
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    PipController.registerPlayerView(surfaceView)
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    if (isReleased) return
+
+    // If we're actively in PiP, tolerate detaches without tearing down playback.
+    if (PipController.isInPiPMode()) return
+
+    release()
+  }
+
+  override fun surfaceCreated(holder: SurfaceHolder) {
+    if (isReleased) return
+
+    val surface = holder.surface
+    lastSurface = surface
+    lastSurfaceW = width.coerceAtLeast(0)
+    lastSurfaceH = height.coerceAtLeast(0)
+
+    playbackService?.attachSurface(surface, lastSurfaceW, lastSurfaceH)
+  }
+
+  override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+    if (isReleased) return
+    if (width <= 0 || height <= 0) return
+
+    lastSurfaceW = width
+    lastSurfaceH = height
+    playbackService?.setSurfaceSize(width, height)
+  }
+
+  override fun surfaceDestroyed(holder: SurfaceHolder) {
+    lastSurface = null
+    playbackService?.detachSurface()
+  }
+
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+    super.onLayout(changed, left, top, right, bottom)
+
+    val pipNow = PipController.isInPiPMode()
+
+    // Fallback for OEMs that resize the view without dispatching surfaceChanged promptly.
+    val w = width
+    val h = height
+    if (w > 0 && h > 0 && (w != lastLayoutW || h != lastLayoutH)) {
+      lastLayoutW = w
+      lastLayoutH = h
+      playbackService?.setSurfaceSize(w, h)
     }
 
-    fun setSubtitleColor(color: String) {
-        if (isMpvInitialized) {
-            val mpvColor = if (color.length == 7) "#FF${color.substring(1)}" else color
-            MPVLib.setPropertyString("sub-color", mpvColor)
-        }
+    // PiP expand -> fullscreen can skip React lifecycle callbacks on some devices.
+    if (lastWasInPipMode && !pipNow) {
+      val svc = playbackService
+      val surface = lastSurface
+      if (svc != null && surface != null) {
+        svc.attachSurface(surface, lastSurfaceW, lastSurfaceH)
+      }
+    }
+    lastWasInPipMode = pipNow
+
+    if (changed && !pipNow) {
+      PipController.registerPlayerView(surfaceView)
+    }
+  }
+
+  // --- Public API called from Expo module ---
+  fun setSource(url: String?) {
+    pendingSource = url
+    playbackService?.let { applyAllStateToService(it) }
+  }
+
+  fun setHeaders(headers: Map<String, String>?) {
+    pendingHeaders = headers
+    playbackService?.setHeaders(headers)
+  }
+
+  fun setPaused(paused: Boolean) {
+    pendingPaused = paused
+    playbackService?.setPaused(paused)
+  }
+
+  fun setResizeMode(mode: String?) {
+    requestedResizeMode = mode
+    playbackService?.setResizeMode(mode)
+  }
+
+  fun setPlayInBackground(enabled: Boolean) {
+    playInBackground = enabled
+  }
+
+  fun seek(positionSec: Double) {
+    playbackService?.seek(positionSec)
+  }
+
+  fun setAudioTrack(trackId: Int) {
+    playbackService?.setAudioTrack(trackId)
+  }
+
+  fun setSubtitleTrack(trackId: Int) {
+    playbackService?.setSubtitleTrack(trackId)
+  }
+
+  fun setMetadata(title: String, artist: String, artworkUrl: String?) {
+    latestTitle = title
+    latestArtist = artist
+    latestArtworkUrl = artworkUrl
+    playbackService?.setMetadata(title, artist, artworkUrl)
+  }
+
+  fun setSubtitleSize(size: Int) {
+    playbackService?.setSubtitleSize(size)
+  }
+
+  fun setSubtitleColor(color: String) {
+    playbackService?.setSubtitleColor(color)
+  }
+
+  fun setSubtitleBackgroundColor(color: String, opacity: Float) {
+    playbackService?.setSubtitleBackgroundColor(color, opacity)
+  }
+
+  fun setSubtitleBorderSize(size: Int) {
+    playbackService?.setSubtitleBorderSize(size)
+  }
+
+  fun setSubtitleBorderColor(color: String) {
+    playbackService?.setSubtitleBorderColor(color)
+  }
+
+  fun setSubtitlePosition(pos: Int) {
+    playbackService?.setSubtitlePosition(pos)
+  }
+
+  fun setSubtitleDelay(delay: Double) {
+    playbackService?.setSubtitleDelay(delay)
+  }
+
+  fun setSubtitleBold(bold: Boolean) {
+    playbackService?.setSubtitleBold(bold)
+  }
+
+  fun setSubtitleItalic(italic: Boolean) {
+    playbackService?.setSubtitleItalic(italic)
+  }
+
+  // --- MpvEngine.Listener ---
+  override fun onLoad(duration: Double, width: Int, height: Int) {
+    onLoad(mapOf("duration" to duration, "width" to width, "height" to height))
+  }
+
+  override fun onProgress(position: Double, duration: Double) {
+    onProgress(mapOf("position" to position, "duration" to duration))
+  }
+
+  override fun onEnd() {
+    onEnd(Unit)
+  }
+
+  override fun onError(error: String) {
+    onError(mapOf("error" to error))
+  }
+
+  override fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>) {
+    onTracksChanged(mapOf("audioTracks" to audioTracks, "subtitleTracks" to subtitleTracks))
+  }
+
+  // --- Internals ---
+  private fun bindPlaybackService() {
+    val appCtx = context.applicationContext
+    val intent = Intent(appCtx, MpvPlaybackService::class.java)
+
+    try {
+      appCtx.startService(intent)
+    } catch (_: Throwable) {
+      // Best-effort; binding is enough for in-app playback.
     }
 
-    fun setSubtitleBackgroundColor(color: String, opacity: Float) {
-        if (isMpvInitialized) {
-            val alphaHex = (opacity * 255).toInt().coerceIn(0, 255).let { String.format("%02X", it) }
-            val baseColor = if (color.startsWith("#")) color.substring(1) else color
-            val mpvColor = "#${alphaHex}${baseColor.takeLast(6)}"
-            MPVLib.setPropertyString("sub-back-color", mpvColor)
-        }
+    try {
+      appCtx.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    } catch (t: Throwable) {
+      Log.e(TAG, "bindService failed", t)
+    }
+  }
+
+  private fun applyAllStateToService(service: MpvPlaybackService) {
+    service.setDecoderMode(decoderMode)
+    service.setGpuMode(gpuMode)
+    service.setHeaders(pendingHeaders)
+    service.setResizeMode(requestedResizeMode)
+    service.setPaused(pendingPaused)
+    service.setMetadata(latestTitle, latestArtist, latestArtworkUrl)
+
+    pendingSource?.let { service.setSource(it) }
+  }
+
+  private fun release() {
+    if (isReleased) return
+    isReleased = true
+
+    val reactContext = context as? ReactContext
+    reactContext?.removeLifecycleEventListener(lifecycleListener)
+
+    PipController.unregisterPlayerView(surfaceView)
+
+    val appCtx = context.applicationContext
+    val svc = playbackService
+    if (svc != null) {
+      try { svc.removeListener(this) } catch (_: Throwable) {}
+      try { svc.detachSurface() } catch (_: Throwable) {}
+      try { svc.unregisterClient() } catch (_: Throwable) {}
     }
 
-    fun setSubtitleBorderSize(size: Int) {
-        if (isMpvInitialized) MPVLib.setPropertyInt("sub-border-size", size)
+    if (isBound) {
+      try { appCtx.unbindService(serviceConnection) } catch (_: Throwable) {}
     }
 
-    fun setSubtitleBorderColor(color: String) {
-        if (isMpvInitialized) {
-            val mpvColor = if (color.length == 7) "#FF${color.substring(1)}" else color
-            MPVLib.setPropertyString("sub-border-color", mpvColor)
-        }
-    }
-
-    fun setSubtitlePosition(pos: Int) {
-        if (isMpvInitialized) MPVLib.setPropertyInt("sub-pos", pos)
-    }
-
-    fun setSubtitleDelay(delaySec: Double) {
-        if (isMpvInitialized) MPVLib.setPropertyDouble("sub-delay", delaySec)
-    }
-
-    fun setSubtitleBold(bold: Boolean) {
-        if (isMpvInitialized) MPVLib.setPropertyString("sub-bold", if (bold) "yes" else "no")
-    }
-
-    fun setSubtitleItalic(italic: Boolean) {
-        if (isMpvInitialized) MPVLib.setPropertyString("sub-italic", if (italic) "yes" else "no")
-    }
-
-    // MPVLib.EventObserver
-    override fun eventProperty(property: String) {
-        if (property == "track-list") parseAndSendTracks()
-    }
-
-    override fun eventProperty(property: String, value: Long) {}
-    override fun eventProperty(property: String, value: Boolean) {
-        when (property) {
-            "eof-reached" -> {
-                if (value) onEnd(Unit)
-            }
-            "pause" -> {
-                // Keep state consistent even if pause changes from native controls.
-                isPaused = value
-                syncPlaybackAndPip()
-            }
-        }
-    }
-    override fun eventProperty(property: String, value: String) {}
-    override fun eventProperty(property: String, value: Double) {
-        when (property) {
-            "time-pos" -> {
-                val duration = MPVLib.getPropertyDouble("duration") ?: 0.0
-                onProgress(mapOf("position" to value, "duration" to duration))
-                
-                mediaSessionHandler?.updatePosition(value)
-                mediaSessionHandler?.updateDuration(duration)
-            }
-            "duration" -> {
-                if (!hasLoadEventFired && value > 0) {
-                    val width = MPVLib.getPropertyInt("width") ?: 0
-                    val height = MPVLib.getPropertyInt("height") ?: 0
-                     if (width > 0 && height > 0) {
-                          hasLoadEventFired = true
-                          onLoad(mapOf("duration" to value, "width" to width, "height" to height))
-
-                           PipState.setAspectRatio(width.toDouble(), height.toDouble())
-                       }
-                  }
-              }
-        }
-    }
-
-    override fun event(eventId: Int) {
-        // Handle core events like MPV_EVENT_FILE_LOADED if needed
-        val MPV_EVENT_FILE_LOADED = 8
-        val MPV_EVENT_END_FILE = 7
-        
-        if (eventId == MPV_EVENT_FILE_LOADED && !isPaused) {
-             MPVLib.setPropertyBoolean("pause", false)
-             val playing = !isPaused
-             mediaSessionHandler?.updatePlaybackState(playing)
-             PipState.isPlaying = playing
-        }
-    }
-
-    private fun parseAndSendTracks() {
-        try {
-            val trackCount = MPVLib.getPropertyInt("track-list/count") ?: 0
-            val audioTracks = mutableListOf<Map<String, Any>>()
-            val subtitleTracks = mutableListOf<Map<String, Any>>()
-            
-            for (i in 0 until trackCount) {
-                val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
-                val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
-                val title = MPVLib.getPropertyString("track-list/$i/title") ?: ""
-                val lang = MPVLib.getPropertyString("track-list/$i/lang") ?: ""
-                
-                val track = mapOf(
-                    "id" to id,
-                    "name" to if (title.isNotEmpty()) title else lang.uppercase(),
-                    "language" to lang
-                )
-                
-                when (type) {
-                    "audio" -> audioTracks.add(track)
-                    "sub" -> subtitleTracks.add(track)
-                }
-            }
-            onTracksChanged(mapOf("audioTracks" to audioTracks, "subtitleTracks" to subtitleTracks))
-        } catch (e: Exception) {}
-    }
+    playbackService = null
+    isBound = false
+  }
 }

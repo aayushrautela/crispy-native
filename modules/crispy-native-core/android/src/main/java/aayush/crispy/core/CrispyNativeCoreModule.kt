@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.facebook.react.bridge.ReactContext
+import aayush.crispy.core.pip.PipController
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -46,8 +47,9 @@ class CrispyNativeCoreModule : Module() {
 
       val reactContext = context as? ReactContext
       if (reactContext != null) {
-        // PiP lifecycle bridge (events + pause-on-dismiss).
-        PipBridge.start(reactContext)
+        // Centralized PiP controller (events + params updates).
+        val app = reactContext.applicationContext as? android.app.Application
+        if (app != null) PipController.start(app, reactContext)
       }
       
       // 1. Start Local Server
@@ -65,7 +67,7 @@ class CrispyNativeCoreModule : Module() {
       }
       crispyServer?.stop()
 
-      PipBridge.stop()
+      PipController.stop()
     }
 
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->
@@ -113,11 +115,7 @@ class CrispyNativeCoreModule : Module() {
 
     AsyncFunction("enterPiP") { width: Double?, height: Double? ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
-      // Keep shared state in sync even when PiP is entered explicitly.
-      PipState.enabled = true
-      // Don't force isPlaying here; player views update this from actual playback.
-      PipState.setAspectRatio(width, height)
-      return@AsyncFunction PipState.enterPiP(activity, width, height)
+      return@AsyncFunction PipController.enterPiP(activity, width, height)
     }
 
     /**
@@ -129,19 +127,14 @@ class CrispyNativeCoreModule : Module() {
      * - player screen mounts/unmounts (enabled flag)
      */
     AsyncFunction("setPiPConfig") { enabled: Boolean, isPlaying: Boolean, width: Double?, height: Double? ->
-      PipState.enabled = enabled
-      // JS-provided isPlaying is best-effort; native player views can still override this from
-      // actual playback callbacks, but we keep it in sync so auto-enter PiP works reliably.
-      PipState.isPlaying = isPlaying
-      PipState.setAspectRatio(width, height)
-      PipState.applyToActivity(appContext.currentActivity)
+      PipController.setConfigFromJs(enabled, isPlaying, width, height)
       return@AsyncFunction true
     }
 
     AsyncFunction("isInPiPMode") {
       val activity = appContext.currentActivity
       if (activity == null) return@AsyncFunction false
-      return@AsyncFunction (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && activity.isInPictureInPictureMode)
+      return@AsyncFunction PipController.isInPiPMode(activity)
     }
 
     // --- VIDEO PLAYER VIEW ---
@@ -174,6 +167,13 @@ class CrispyNativeCoreModule : Module() {
 
       AsyncFunction("seek") { view: CrispyMpvVideoView, positionSec: Double ->
         view.seek(positionSec)
+      }
+
+      // Convenience for the player screen ref API.
+      // (There is also a module-level enterPiP(width,height) for aspect-ratio overrides.)
+      AsyncFunction("enterPiP") { _: CrispyMpvVideoView ->
+        val activity = appContext.currentActivity ?: return@AsyncFunction false
+        return@AsyncFunction PipController.enterPiP(activity, null, null)
       }
 
       AsyncFunction("setAudioTrack") { view: CrispyMpvVideoView, trackId: Int ->
