@@ -27,7 +27,7 @@ import aayush.crispy.core.player.MpvPlaybackService
  */
 class CrispyMpvVideoView(
   context: Context,
-  private val appContext: AppContext
+  appContext: AppContext
 ) : ExpoView(context, appContext), SurfaceHolder.Callback, MpvEngine.Listener {
 
   companion object {

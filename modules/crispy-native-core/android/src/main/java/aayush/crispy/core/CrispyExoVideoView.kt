@@ -26,7 +26,7 @@ import aayush.crispy.core.player.ExoPlaybackService
  */
 class CrispyExoVideoView(
   context: Context,
-  private val appContext: AppContext
+  appContext: AppContext
 ) : ExpoView(context, appContext), ExoEngine.Listener {
 
   companion object {

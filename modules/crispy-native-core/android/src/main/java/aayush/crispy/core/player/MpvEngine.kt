@@ -419,13 +419,19 @@ class MpvEngine(
 
   private fun observeProperties() {
     try {
-      MPVLib.observeProperty("time-pos")
-      MPVLib.observeProperty("duration")
-      MPVLib.observeProperty("eof-reached")
-      MPVLib.observeProperty("pause")
-      MPVLib.observeProperty("track-list")
-      MPVLib.observeProperty("width")
-      MPVLib.observeProperty("height")
+      // Format constants from MPVLib.MpvFormat
+      val MPV_FORMAT_DOUBLE = 5
+      val MPV_FORMAT_FLAG = 3
+      val MPV_FORMAT_INT64 = 4
+      val MPV_FORMAT_NONE = 0
+
+      MPVLib.observeProperty("time-pos", MPV_FORMAT_DOUBLE)
+      MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
+      MPVLib.observeProperty("eof-reached", MPV_FORMAT_FLAG)
+      MPVLib.observeProperty("pause", MPV_FORMAT_FLAG)
+      MPVLib.observeProperty("track-list", MPV_FORMAT_NONE)
+      MPVLib.observeProperty("width", MPV_FORMAT_INT64)
+      MPVLib.observeProperty("height", MPV_FORMAT_INT64)
     } catch (_: Throwable) {
       // ignore
     }
@@ -488,7 +494,7 @@ class MpvEngine(
 
   private fun getTimePosUnsafe(): Double {
     return try {
-      MPVLib.getPropertyDouble("time-pos")
+      MPVLib.getPropertyDouble("time-pos") ?: 0.0
     } catch (_: Throwable) {
       0.0
     }
@@ -499,10 +505,10 @@ class MpvEngine(
     val subtitleTracks = mutableListOf<Map<String, Any>>()
 
     try {
-      val count = MPVLib.getPropertyInt("track-list/count")
+      val count = MPVLib.getPropertyInt("track-list/count") ?: 0
       for (i in 0 until count) {
         val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
-        val id = MPVLib.getPropertyInt("track-list/$i/id")
+        val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
         val title = MPVLib.getPropertyString("track-list/$i/title")
         val lang = MPVLib.getPropertyString("track-list/$i/lang")
 
@@ -513,7 +519,7 @@ class MpvEngine(
         }
         val safeLang = lang ?: ""
 
-        val entry = mapOf(
+        val entry: Map<String, Any> = mapOf(
           "id" to id,
           "name" to name,
           "language" to safeLang
@@ -597,7 +603,8 @@ class MpvEngine(
 
   override fun event(eventId: Int) {
     // Best-effort: apply requested resize mode after file load.
-    if (eventId == MPVLib.MPV_EVENT_FILE_LOADED) {
+    // MPV_EVENT_FILE_LOADED = 8 (from MPVLib.MpvEvent)
+    if (eventId == 8) {
       applyResizeMode(requestedResizeMode)
       // Keep pause state authoritative.
       try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
