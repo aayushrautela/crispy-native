@@ -63,11 +63,20 @@ object PipBridge : Application.ActivityLifecycleCallbacks {
     private var lastPipH: Int = 0
 
     private fun computeWindowSize(activity: Activity): Pair<Int, Int> {
-        // Returns the content size in pixels.
+        // In PiP mode, we want the raw window bounds without subtracting insets,
+        // since PiP windows don't have system bars overlaying them.
+        val isPip = isInPip(activity)
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 val metrics = activity.windowManager.currentWindowMetrics
                 val bounds = metrics.bounds
+                
+                if (isPip) {
+                    // In PiP, use raw bounds - no system bars to subtract
+                    return bounds.width() to bounds.height()
+                }
+                
                 val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
                     WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
                 )
