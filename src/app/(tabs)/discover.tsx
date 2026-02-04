@@ -7,6 +7,8 @@ import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
+import { LAYOUT } from '@/src/constants/layout';
+import { useMeasuredWidth } from '@/src/core/hooks/useMeasuredWidth';
 import { FlashList } from '@shopify/flash-list';
 import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -41,7 +43,8 @@ const RATING_OPTIONS = [
 export default function DiscoverScreen() {
     const { manifests } = useUserStore();
     const { theme } = useTheme();
-    const { width } = useWindowDimensions();
+    const { width: windowWidth } = useWindowDimensions();
+    const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();
 
     const [selectedType, setSelectedType] = useState('all');
     const [selectedGenre, setSelectedGenre] = useState('All');
@@ -53,11 +56,24 @@ export default function DiscoverScreen() {
     const [allItems, setAllItems] = useState<MetaPreview[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const numColumns = width > 768 ? 5 : 3;
+    // Measure the actual content area width so grids don't drift/overlap on tablets (rail)
+    // or in split-screen/multi-window.
+    const hasRailFallback = windowWidth >= 768;
+    const fallbackWidth = hasRailFallback ? windowWidth - LAYOUT.RAIL_WIDTH : windowWidth;
+    const contentWidth = measuredWidth > 0 ? measuredWidth : fallbackWidth;
+
     const gap = 12;
     const padding = 16;
-    const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
-    const itemWidth = availableWidth / numColumns;
+
+    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
+
+    // Exact item width ensuring a centered grid with even side margins.
+    const availableWidth = contentWidth - (padding * 2) - (gap * (numColumns - 1));
+    const itemWidth = Math.floor(availableWidth / numColumns);
+    const rowWidth = (itemWidth * numColumns) + (gap * (numColumns - 1));
+    const extraSpace = Math.max(0, contentWidth - (padding * 2) - rowWidth);
+    const listPaddingLeft = padding + Math.floor(extraSpace / 2);
+    const listPaddingRight = padding + Math.ceil(extraSpace / 2);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -172,20 +188,29 @@ export default function DiscoverScreen() {
         }));
     }, [numColumns]);
 
-    const renderItem = useCallback(({ item }: { item: MetaPreview }) => (
-        <View style={{ width: itemWidth, marginBottom: gap }}>
-            {showSkeleton
-                ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
-                : <CatalogCard item={item} width={itemWidth} />}
-        </View>
-    ), [gap, itemWidth, showSkeleton]);
+    const renderItem = useCallback(({ item, index }: { item: MetaPreview; index: number }) => {
+        const isLastInRow = (index + 1) % numColumns === 0;
+        return (
+            <View
+                style={{
+                    width: itemWidth,
+                    marginBottom: gap,
+                    marginRight: isLastInRow ? 0 : gap,
+                }}
+            >
+                {showSkeleton
+                    ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
+                    : <CatalogCard item={item} width={itemWidth} />}
+            </View>
+        );
+    }, [gap, itemWidth, numColumns, showSkeleton]);
 
     const activeIndex = useMemo(() => {
         return TYPE_OPTIONS.findIndex(opt => opt.value === selectedType);
     }, [selectedType]);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View onLayout={onContainerLayout} style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
             {(!showSkeleton && !loading && filteredItems.length === 0) ? (
                 <EmptyState
@@ -204,7 +229,8 @@ export default function DiscoverScreen() {
                     removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingLeft: listPaddingLeft,
+                        paddingRight: listPaddingRight,
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}

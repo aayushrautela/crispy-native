@@ -9,6 +9,7 @@ import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
 import { LAYOUT } from '@/src/constants/layout';
+import { useMeasuredWidth } from '@/src/core/hooks/useMeasuredWidth';
 import {
     Bookmark,
     ChevronDown,
@@ -50,7 +51,8 @@ const SORT_OPTIONS = [
 export default function LibraryScreen() {
     const { theme } = useTheme();
     const { traktAuth } = useUserStore();
-    const { width, height } = useWindowDimensions();
+    const { width: windowWidth, height } = useWindowDimensions();
+    const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();
 
     const [selectedFilter, setSelectedFilter] = useState('watchlist');
     const [selectedSort, setSelectedSort] = useState('date_desc');
@@ -61,9 +63,10 @@ export default function LibraryScreen() {
     const genreSheetRef = useRef<BottomSheetRef>(null);
     const sortSheetRef = useRef<BottomSheetRef>(null);
 
-    // Keep this in sync with `src/app/(tabs)/_layout.tsx` which shows the rail at 768+
-    const hasRail = width >= 768;
-    const contentWidth = hasRail ? width - LAYOUT.RAIL_WIDTH : width;
+    // Prefer the measured content area width (handles rail + split-screen). Fall back to window width.
+    const hasRailFallback = windowWidth >= 768;
+    const fallbackWidth = hasRailFallback ? windowWidth - LAYOUT.RAIL_WIDTH : windowWidth;
+    const contentWidth = measuredWidth > 0 ? measuredWidth : fallbackWidth;
 
     // Responsive grid: avoid tiny items (and too many images) on large phones in landscape.
     const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
@@ -224,7 +227,7 @@ export default function LibraryScreen() {
     const activeFilterIndex = FILTER_OPTIONS.findIndex(opt => opt.value === selectedFilter);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View onLayout={onContainerLayout} style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
             {(!showSkeleton && !loading && filteredAndSortedItems.length === 0) ? (
                 <EmptyState
