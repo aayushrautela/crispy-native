@@ -29,6 +29,13 @@ export interface CrispyOpenPlayerActivityParams {
     metadata?: CrispyMediaMetadata;
 }
 
+export interface CrispyNativePlayerLoadParams {
+    url?: string;
+    headers?: Record<string, string>;
+    paused?: boolean;
+    metadata?: CrispyMediaMetadata;
+}
+
 export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;
@@ -278,6 +285,24 @@ export default {
             return false;
         } catch (e) {
             console.error('[CrispyNativeCore] nativePlayerSeek failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerLoad(params: CrispyNativePlayerLoadParams): Promise<boolean> {
+        try {
+            if (!CrispyNativeCore.nativePlayerLoad) return false;
+            const md = params.metadata;
+            return await CrispyNativeCore.nativePlayerLoad(
+                params.url ?? null,
+                params.headers ?? null,
+                params.paused ?? false,
+                md?.title ?? '',
+                md?.subtitle ?? '',
+                md?.artworkUrl ?? null
+            );
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerLoad failed:', e);
             return false;
         }
     },

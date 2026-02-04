@@ -185,6 +185,12 @@ class CrispyNativeCoreModule : Module() {
       return@AsyncFunction true
     }
 
+    AsyncFunction("nativePlayerLoad") { url: String?, headers: Map<String, String>?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      activity.loadFromJs(url, headers, paused, title, artist, artworkUrl)
+      return@AsyncFunction true
+    }
+
     // --- VIDEO PLAYER VIEW ---
     View(CrispyMpvVideoView::class) {
       Prop("source") { view: CrispyMpvVideoView, url: String? ->

@@ -2,6 +2,19 @@ import CrispyNativeCore from '@/modules/crispy-native-core';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeviceEventEmitter, Pressable, StyleSheet, Text, View } from 'react-native';
 
+type NativePlayerEvent = {
+    sessionId?: string;
+    engine?: string;
+    type?: string;
+    duration?: number;
+    width?: number;
+    height?: number;
+    position?: number;
+    message?: string;
+    audioTracks?: any[];
+    subtitleTracks?: any[];
+};
+
 interface PlayerOverlayRootProps {
     sessionId?: string;
     engine?: string;
@@ -15,9 +28,22 @@ interface PlayerOverlayRootProps {
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [paused, setPaused] = useState<boolean>(props.paused ?? false);
     const [isPip, setIsPip] = useState(false);
+    const [progress, setProgress] = useState({ position: 0, duration: 0 });
+    const [lastError, setLastError] = useState<string | null>(null);
 
+    const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
     const title = useMemo(() => props.title || 'Now Playing', [props.title]);
     const subtitle = useMemo(() => props.artist || '', [props.artist]);
+
+    const formatTime = useCallback((seconds: number) => {
+        if (!seconds || !isFinite(seconds) || isNaN(seconds)) return '0:00';
+        const totalSecs = Math.floor(seconds);
+        const hours = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+        if (hours > 0) return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }, []);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('onPipModeChanged', (v: boolean) => {
@@ -32,6 +58,42 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             dismissed.remove();
         };
     }, []);
+
+    useEffect(() => {
+        if (!sessionId) return;
+
+        const nativeEvents = DeviceEventEmitter.addListener('nativePlayerEvent', (evt: NativePlayerEvent) => {
+            if (!evt || evt.sessionId !== sessionId) return;
+
+            const type = evt.type;
+            if (type === 'load') {
+                setLastError(null);
+                const duration = typeof evt.duration === 'number' ? evt.duration : 0;
+                setProgress((p) => ({ ...p, duration: duration > 0 ? duration : p.duration }));
+                return;
+            }
+
+            if (type === 'progress') {
+                const position = typeof evt.position === 'number' ? evt.position : 0;
+                const duration = typeof evt.duration === 'number' ? evt.duration : 0;
+                setProgress({ position, duration });
+                return;
+            }
+
+            if (type === 'error') {
+                setLastError(evt.message || 'Playback error');
+                return;
+            }
+
+            if (type === 'end') {
+                void CrispyNativeCore.closePlayerActivity();
+            }
+        });
+
+        return () => {
+            nativeEvents.remove();
+        };
+    }, [sessionId]);
 
     const onClose = useCallback(() => {
         void CrispyNativeCore.closePlayerActivity();
@@ -57,10 +119,14 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 <View style={styles.titleWrap} pointerEvents="none">
                     <Text numberOfLines={1} style={styles.title}>{title}</Text>
                     {!!subtitle && <Text numberOfLines={1} style={styles.subtitle}>{subtitle}</Text>}
+                    {!!lastError && <Text numberOfLines={2} style={styles.error}>{lastError}</Text>}
                 </View>
             </View>
 
             <View style={styles.bottomBar} pointerEvents="box-none">
+                <Text style={styles.timeText} pointerEvents="none">
+                    {formatTime(progress.position)} / {formatTime(progress.duration)}
+                </Text>
                 <Pressable onPress={onTogglePlay} style={styles.playBtn}>
                     <Text style={styles.playText}>{paused ? 'Play' : 'Pause'}</Text>
                 </Pressable>
@@ -138,5 +204,17 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 15,
         fontFamily: 'GoogleSans-Medium',
+    },
+    timeText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 12,
+        fontFamily: 'GoogleSans-Regular',
+        marginBottom: 10,
+    },
+    error: {
+        marginTop: 6,
+        color: 'rgba(255,120,120,0.95)',
+        fontSize: 12,
+        fontFamily: 'GoogleSans-Regular',
     },
 });

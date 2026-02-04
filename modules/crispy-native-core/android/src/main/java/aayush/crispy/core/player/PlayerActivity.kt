@@ -10,6 +10,7 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
 import android.view.Surface
@@ -20,6 +21,7 @@ import android.widget.FrameLayout
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.ReactApplication
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.HashMap
@@ -72,6 +74,8 @@ class PlayerActivity : ReactActivity() {
   private var videoW: Int = 0
   private var videoH: Int = 0
   private var isPlaying: Boolean = false
+
+  private var lastProgressEmitMs: Long = 0L
 
   private var wasInPip: Boolean = false
   private var activityStopped: Boolean = false
@@ -230,12 +234,7 @@ class PlayerActivity : ReactActivity() {
         mpvService?.registerClient()
         mpvService?.addListener(mpvListener)
 
-        headers?.let { mpvService?.setHeaders(it) }
-        mpvService?.setPaused(startPaused)
-        mpvService?.setSource(url)
-        mpvService?.setMetadata(title, artist, artworkUrl)
-
-        isPlaying = !startPaused
+        applyPendingLoadIfReady()
         attachSurfaceIfReady()
         updatePipParams()
         return
@@ -246,12 +245,7 @@ class PlayerActivity : ReactActivity() {
       exoService?.registerClient()
       exoService?.addListener(exoListener)
 
-      headers?.let { exoService?.setHeaders(it) }
-      exoService?.setSource(url)
-      exoService?.setMetadata(title, artist, artworkUrl)
-      exoService?.setPaused(startPaused)
-
-      isPlaying = !startPaused
+      applyPendingLoadIfReady()
       attachSurfaceIfReady()
       updatePipParams()
     }
@@ -269,22 +263,53 @@ class PlayerActivity : ReactActivity() {
         videoH = height
         updatePipParams()
       }
+
+      emitNativePlayerEvent(
+        "load",
+        mapOf(
+          "duration" to duration,
+          "width" to width,
+          "height" to height
+        )
+      )
     }
 
     override fun onProgress(position: Double, duration: Double) {
-      // no-op
+      val now = SystemClock.uptimeMillis()
+      if (now - lastProgressEmitMs < 500L) return
+      lastProgressEmitMs = now
+
+      emitNativePlayerEvent(
+        "progress",
+        mapOf(
+          "position" to position,
+          "duration" to duration
+        )
+      )
     }
 
     override fun onEnd() {
-      // no-op
+      emitNativePlayerEvent("end", emptyMap())
     }
 
     override fun onError(error: String) {
       Log.w(TAG, "MPV error: $error")
+      emitNativePlayerEvent(
+        "error",
+        mapOf(
+          "message" to error
+        )
+      )
     }
 
     override fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>) {
-      // no-op
+      emitNativePlayerEvent(
+        "tracks",
+        mapOf(
+          "audioTracks" to audioTracks,
+          "subtitleTracks" to subtitleTracks
+        )
+      )
     }
   }
 
@@ -295,23 +320,93 @@ class PlayerActivity : ReactActivity() {
         videoH = height
         updatePipParams()
       }
+
+      emitNativePlayerEvent(
+        "load",
+        mapOf(
+          "duration" to duration,
+          "width" to width,
+          "height" to height
+        )
+      )
     }
 
     override fun onProgress(currentTime: Double, duration: Double) {
-      // no-op
+      // ExoEngine already ticks at 500ms; forward as-is.
+      emitNativePlayerEvent(
+        "progress",
+        mapOf(
+          "position" to currentTime,
+          "duration" to duration
+        )
+      )
     }
 
     override fun onEnd() {
-      // no-op
+      emitNativePlayerEvent("end", emptyMap())
     }
 
     override fun onError(error: String) {
       Log.w(TAG, "Exo error: $error")
+      emitNativePlayerEvent(
+        "error",
+        mapOf(
+          "message" to error
+        )
+      )
     }
 
     override fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>) {
-      // no-op
+      emitNativePlayerEvent(
+        "tracks",
+        mapOf(
+          "audioTracks" to audioTracks,
+          "subtitleTracks" to subtitleTracks
+        )
+      )
     }
+  }
+
+  fun loadFromJs(
+    nextUrl: String?,
+    nextHeaders: Map<String, String>?,
+    paused: Boolean,
+    nextTitle: String?,
+    nextArtist: String?,
+    nextArtworkUrl: String?
+  ) {
+    url = nextUrl
+    headers = nextHeaders
+    startPaused = paused
+
+    title = nextTitle ?: ""
+    artist = nextArtist ?: ""
+    artworkUrl = nextArtworkUrl
+
+    applyPendingLoadIfReady()
+  }
+
+  private fun applyPendingLoadIfReady() {
+    val nextUrl = url
+    if (nextUrl.isNullOrBlank()) return
+
+    isPlaying = !startPaused
+    updatePipParams()
+
+    if (engine == ENGINE_MPV) {
+      val svc = mpvService ?: return
+      headers?.let { svc.setHeaders(it) }
+      svc.setMetadata(title, artist, artworkUrl)
+      svc.setPaused(startPaused)
+      svc.setSource(nextUrl)
+      return
+    }
+
+    val svc = exoService ?: return
+    headers?.let { svc.setHeaders(it) }
+    svc.setMetadata(title, artist, artworkUrl)
+    svc.setPaused(startPaused)
+    svc.setSource(nextUrl)
   }
 
   private fun attachSurfaceIfReady() {
@@ -429,6 +524,9 @@ class PlayerActivity : ReactActivity() {
   }
 
   override fun onDestroy() {
+    // Let the background /player route clean up (e.g., destroyStream(sessionId)) once we close.
+    emit("onNativePlayerClosed", sessionId)
+
     try {
       if (engine == ENGINE_MPV) {
         mpvService?.removeListener(mpvListener)
@@ -551,6 +649,27 @@ class PlayerActivity : ReactActivity() {
       rc
         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         .emit(eventName, payload)
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
+  private fun emitNativePlayerEvent(eventType: String, extras: Map<String, Any>) {
+    val rc = getReactContextUnsafe() ?: return
+
+    val payload = HashMap<String, Any>()
+    payload["sessionId"] = sessionId
+    payload["engine"] = engine
+    payload["type"] = eventType
+    for ((k, v) in extras.entries) {
+      payload[k] = v
+    }
+
+    try {
+      val map = Arguments.makeNativeMap(payload as Map<String, Any>)
+      rc
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit("nativePlayerEvent", map)
     } catch (_: Throwable) {
       // ignore
     }

@@ -454,6 +454,11 @@ export default function PlayerScreen() {
     // Session ID to prevent race conditions during fast navigation
     const sessionId = useMemo(() => Math.random().toString(36).substring(7), []);
 
+    // Android-only: hand off playback + PiP to native PlayerActivity.
+    const nativePlayerLaunchRef = useRef(false);
+    const nativeHandoffToActivityRef = useRef(false);
+    const [nativePlayerLaunchFailed, setNativePlayerLaunchFailed] = useState(false);
+
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
@@ -530,6 +535,11 @@ export default function PlayerScreen() {
         return () => {
             isMounted = false;
             controller.abort();
+            if (nativeHandoffToActivityRef.current) {
+                console.log(`[Player] Unmounting; native PlayerActivity owns session: ${sessionId}`);
+                return;
+            }
+
             console.log(`Player unmounting, destroying session: ${sessionId}`);
             // Check if destroyStream exists (it should now, but safe guard)
             if (CrispyNativeCore.destroyStream) {
@@ -538,7 +548,39 @@ export default function PlayerScreen() {
         };
     }, [url, infoHash, fileIdx, activeStream, id, type, sessionId, manifests]);
 
+    const nativeEngine = useMemo<'exoplayer' | 'mpv'>(() => {
+        if (settings.videoPlayerEngine === 'mpv') return 'mpv';
+        return 'exoplayer';
+    }, [settings.videoPlayerEngine]);
+
     useEffect(() => {
+        if (Platform.OS !== 'android') return;
+        if (nativePlayerLaunchFailed) return;
+        if (nativePlayerLaunchRef.current) return;
+        if (!finalUrl || loading) return;
+
+        nativePlayerLaunchRef.current = true;
+
+        void CrispyNativeCore.openPlayerActivity({
+            sessionId,
+            url: finalUrl,
+            headers,
+            engine: nativeEngine,
+            paused,
+            metadata: mediaMetadata,
+        }).then((ok: boolean) => {
+            if (!ok) {
+                nativePlayerLaunchRef.current = false;
+                setNativePlayerLaunchFailed(true);
+                return;
+            }
+            nativeHandoffToActivityRef.current = true;
+            router.back();
+        });
+    }, [finalUrl, headers, loading, mediaMetadata, nativeEngine, nativePlayerLaunchFailed, paused, router, sessionId]);
+
+    useEffect(() => {
+        if (Platform.OS === 'android' && !nativePlayerLaunchFailed) return;
         // Lock to landscape
         const lock = async () => {
             try {
@@ -618,11 +660,12 @@ export default function PlayerScreen() {
                 NavigationBar.setVisibilityAsync("visible");
             }
         };
-    }, []);
+    }, [nativePlayerLaunchFailed]);
 
     // Enable PiP only while the player screen is mounted.
     useEffect(() => {
         if (Platform.OS !== 'android') return;
+        if (!nativePlayerLaunchFailed) return;
 
         void CrispyNativeCore.setPiPConfig({
             enabled: true,
@@ -636,18 +679,19 @@ export default function PlayerScreen() {
         };
         // Intentionally mount/unmount only.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [nativePlayerLaunchFailed]);
 
     // Keep native PiP params up to date (aspect ratio + playback state).
     useEffect(() => {
         if (Platform.OS !== 'android') return;
+        if (!nativePlayerLaunchFailed) return;
         void CrispyNativeCore.setPiPConfig({
             enabled: true,
             isPlaying: !paused,
             width: videoNaturalSize?.width,
             height: videoNaturalSize?.height,
         });
-    }, [paused, videoNaturalSize?.width, videoNaturalSize?.height]);
+    }, [nativePlayerLaunchFailed, paused, videoNaturalSize?.width, videoNaturalSize?.height]);
 
     // Note: avoid polling PiP state. Native PiP callbacks can be noisy during transitions,
     // and polling can cause UI/state oscillation.
@@ -787,6 +831,18 @@ export default function PlayerScreen() {
         const match = magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/);
         return match ? match[1] : null;
     };
+
+    // Android: this route becomes a launcher for the native PlayerActivity.
+    if (Platform.OS === 'android' && !nativePlayerLaunchFailed) {
+        return (
+            <View style={[styles.container, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
+                <LoadingIndicator size="large" color={theme.colors.primary} />
+                <Typography variant="body" className="text-white mt-4">
+                    {!finalUrl || loading ? 'Resolving Stream...' : 'Opening Player...'}
+                </Typography>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: '#000' }]}>

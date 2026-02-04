@@ -59,6 +59,7 @@ class MpvEngine(
   private var isPaused: Boolean = true
 
   private var durationSec: Double = 0.0
+  private var lastPositionSec: Double = 0.0
   private var videoW: Int = 0
   private var videoH: Int = 0
   private var hasLoadEventFired = false
@@ -76,7 +77,9 @@ class MpvEngine(
     if (hasLoadEventFired && durationSec > 0.0 && videoW > 0 && videoH > 0) {
       safeEmit { listener.onLoad(durationSec, videoW, videoH) }
     }
-    safeEmit { listener.onProgress(getTimePosUnsafe(), durationSec) }
+    // IMPORTANT: don't call into MPVLib here. MPV may not be initialized yet and calling
+    // getProperty* can crash the process (native mutex teardown races).
+    safeEmit { listener.onProgress(lastPositionSec, durationSec) }
   }
 
   fun removeListener(listener: Listener) {
@@ -239,6 +242,9 @@ class MpvEngine(
     mediaSessionHandler = null
 
     if (!isCreated) return
+    // Mark inactive before tearing down mpv to avoid races calling into a destroyed instance.
+    isInitialized = false
+    isCreated = false
     try {
       MPVLib.removeObserver(this)
     } catch (_: Throwable) {
@@ -493,10 +499,11 @@ class MpvEngine(
   }
 
   private fun getTimePosUnsafe(): Double {
+    if (!isInitialized) return lastPositionSec
     return try {
-      MPVLib.getPropertyDouble("time-pos") ?: 0.0
+      MPVLib.getPropertyDouble("time-pos") ?: lastPositionSec
     } catch (_: Throwable) {
-      0.0
+      lastPositionSec
     }
   }
 
@@ -593,6 +600,7 @@ class MpvEngine(
       }
       "time-pos" -> {
         val pos = value
+        lastPositionSec = pos
         val dur = durationSec
         safeEmit { listeners.forEach { it.onProgress(pos, dur) } }
         ensureMediaSession()
