@@ -1,11 +1,14 @@
 package aayush.crispy.core
 
 import android.content.Context
+import android.graphics.Rect
+import android.os.Build
 import android.util.Log
-import android.view.View
-import android.view.ViewGroup
+import android.view.SurfaceControl
 import android.view.SurfaceView
 import android.view.TextureView
+import android.view.View
+import android.view.ViewGroup
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -55,10 +58,6 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
-
-    // Track last applied dimensions for layout change detection
-    private var lastAppliedW: Int = 0
-    private var lastAppliedH: Int = 0
 
     // PiP resize -> surface buffer sizing (debounced)
     private var pipPendingW: Int = 0
@@ -155,37 +154,6 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         )
         playerView.useController = false
         playerView.player = player
-
-        // Handle PiP window resizing: force PlayerView to update when container size changes
-        addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
-            val w = right - left
-            val h = bottom - top
-            val oldW = oldRight - oldLeft
-            val oldH = oldBottom - oldTop
-            if (w > 0 && h > 0 && (w != oldW || h != oldH)) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        TAG,
-                        "container onLayoutChange ${oldW}x${oldH} -> ${w}x${h} (isInPipMode=$isInPipMode) playerView=${playerView.width}x${playerView.height} measured=${playerView.measuredWidth}x${playerView.measuredHeight}"
-                    )
-                }
-                // Update tracked dimensions
-                lastAppliedW = w
-                lastAppliedH = h
-                
-                // Force PlayerView to remeasure and update its internal surface
-                playerView.post {
-                    if (BuildConfig.DEBUG) {
-                        Log.d(
-                            TAG,
-                            "container layoutChange -> requestLayout/invalidate (playerView lp=${playerView.layoutParams?.width}x${playerView.layoutParams?.height})"
-                        )
-                    }
-                    playerView.requestLayout()
-                    playerView.invalidate()
-                }
-            }
-        }
 
         addView(playerView)
 
@@ -572,14 +540,12 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     private fun applyPipSurfaceSizeNow(width: Int, height: Int, reason: String) {
+        forcePlayerViewLayout(width, height)
+
         // SurfaceView is preferred for HDR, but handle TextureView too for safety.
         val sv = resolveSurfaceView()
         if (sv != null) {
-            try {
-                sv.holder.setFixedSize(width, height)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to setFixedSize(${width}x${height}) reason=$reason", e)
-            }
+            forceSurfaceViewBuffer(sv, width, height, reason)
         } else {
             val tv = resolveTextureView()
             if (tv != null) {
@@ -596,6 +562,47 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
             playerView.invalidate()
         } catch (_: Exception) {
             // ignore
+        }
+    }
+
+    private fun forcePlayerViewLayout(width: Int, height: Int) {
+        try {
+            val lp = playerView.layoutParams
+            if (lp != null && (lp.width != width || lp.height != height)) {
+                lp.width = width
+                lp.height = height
+                playerView.layoutParams = lp
+            }
+
+            val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
+            val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
+            playerView.measure(wSpec, hSpec)
+            playerView.layout(0, 0, width, height)
+        } catch (_: Exception) {
+            // ignore
+        }
+    }
+
+    private fun forceSurfaceViewBuffer(surfaceView: SurfaceView, width: Int, height: Int, reason: String) {
+        try {
+            surfaceView.holder.setFixedSize(width, height)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to setFixedSize(${width}x${height}) reason=$reason", e)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val surfaceControl = surfaceView.surfaceControl
+                if (surfaceControl != null && surfaceControl.isValid) {
+                    val transaction = SurfaceControl.Transaction()
+                    transaction.setBufferSize(surfaceControl, width, height)
+                    transaction.setCrop(surfaceControl, Rect(0, 0, width, height))
+                    transaction.setPosition(surfaceControl, 0f, 0f)
+                    transaction.apply()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to apply SurfaceControl resize ${width}x${height} reason=$reason", e)
+            }
         }
     }
 
