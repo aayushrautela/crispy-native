@@ -8,6 +8,7 @@ import { Screen } from '@/src/core/ui/layout/Screen';
 import { Typography } from '@/src/core/ui/Typography';
 import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
+import { LAYOUT } from '@/src/constants/layout';
 import {
     Bookmark,
     ChevronDown,
@@ -60,11 +61,15 @@ export default function LibraryScreen() {
     const genreSheetRef = useRef<BottomSheetRef>(null);
     const sortSheetRef = useRef<BottomSheetRef>(null);
 
-    const numColumns = width > 768 ? 5 : 3;
+    const isTablet = width >= 768;
+    const contentWidth = isTablet ? width - LAYOUT.RAIL_WIDTH : width;
+    const numColumns = isTablet ? 5 : 3;
     const gap = 12;
     const padding = 16;
-    const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
-    const itemWidth = availableWidth / numColumns;
+    
+    // Exact item width ensuring perfect fit with gaps
+    const availableWidth = contentWidth - (padding * 2) - (gap * (numColumns - 1));
+    const itemWidth = Math.floor(availableWidth / numColumns);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -179,13 +184,20 @@ export default function LibraryScreen() {
         }));
     }, [numColumns]);
 
-    const renderItem = useCallback(({ item }: { item: any }) => (
-        <View style={{ width: itemWidth, marginBottom: gap }}>
-            {showSkeleton
-                ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
-                : <CatalogCard item={item} width={itemWidth} />}
-        </View>
-    ), [gap, itemWidth, showSkeleton]);
+    const renderItem = useCallback(({ item, index }: { item: any, index: number }) => {
+        const isLastInRow = (index + 1) % numColumns === 0;
+        return (
+            <View style={{
+                width: itemWidth,
+                marginBottom: gap,
+                marginRight: isLastInRow ? 0 : gap
+            }}>
+                {showSkeleton
+                    ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
+                    : <CatalogCard item={item} width={itemWidth} />}
+            </View>
+        );
+    }, [gap, itemWidth, numColumns, showSkeleton]);
 
     if (!traktAuth.accessToken) {
         return (
