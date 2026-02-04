@@ -27,6 +27,7 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
+    private var pipTransitionPending: Boolean = false  // True during initial PiP entry until surface stabilizes
 
     private var isReleased: Boolean = false
 
@@ -181,7 +182,16 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         if (isReleased) return
         if (width <= 0 || height <= 0) return
-        Log.d(TAG, "surfaceChanged: ${width}x${height}")
+        Log.d(TAG, "surfaceChanged: ${width}x${height} isInPipMode=$isInPipMode pipTransitionPending=$pipTransitionPending")
+        
+        // Clear PiP transition flag once we get a valid surface size in PiP mode.
+        // This means the surface has stabilized and future onPipWindowSizeChanged calls
+        // should be trusted for in-place resizes.
+        if (isInPipMode && pipTransitionPending) {
+            pipTransitionPending = false
+            Log.d(TAG, "PiP transition complete - future onPipWindowSizeChanged will be trusted")
+        }
+        
         updateMpvSurfaceSize(width, height)
     }
 
@@ -463,14 +473,24 @@ class CrispyMpvVideoView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "onPipModeChanged: $isPip")
         isInPipMode = isPip
-        // Let Android handle surface lifecycle - no proactive intervention needed
+        if (isPip) {
+            // Mark transition pending - we'll trust surfaceChanged for the initial size
+            pipTransitionPending = true
+        } else {
+            pipTransitionPending = false
+        }
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
-        // NO-OP: Let Android handle surface lifecycle naturally via surfaceChanged.
-        // Proactive intervention here causes race conditions and breaks video rendering.
-        // This matches crispy-android's approach which works correctly.
-        Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height} (ignored - trusting surfaceChanged)")
+        Log.d(TAG, "onPipWindowSizeChanged: ${width}x${height} isInPipMode=$isInPipMode pipTransitionPending=$pipTransitionPending")
+        
+        // During initial PiP entry (pipTransitionPending=true), ignore this callback.
+        // The surface is still transitioning and surfaceChanged gives us the correct size.
+        // Once transition completes, subsequent resizes (pinch zoom) only fire this callback -
+        // surfaceChanged is NOT called for in-place resizes. So we must update MPV here.
+        if (isInPipMode && !pipTransitionPending && width > 0 && height > 0) {
+            updateMpvSurfaceSize(width, height)
+        }
     }
 
     override fun pauseFromPipDismissed() {
