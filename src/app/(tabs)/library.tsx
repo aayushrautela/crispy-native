@@ -50,7 +50,7 @@ const SORT_OPTIONS = [
 export default function LibraryScreen() {
     const { theme } = useTheme();
     const { traktAuth } = useUserStore();
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
 
     const [selectedFilter, setSelectedFilter] = useState('watchlist');
     const [selectedSort, setSelectedSort] = useState('date_desc');
@@ -61,15 +61,23 @@ export default function LibraryScreen() {
     const genreSheetRef = useRef<BottomSheetRef>(null);
     const sortSheetRef = useRef<BottomSheetRef>(null);
 
-    const isTablet = width >= 768;
-    const contentWidth = isTablet ? width - LAYOUT.RAIL_WIDTH : width;
-    const numColumns = isTablet ? 5 : 3;
+    // Keep this in sync with `src/app/(tabs)/_layout.tsx` which shows the rail at 768+
+    const hasRail = width >= 768;
+    const contentWidth = hasRail ? width - LAYOUT.RAIL_WIDTH : width;
+
+    // Responsive grid: avoid tiny items (and too many images) on large phones in landscape.
+    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
     const gap = 12;
     const padding = 16;
     
-    // Exact item width ensuring perfect fit with gaps
+    // Exact item width ensuring perfect fit with gaps.
+    // We floor to avoid sub-pixel rendering and then center the leftover space.
     const availableWidth = contentWidth - (padding * 2) - (gap * (numColumns - 1));
     const itemWidth = Math.floor(availableWidth / numColumns);
+    const rowWidth = (itemWidth * numColumns) + (gap * (numColumns - 1));
+    const extraSpace = Math.max(0, contentWidth - (padding * 2) - rowWidth);
+    const listPaddingLeft = padding + Math.floor(extraSpace / 2);
+    const listPaddingRight = padding + Math.ceil(extraSpace / 2);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -175,14 +183,16 @@ export default function LibraryScreen() {
     const showSkeleton = loading && items.length === 0;
 
     const skeletonItems = useMemo((): any[] => {
-        const count = numColumns * 15;
+        const approxRowHeight = (itemWidth * 1.5) + 64 + gap;
+        const approxVisibleRows = Math.max(8, Math.ceil((height - (HEADER_HEIGHT + 16)) / approxRowHeight) + 2);
+        const count = numColumns * approxVisibleRows;
         return Array.from({ length: count }, (_, i) => ({
             id: `library-skeleton-${i}`,
             type: 'movie',
             name: 'Loading',
             posterShape: 'poster',
         }));
-    }, [numColumns]);
+    }, [gap, height, itemWidth, numColumns]);
 
     const renderItem = useCallback(({ item, index }: { item: any, index: number }) => {
         const isLastInRow = (index + 1) % numColumns === 0;
@@ -229,11 +239,12 @@ export default function LibraryScreen() {
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72)}
+                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72 + gap)}
                     removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingLeft: listPaddingLeft,
+                        paddingRight: listPaddingRight,
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}
