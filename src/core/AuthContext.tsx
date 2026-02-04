@@ -24,29 +24,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Get initial session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-            if (session) {
-                SessionManager.addSession(session);
-            }
-        });
+        let cancelled = false;
+        let unsubscribe: (() => void) | null = null;
 
-        // Listen for changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-            if (session) {
-                SessionManager.addSession(session);
+        const init = async () => {
+            try {
+                // If we have a previously stored session in MMKV, restore it into supabase
+                await SessionManager.restoreActiveSession();
+            } catch (e) {
+                console.warn('[AuthContext] Failed to restore previous session:', e);
             }
-        });
 
-        return () => subscription.unsubscribe();
+            try {
+                const { data } = await supabase.auth.getSession();
+                if (cancelled) return;
+
+                setSession(data.session);
+                setUser(data.session?.user ?? null);
+                setLoading(false);
+
+                if (data.session) {
+                    void SessionManager.addSession(data.session);
+                }
+            } catch (e) {
+                if (cancelled) return;
+                console.error('[AuthContext] Failed to load session:', e);
+                setLoading(false);
+            }
+
+            if (cancelled) return;
+
+            // Listen for changes
+            const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+                setSession(nextSession);
+                setUser(nextSession?.user ?? null);
+                setLoading(false);
+
+                if (nextSession) {
+                    void SessionManager.addSession(nextSession);
+                }
+            });
+
+            unsubscribe = () => data.subscription.unsubscribe();
+        };
+
+        void init();
+
+        return () => {
+            cancelled = true;
+            unsubscribe?.();
+        };
     }, []);
 
     const signOut = useCallback(async () => {
