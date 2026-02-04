@@ -1,12 +1,8 @@
 package aayush.crispy.core
 
 import android.content.Context
-import android.graphics.Rect
 import android.os.Build
 import android.util.Log
-import android.view.SurfaceControl
-import android.view.SurfaceView
-import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import androidx.media3.common.C
@@ -59,12 +55,8 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     private var requestedResizeMode: String? = null
     private var isInPipMode: Boolean = false
 
-    // PiP resize -> surface buffer sizing (debounced)
-    private var pipPendingW: Int = 0
-    private var pipPendingH: Int = 0
-    private var pipResizeRunnable: Runnable? = null
-    private var cachedSurfaceView: SurfaceView? = null
-    private var cachedTextureView: TextureView? = null
+    private var isReleased: Boolean = false
+    private var deferredReleaseRunnable: Runnable? = null
 
     // Track mapping for index-based selection from JS
     private data class TrackRef(
@@ -428,6 +420,12 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     private fun release() {
+        if (isReleased) return
+        isReleased = true
+
+        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
+        deferredReleaseRunnable = null
+
         try {
             mainHandler.removeCallbacksAndMessages(null)
             playerView.player = null
@@ -443,14 +441,35 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+
+        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
+        deferredReleaseRunnable = null
+
+        // Ensure the PlayerView is bound to the current surface after returning from PiP.
+        rebindPlayerView("onAttachedToWindow")
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        if (isReleased) return
+
+        // If we're actively in PiP, tolerate detaches without tearing down playback.
+        val pipNow = isInPipFromActivityOrNull()
+        if (pipNow == true || isInPipMode) {
+            return
+        }
+
+        deferredReleaseRunnable?.let { mainHandler.removeCallbacks(it) }
+        val runnable = Runnable { release() }
+        deferredReleaseRunnable = runnable
+        mainHandler.postDelayed(runnable, 2000L)
+    }
+
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
-        isInPipMode = isPip
-
-        pipResizeRunnable?.let { mainHandler.removeCallbacks(it) }
-        pipResizeRunnable = null
-        pipPendingW = 0
-        pipPendingH = 0
+        isInPipMode = isPipFromActivityOrNull() ?: isPip
 
         if (BuildConfig.DEBUG) {
             Log.d(
@@ -470,29 +489,9 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
                 // ignore
             }
 
-            // Restore normal surface sizing after forcing fixed sizes in PiP.
-            resolveSurfaceView()?.let { sv ->
-                try {
-                    sv.holder.setSizeFromLayout()
-                } catch (_: Exception) {
-                    // ignore
-                }
-            }
-
-            resolveTextureView()?.let { tv ->
-                // Best-effort: reset texture buffer to the current view size after layout.
-                playerView.post {
-                    val w = playerView.width
-                    val h = playerView.height
-                    if (w > 0 && h > 0) {
-                        try {
-                            tv.surfaceTexture?.setDefaultBufferSize(w, h)
-                        } catch (_: Exception) {
-                            // ignore
-                        }
-                    }
-                }
-            }
+            // PiP exit doesn't necessarily trigger a React lifecycle resume.
+            // Force a surface rebind to avoid black video after returning to fullscreen.
+            playerView.post { rebindPlayerView("exitPiP") }
         }
         
         // The layout change listener in init{} handles all surface resizing.
@@ -503,6 +502,8 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
     }
 
     override fun onPipWindowSizeChanged(width: Int, height: Int) {
+        isInPipFromActivityOrNull()?.let { isInPipMode = it }
+
         if (BuildConfig.DEBUG) {
             Log.d(
                 TAG,
@@ -513,50 +514,8 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         if (!isInPipMode) return
         if (width <= 0 || height <= 0) return
 
-        schedulePipSurfaceResize(width, height, reason = "onPipWindowSizeChanged")
-    }
-
-    private fun schedulePipSurfaceResize(width: Int, height: Int, reason: String) {
-        if (!isInPipMode) return
-        if (width <= 0 || height <= 0) return
-
-        pipPendingW = width
-        pipPendingH = height
-
-        pipResizeRunnable?.let { mainHandler.removeCallbacks(it) }
-
-        val runnable = Runnable {
-            val w = pipPendingW
-            val h = pipPendingH
-            if (!isInPipMode) return@Runnable
-            if (w <= 0 || h <= 0) return@Runnable
-
-            applyPipSurfaceSizeNow(w, h, reason)
-        }
-
-        pipResizeRunnable = runnable
-        // Debounce: interactive PiP resize can emit many intermediate bounds.
-        mainHandler.postDelayed(runnable, 150L)
-    }
-
-    private fun applyPipSurfaceSizeNow(width: Int, height: Int, reason: String) {
-        forcePlayerViewLayout(width, height)
-
-        // SurfaceView is preferred for HDR, but handle TextureView too for safety.
-        val sv = resolveSurfaceView()
-        if (sv != null) {
-            forceSurfaceViewBuffer(sv, width, height, reason)
-        } else {
-            val tv = resolveTextureView()
-            if (tv != null) {
-                try {
-                    tv.surfaceTexture?.setDefaultBufferSize(width, height)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to setDefaultBufferSize(${width}x${height}) reason=$reason", e)
-                }
-            }
-        }
-
+        // Keep this lightweight: with non-seamless PiP resize enabled, the view hierarchy should
+        // relayout and Media3 will resize its surface normally.
         try {
             playerView.requestLayout()
             playerView.invalidate()
@@ -565,91 +524,24 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
         }
     }
 
-    private fun forcePlayerViewLayout(width: Int, height: Int) {
+    private fun rebindPlayerView(reason: String) {
+        if (isReleased) return
         try {
-            val lp = playerView.layoutParams
-            if (lp != null && (lp.width != width || lp.height != height)) {
-                lp.width = width
-                lp.height = height
-                playerView.layoutParams = lp
-            }
-
-            val wSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)
-            val hSpec = View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
-            playerView.measure(wSpec, hSpec)
-            playerView.layout(0, 0, width, height)
-        } catch (_: Exception) {
-            // ignore
-        }
-    }
-
-    private fun forceSurfaceViewBuffer(surfaceView: SurfaceView, width: Int, height: Int, reason: String) {
-        try {
-            surfaceView.holder.setFixedSize(width, height)
+            // Toggling the binding forces Media3 to recreate/reattach the video surface.
+            playerView.player = null
+            playerView.player = player
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to setFixedSize(${width}x${height}) reason=$reason", e)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val surfaceControl = surfaceView.surfaceControl
-                if (surfaceControl != null && surfaceControl.isValid) {
-                    val transaction = SurfaceControl.Transaction()
-                    transaction.setBufferSize(surfaceControl, width, height)
-                    transaction.setCrop(surfaceControl, Rect(0, 0, width, height))
-                    transaction.setPosition(surfaceControl, 0f, 0f)
-                    transaction.apply()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to apply SurfaceControl resize ${width}x${height} reason=$reason", e)
-            }
+            Log.w(TAG, "Failed to rebind PlayerView reason=$reason", e)
         }
     }
 
-    private fun resolveSurfaceView(): SurfaceView? {
-        val cached = cachedSurfaceView
-        if (cached != null && cached.isAttachedToWindow) return cached
-        val found = findSurfaceView(playerView)
-        cachedSurfaceView = found
-        return found
-    }
-
-    private fun resolveTextureView(): TextureView? {
-        val cached = cachedTextureView
-        if (cached != null && cached.isAttachedToWindow) return cached
-        val found = findTextureView(playerView)
-        cachedTextureView = found
-        return found
-    }
-
-    private fun findSurfaceView(root: View?): SurfaceView? {
-        when (root) {
-            null -> return null
-            is SurfaceView -> return root
-            is ViewGroup -> {
-                for (i in 0 until root.childCount) {
-                    val child = root.getChildAt(i)
-                    val found = findSurfaceView(child)
-                    if (found != null) return found
-                }
-            }
+    private fun isInPipFromActivityOrNull(): Boolean? {
+        val activity = appContext.currentActivity ?: return null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            activity.isInPictureInPictureMode
+        } else {
+            false
         }
-        return null
-    }
-
-    private fun findTextureView(root: View?): TextureView? {
-        when (root) {
-            null -> return null
-            is TextureView -> return root
-            is ViewGroup -> {
-                for (i in 0 until root.childCount) {
-                    val child = root.getChildAt(i)
-                    val found = findTextureView(child)
-                    if (found != null) return found
-                }
-            }
-        }
-        return null
     }
 
     override fun pauseFromPipDismissed() {

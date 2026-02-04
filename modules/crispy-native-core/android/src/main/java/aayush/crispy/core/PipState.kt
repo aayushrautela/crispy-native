@@ -64,6 +64,11 @@ object PipState {
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
 
+            // SurfaceView-based video renderers (MPV/Exo) can fail to resize correctly during
+            // Android's seamless PiP resize animation. Prefer non-seamless resize so the window
+            // relayouts and the underlying surfaces receive real size changes.
+            trySetSeamlessResizeEnabled(builder, enabled = false)
+
             // Use the specific source rect provided by the player view, if available.
             sourceRectHint?.let {
                 builder.setSourceRectHint(it)
@@ -92,6 +97,9 @@ object PipState {
 
             val builder = PictureInPictureParams.Builder()
             getAspectRatio()?.let { builder.setAspectRatio(it) }
+
+            // See applyToActivity() for rationale.
+            trySetSeamlessResizeEnabled(builder, enabled = false)
 
             // Use the specific source rect provided by the player view, if available.
             sourceRectHint?.let {
@@ -127,5 +135,15 @@ object PipState {
         val baseH = 1000
         val adjW = (baseH * clamped).toInt().coerceAtLeast(1)
         return Rational(adjW, baseH)
+    }
+
+    private fun trySetSeamlessResizeEnabled(builder: PictureInPictureParams.Builder, enabled: Boolean) {
+        // API availability varies across platform versions; use reflection to avoid hard dependency.
+        try {
+            val m = builder.javaClass.getMethod("setSeamlessResizeEnabled", Boolean::class.javaPrimitiveType)
+            m.invoke(builder, enabled)
+        } catch (_: Exception) {
+            // ignore
+        }
     }
 }
