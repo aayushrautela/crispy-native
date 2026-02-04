@@ -10,7 +10,9 @@ import android.os.IBinder
 import android.util.Log
 import com.facebook.react.bridge.ReactContext
 import aayush.crispy.core.pip.PipController
+import aayush.crispy.core.player.PlayerActivity
 import java.io.File
+import java.util.HashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -135,6 +137,52 @@ class CrispyNativeCoreModule : Module() {
       val activity = appContext.currentActivity
       if (activity == null) return@AsyncFunction false
       return@AsyncFunction PipController.isInPiPMode(activity)
+    }
+
+    // --- NATIVE PLAYER ACTIVITY (Android) ---
+    AsyncFunction("openPlayerActivity") { sessionId: String, url: String, headers: Map<String, String>?, engine: String?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+      val ctx = appContext.reactContext ?: return@AsyncFunction false
+      val activity = appContext.currentActivity
+
+      val intent = Intent(activity ?: ctx, PlayerActivity::class.java)
+      if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+      intent.putExtra(PlayerActivity.EXTRA_SESSION_ID, sessionId)
+      intent.putExtra(PlayerActivity.EXTRA_URL, url)
+      intent.putExtra(PlayerActivity.EXTRA_ENGINE, engine ?: PlayerActivity.ENGINE_EXO)
+      intent.putExtra(PlayerActivity.EXTRA_PAUSED, paused)
+      intent.putExtra(PlayerActivity.EXTRA_TITLE, title ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTIST, artist ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTWORK_URL, artworkUrl)
+      if (headers != null) {
+        intent.putExtra(PlayerActivity.EXTRA_HEADERS, HashMap(headers))
+      }
+
+      return@AsyncFunction try {
+        (activity ?: ctx).startActivity(intent)
+        true
+      } catch (t: Throwable) {
+        Log.e("CrispyModule", "openPlayerActivity failed", t)
+        false
+      }
+    }
+
+    AsyncFunction("closePlayerActivity") {
+      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      activity.finish()
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetPaused") { paused: Boolean ->
+      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      activity.setPausedFromJs(paused)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSeek") { positionSec: Double ->
+      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      activity.seekFromJs(positionSec)
+      return@AsyncFunction true
     }
 
     // --- VIDEO PLAYER VIEW ---

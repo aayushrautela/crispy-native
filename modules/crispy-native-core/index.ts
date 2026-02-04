@@ -18,6 +18,17 @@ export interface CrispyPiPConfig {
     height?: number;
 }
 
+export type CrispyPlayerEngine = 'exoplayer' | 'mpv';
+
+export interface CrispyOpenPlayerActivityParams {
+    sessionId: string;
+    url: string;
+    headers?: Record<string, string>;
+    engine?: CrispyPlayerEngine;
+    paused?: boolean;
+    metadata?: CrispyMediaMetadata;
+}
+
 export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;
@@ -208,6 +219,65 @@ export default {
             return false;
         } catch (e) {
             console.error('[CrispyNativeCore] isInPiPMode failed:', e);
+            return false;
+        }
+    },
+
+    /**
+     * Opens the native PlayerActivity (Android only).
+     * Video surface + PiP are owned by the Activity; JS renders as an overlay.
+     */
+    async openPlayerActivity(params: CrispyOpenPlayerActivityParams): Promise<boolean> {
+        try {
+            const md = params.metadata;
+            return await CrispyNativeCore.openPlayerActivity(
+                params.sessionId,
+                params.url,
+                params.headers ?? null,
+                params.engine ?? 'exoplayer',
+                params.paused ?? false,
+                md?.title ?? '',
+                md?.subtitle ?? '',
+                md?.artworkUrl ?? null
+            );
+        } catch (e) {
+            console.error('[CrispyNativeCore] openPlayerActivity failed:', e);
+            return false;
+        }
+    },
+
+    async closePlayerActivity(): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.closePlayerActivity) {
+                return await CrispyNativeCore.closePlayerActivity();
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] closePlayerActivity failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetPaused(paused: boolean): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetPaused) {
+                return await CrispyNativeCore.nativePlayerSetPaused(paused);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetPaused failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSeek(positionSec: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSeek) {
+                return await CrispyNativeCore.nativePlayerSeek(positionSec);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSeek failed:', e);
             return false;
         }
     },

@@ -10,6 +10,13 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
   <application>
+    <activity
+      android:name=".player.PlayerActivity"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+      android:exported="false"
+      android:resizeableActivity="true"
+      android:supportsPictureInPicture="true" />
+
     <service
       android:name=".TorrentService"
       android:enabled="true"

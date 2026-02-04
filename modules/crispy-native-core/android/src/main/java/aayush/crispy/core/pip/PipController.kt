@@ -21,6 +21,7 @@ import kotlin.math.roundToInt
 
 import aayush.crispy.core.player.ExoPlaybackService
 import aayush.crispy.core.player.MpvPlaybackService
+import aayush.crispy.core.player.PlayerActivity
 
 /**
  * Centralized PiP controller for the RN app.
@@ -57,18 +58,21 @@ object PipController {
 
   private val activityCallbacks = object : Application.ActivityLifecycleCallbacks {
     override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {
+      if (activity is PlayerActivity) return
       setCurrentActivity(activity)
       ensurePipListener(activity)
       applyParamsToActivity(activity)
     }
 
     override fun onActivityStarted(activity: Activity) {
+      if (activity is PlayerActivity) return
       setCurrentActivity(activity)
       ensurePipListener(activity)
       applyParamsToActivity(activity)
     }
 
     override fun onActivityResumed(activity: Activity) {
+      if (activity is PlayerActivity) return
       setCurrentActivity(activity)
       ensurePipListener(activity)
       // When returning from PiP expansion, we want params fresh for the next swipe-home.
@@ -80,6 +84,7 @@ object PipController {
     }
 
     override fun onActivityStopped(activity: Activity) {
+      if (activity is PlayerActivity) return
       // If the PiP window is dismissed (swiped away), the activity is typically stopped/destroyed
       // while still in PiP mode. Treat that as dismissal.
       if (isInPipMode && currentActivityRef?.get() === activity) {
@@ -95,6 +100,7 @@ object PipController {
     }
 
     override fun onActivityDestroyed(activity: Activity) {
+      if (activity is PlayerActivity) return
       val current = currentActivityRef?.get()
       if (current === activity) {
         currentActivityRef = null
@@ -176,6 +182,7 @@ object PipController {
 
   fun enterPiP(activity: Activity?, overrideWidth: Double?, overrideHeight: Double?): Boolean {
     if (activity == null) return false
+    if (activity is PlayerActivity) return false
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
 
     emit("onPipWillEnter", null)
@@ -217,6 +224,8 @@ object PipController {
   private fun ensurePipListener(activity: Activity) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
+    if (activity is PlayerActivity) return
+
     val componentActivity = activity as? ComponentActivity ?: return
 
     val existing = pipListenerActivityRef?.get()
@@ -256,6 +265,8 @@ object PipController {
 
   private fun applyParamsToActivity(activity: Activity) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+    if (activity is PlayerActivity) return
 
     // Avoid updating params while already in PiP; OEMs can snap the window back.
     if (activity.isInPictureInPictureMode) return
