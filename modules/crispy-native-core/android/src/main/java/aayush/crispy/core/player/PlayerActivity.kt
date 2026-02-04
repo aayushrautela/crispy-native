@@ -18,6 +18,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import com.facebook.react.ReactActivity
+import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -77,16 +78,20 @@ class PlayerActivity : ReactActivity() {
 
   override fun getMainComponentName(): String = "PlayerOverlayRoot"
 
-  override fun getLaunchOptions(): Bundle? {
-    val b = Bundle()
-    b.putString("sessionId", sessionId)
-    b.putString("engine", engine)
-    b.putString("url", url)
-    b.putBoolean("paused", startPaused)
-    b.putString("title", title)
-    b.putString("artist", artist)
-    b.putString("artworkUrl", artworkUrl)
-    return b
+  override fun createReactActivityDelegate(): ReactActivityDelegate {
+    return object : ReactActivityDelegate(this, mainComponentName) {
+      override fun getLaunchOptions(): Bundle? {
+        val b = Bundle()
+        b.putString("sessionId", sessionId)
+        b.putString("engine", engine)
+        b.putString("url", url)
+        b.putBoolean("paused", startPaused)
+        b.putString("title", title)
+        b.putString("artist", artist)
+        b.putString("artworkUrl", artworkUrl)
+        return b
+      }
+    }
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
