@@ -469,7 +469,7 @@ class CrispyExoVideoView(context: Context, appContext: AppContext) : ExpoView(co
 
     override fun onPipModeChanged(isPip: Boolean) {
         Log.d(TAG, "PiP mode changed: isPip=$isPip")
-        isInPipMode = isPipFromActivityOrNull() ?: isPip
+        isInPipMode = isInPipFromActivityOrNull() ?: isPip
 
         if (BuildConfig.DEBUG) {
             Log.d(
