@@ -17,6 +17,7 @@ import { SettingsTab } from '@/src/features/player/components/tabs/SettingsTab';
 import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/features/player/components/VideoSurface';
+import { useNativePlayerSessionStore } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -561,6 +562,26 @@ export default function PlayerScreen() {
 
         nativePlayerLaunchRef.current = true;
 
+        useNativePlayerSessionStore.getState().upsertSession({
+            sessionId,
+            id,
+            type,
+            title,
+            poster,
+            episodeTitle,
+            url: finalUrl,
+            headers,
+            streams: availableStreams,
+            infoHash: (activeStream?.infoHash || infoHash) ? String(activeStream?.infoHash || infoHash) : undefined,
+            fileIdx: typeof activeStream?.fileIdx === 'number'
+                ? activeStream.fileIdx
+                : (fileIdx ? parseInt(String(fileIdx), 10) : undefined),
+            engine: nativeEngine,
+            paused,
+            artist: mediaMetadata?.subtitle,
+            artworkUrl: mediaMetadata?.artworkUrl,
+        });
+
         void CrispyNativeCore.openPlayerActivity({
             sessionId,
             url: finalUrl,
@@ -577,7 +598,7 @@ export default function PlayerScreen() {
             nativeHandoffToActivityRef.current = true;
             router.back();
         });
-    }, [finalUrl, headers, loading, mediaMetadata, nativeEngine, nativePlayerLaunchFailed, paused, router, sessionId]);
+    }, [activeStream?.fileIdx, activeStream?.infoHash, availableStreams, episodeTitle, finalUrl, fileIdx, headers, id, infoHash, loading, mediaMetadata, nativeEngine, nativePlayerLaunchFailed, paused, poster, router, sessionId, title, type]);
 
     useEffect(() => {
         if (Platform.OS === 'android' && !nativePlayerLaunchFailed) return;

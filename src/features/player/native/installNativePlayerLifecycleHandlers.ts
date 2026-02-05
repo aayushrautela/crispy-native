@@ -1,5 +1,6 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { DeviceEventEmitter, Platform } from 'react-native';
+import { useNativePlayerSessionStore } from './nativePlayerSessionStore';
 
 let installed = false;
 
@@ -12,6 +13,7 @@ export function installNativePlayerLifecycleHandlers() {
     DeviceEventEmitter.addListener('onNativePlayerClosed', (sessionId: string) => {
         if (typeof sessionId !== 'string' || !sessionId) return;
         void CrispyNativeCore.destroyStream(sessionId);
+        useNativePlayerSessionStore.getState().removeSession(sessionId);
     });
 }
 

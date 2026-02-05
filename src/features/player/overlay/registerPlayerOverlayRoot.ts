@@ -1,4 +1,4 @@
 import { AppRegistry } from 'react-native';
-import PlayerOverlayRoot from './PlayerOverlayRoot';
+import PlayerOverlayApp from './PlayerOverlayApp';
 
-AppRegistry.registerComponent('PlayerOverlayRoot', () => PlayerOverlayRoot);
+AppRegistry.registerComponent('PlayerOverlayRoot', () => PlayerOverlayApp);
