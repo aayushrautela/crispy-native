@@ -17,7 +17,6 @@ import { SettingsTab } from '@/src/features/player/components/tabs/SettingsTab';
 import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/features/player/components/VideoSurface';
-import { useNativePlayerSessionStore } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -34,8 +33,7 @@ import {
     StepForward
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar';
+import { ActivityIndicator, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -455,11 +453,6 @@ export default function PlayerScreen() {
     // Session ID to prevent race conditions during fast navigation
     const sessionId = useMemo(() => Math.random().toString(36).substring(7), []);
 
-    // Android-only: hand off playback + PiP to native PlayerActivity.
-    const nativePlayerLaunchRef = useRef(false);
-    const nativeHandoffToActivityRef = useRef(false);
-    const [nativePlayerLaunchFailed, setNativePlayerLaunchFailed] = useState(false);
-
     // Resolve stream logic
     useEffect(() => {
         let isMounted = true;
@@ -532,15 +525,9 @@ export default function PlayerScreen() {
 
         resolve();
 
-        // CLEANUP: Only destroy the stream belonging to THIS session
         return () => {
             isMounted = false;
             controller.abort();
-            if (nativeHandoffToActivityRef.current) {
-                console.log(`[Player] Unmounting; native PlayerActivity owns session: ${sessionId}`);
-                return;
-            }
-
             console.log(`Player unmounting, destroying session: ${sessionId}`);
             // Check if destroyStream exists (it should now, but safe guard)
             if (CrispyNativeCore.destroyStream) {
@@ -549,59 +536,7 @@ export default function PlayerScreen() {
         };
     }, [url, infoHash, fileIdx, activeStream, id, type, sessionId, manifests]);
 
-    const nativeEngine = useMemo<'exoplayer' | 'mpv'>(() => {
-        if (settings.videoPlayerEngine === 'mpv') return 'mpv';
-        return 'exoplayer';
-    }, [settings.videoPlayerEngine]);
-
     useEffect(() => {
-        if (Platform.OS !== 'android') return;
-        if (nativePlayerLaunchFailed) return;
-        if (nativePlayerLaunchRef.current) return;
-        if (!finalUrl || loading) return;
-
-        nativePlayerLaunchRef.current = true;
-
-        useNativePlayerSessionStore.getState().upsertSession({
-            sessionId,
-            id,
-            type,
-            title,
-            poster,
-            episodeTitle,
-            url: finalUrl,
-            headers,
-            streams: availableStreams,
-            infoHash: (activeStream?.infoHash || infoHash) ? String(activeStream?.infoHash || infoHash) : undefined,
-            fileIdx: typeof activeStream?.fileIdx === 'number'
-                ? activeStream.fileIdx
-                : (fileIdx ? parseInt(String(fileIdx), 10) : undefined),
-            engine: nativeEngine,
-            paused,
-            artist: mediaMetadata?.subtitle,
-            artworkUrl: mediaMetadata?.artworkUrl,
-        });
-
-        void CrispyNativeCore.openPlayerActivity({
-            sessionId,
-            url: finalUrl,
-            headers,
-            engine: nativeEngine,
-            paused,
-            metadata: mediaMetadata,
-        }).then((ok: boolean) => {
-            if (!ok) {
-                nativePlayerLaunchRef.current = false;
-                setNativePlayerLaunchFailed(true);
-                return;
-            }
-            nativeHandoffToActivityRef.current = true;
-            router.back();
-        });
-    }, [activeStream?.fileIdx, activeStream?.infoHash, availableStreams, episodeTitle, finalUrl, fileIdx, headers, id, infoHash, loading, mediaMetadata, nativeEngine, nativePlayerLaunchFailed, paused, poster, router, sessionId, title, type]);
-
-    useEffect(() => {
-        if (Platform.OS === 'android' && !nativePlayerLaunchFailed) return;
         // Lock to landscape
         const lock = async () => {
             try {
@@ -613,60 +548,8 @@ export default function PlayerScreen() {
 
         lock();
         StatusBar.setHidden(true);
-        if (Platform.OS === 'android') {
-            NavigationBar.setVisibilityAsync("hidden");
-            NavigationBar.setBehaviorAsync("overlay-swipe");
-        }
-
-        // Listen for PiP mode changes (Android)
-        const pipSubscription = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
-            console.log('[Player] PiP Mode Changed:', isPip);
-            setIsPipMode(isPip);
-            if (isPip) {
-                setShowControls(false);
-                setActiveTab('none');
-                if (controlsTimer.current) clearTimeout(controlsTimer.current);
-            } else {
-                // When leaving PiP, bring controls back briefly so the user isn't stuck.
-                setShowControls(true);
-                setActiveTab('none');
-                if (controlsTimer.current) clearTimeout(controlsTimer.current);
-                controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
-            }
-        });
-
-        const pipWillEnterSubscription = DeviceEventEmitter.addListener('onPipWillEnter', () => {
-            console.log('[Player] PiP Will Enter');
-            setIsPipMode(true);
-            setShowControls(false);
-            setActiveTab('none');
-            if (controlsTimer.current) clearTimeout(controlsTimer.current);
-        });
-
-        const pipDismissedSubscription = DeviceEventEmitter.addListener('onPipDismissed', () => {
-            console.log('[Player] PiP dismissed — pausing playback');
-            setPaused(true);
-            setIsPipMode(false);
-            setShowControls(false);
-            setActiveTab('none');
-            if (controlsTimer.current) clearTimeout(controlsTimer.current);
-        });
-
-        // Sync initial state in case the event was missed.
-        if (Platform.OS === 'android' && CrispyNativeCore.isInPiPMode) {
-            void CrispyNativeCore.isInPiPMode().then((v: boolean) => {
-                if (v) {
-                    setIsPipMode(true);
-                    setShowControls(false);
-                    setActiveTab('none');
-                }
-            });
-        }
 
         return () => {
-            pipSubscription.remove();
-            pipWillEnterSubscription.remove();
-            pipDismissedSubscription.remove();
             const unlock = async () => {
                 try {
                     await SafeOrientation.lockAsync?.(SafeOrientation.OrientationLock.PORTRAIT_UP);
@@ -677,45 +560,8 @@ export default function PlayerScreen() {
 
             unlock();
             StatusBar.setHidden(false);
-            if (Platform.OS === 'android') {
-                NavigationBar.setVisibilityAsync("visible");
-            }
         };
-    }, [nativePlayerLaunchFailed]);
-
-    // Enable PiP only while the player screen is mounted.
-    useEffect(() => {
-        if (Platform.OS !== 'android') return;
-        if (!nativePlayerLaunchFailed) return;
-
-        void CrispyNativeCore.setPiPConfig({
-            enabled: true,
-            isPlaying: !paused,
-            width: videoNaturalSize?.width,
-            height: videoNaturalSize?.height,
-        });
-
-        return () => {
-            void CrispyNativeCore.setPiPConfig({ enabled: false, isPlaying: false });
-        };
-        // Intentionally mount/unmount only.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [nativePlayerLaunchFailed]);
-
-    // Keep native PiP params up to date (aspect ratio + playback state).
-    useEffect(() => {
-        if (Platform.OS !== 'android') return;
-        if (!nativePlayerLaunchFailed) return;
-        void CrispyNativeCore.setPiPConfig({
-            enabled: true,
-            isPlaying: !paused,
-            width: videoNaturalSize?.width,
-            height: videoNaturalSize?.height,
-        });
-    }, [nativePlayerLaunchFailed, paused, videoNaturalSize?.width, videoNaturalSize?.height]);
-
-    // Note: avoid polling PiP state. Native PiP callbacks can be noisy during transitions,
-    // and polling can cause UI/state oscillation.
+    }, []);
 
     const resetControlsTimer = useCallback(() => {
         if (isPipMode) return;
@@ -726,21 +572,6 @@ export default function PlayerScreen() {
             controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
         }
     }, [activeTab, isPipMode]);
-
-    // Fallback: when app backgrounds (incl. PiP), immediately hide overlays.
-    useEffect(() => {
-        if (Platform.OS !== 'android') return;
-        const sub = AppState.addEventListener('change', (state) => {
-            if (state !== 'active') {
-                setShowControls(false);
-                setActiveTab('none');
-            } else {
-                resetControlsTimer();
-            }
-        });
-
-        return () => sub.remove();
-    }, [resetControlsTimer]);
 
     // Keep controls visible when tab is active
     useEffect(() => {
@@ -853,20 +684,8 @@ export default function PlayerScreen() {
         return match ? match[1] : null;
     };
 
-    // Android: this route becomes a launcher for the native PlayerActivity.
-    if (Platform.OS === 'android' && !nativePlayerLaunchFailed) {
-        return (
-            <View style={[styles.container, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
-                <LoadingIndicator size="large" color={theme.colors.primary} />
-                <Typography variant="body" className="text-white mt-4">
-                    {!finalUrl || loading ? 'Resolving Stream...' : 'Opening Player...'}
-                </Typography>
-            </View>
-        );
-    }
-
     return (
-        <View style={[styles.container, { backgroundColor: '#000' }]}>
+        <View style={[styles.container, { backgroundColor: '#000' }]}> 
             {/* VIDEO LAYER - ALWAYS MOUNTED (zIndex: 0) */}
             <VideoSurface
                 ref={videoRef}

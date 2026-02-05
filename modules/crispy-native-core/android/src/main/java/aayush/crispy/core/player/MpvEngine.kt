@@ -595,6 +595,18 @@ class MpvEngine(
         val title = MPVLib.getPropertyString("track-list/$i/title")
         val lang = MPVLib.getPropertyString("track-list/$i/lang")
 
+        val selected: Boolean = try {
+          val vInt = MPVLib.getPropertyInt("track-list/$i/selected")
+          if (vInt != null) {
+            vInt != 0
+          } else {
+            val vStr = MPVLib.getPropertyString("track-list/$i/selected")
+            vStr == "yes" || vStr == "true" || vStr == "1"
+          }
+        } catch (_: Throwable) {
+          false
+        }
+
         val name = when {
           !title.isNullOrBlank() -> title
           !lang.isNullOrBlank() -> lang
@@ -605,7 +617,8 @@ class MpvEngine(
         val entry: Map<String, Any> = mapOf(
           "id" to id,
           "name" to name,
-          "language" to safeLang
+          "language" to safeLang,
+          "selected" to selected
         )
 
         if (type == "audio") audioTracks.add(entry)

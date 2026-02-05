@@ -364,12 +364,12 @@ class ExoEngine(
             C.TRACK_TYPE_AUDIO -> {
               val id = audioRefs.size
               audioRefs.add(TrackRef(tg, i, type))
-              audioTracks.add(mapOf("id" to id, "name" to name, "language" to lang))
+              audioTracks.add(mapOf("id" to id, "name" to name, "language" to lang, "selected" to group.isTrackSelected(i)))
             }
             C.TRACK_TYPE_TEXT -> {
               val id = textRefs.size
               textRefs.add(TrackRef(tg, i, type))
-              subtitleTracks.add(mapOf("id" to id, "name" to name, "language" to lang))
+              subtitleTracks.add(mapOf("id" to id, "name" to name, "language" to lang, "selected" to group.isTrackSelected(i)))
             }
           }
         }
