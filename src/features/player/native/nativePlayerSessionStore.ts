@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 export type PlayerContentType = 'movie' | 'series';
 export type NativePlayerEngine = 'exoplayer' | 'mpv';
+export type PlaybackState = 'idle' | 'resolving' | 'loading' | 'buffering' | 'ready' | 'error';
 
 export interface NativePlayerSessionContext {
     sessionId: string;
@@ -20,6 +21,7 @@ export interface NativePlayerSessionContext {
     fileIdx?: number;
 
     engine?: NativePlayerEngine;
+    playbackState?: PlaybackState;
     paused?: boolean;
     artist?: string;
     artworkUrl?: string;
@@ -83,3 +85,9 @@ export const useNativePlayerSessionStore = create<NativePlayerSessionStore>((set
         set({ sessionsById: {} });
     },
 }));
+
+export const nativePlayerSessionStore = {
+    getState: () => useNativePlayerSessionStore.getState(),
+    setState: (fn: any) => useNativePlayerSessionStore.setState(fn),
+    subscribe: (fn: any) => useNativePlayerSessionStore.subscribe(fn),
+};

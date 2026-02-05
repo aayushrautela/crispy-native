@@ -878,13 +878,12 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         if (isPipMode) return false;
         if (loadingStreamSwitch) return true;
         if (buffering) return true;
-        if (!firstFrameRendered && (progress.position <= 0 && (stableDuration || progress.duration) <= 0)) return true;
+        
+        const pState = session?.playbackState || 'idle';
+        const ready = pState === 'ready' || (firstFrameRendered && (progress.position > 0 || stableDuration > 0));
+        if (!ready && !lastError) return true;
         return false;
-    }, [buffering, firstFrameRendered, isPipMode, loadingStreamSwitch, progress.duration, progress.position, stableDuration]);
-
-    if (isPipMode) {
-        return <View style={styles.pipContainer} pointerEvents="none" />;
-    }
+    }, [isPipMode, loadingStreamSwitch, buffering, session?.playbackState, firstFrameRendered, progress.position, stableDuration, lastError]);
 
     return (
         <View style={styles.container} pointerEvents="box-none">

@@ -76,6 +76,8 @@ interface VideoSurfaceProps {
     onEnd?: () => void;
     onError?: (error: { message: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    onBuffering?: (isBuffering: boolean) => void;
+    onReadyForDisplay?: () => void;
     metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
 }
 
@@ -97,6 +99,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         onEnd,
         onError,
         onTracksChanged,
+        onBuffering,
+        onReadyForDisplay,
     } = props;
 
     // Log metadata for debugging notifications
@@ -250,6 +254,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     onLoad={(data) => onLoad?.(data)}
                     onProgress={(data) => onProgress?.(data)}
                     onTracksChanged={(data) => onTracksChanged?.(data)}
+                    onBuffering={(e: { buffering: boolean }) => onBuffering?.(e.buffering)}
+                    onReadyForDisplay={() => onReadyForDisplay?.()}
                     onError={(e) => {
                         const msg = e?.error || 'ExoPlayer error';
                         if (isCodecError(msg)) {
@@ -277,6 +283,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     onEnd={onEnd}
                     onError={handleMpvError}
                     onTracksChanged={handleMpvTracksChanged}
+                    onBuffering={(e: { buffering: boolean }) => onBuffering?.(e.buffering)}
+                    onReadyForDisplay={() => onReadyForDisplay?.()}
                 />
             )}
         </View>

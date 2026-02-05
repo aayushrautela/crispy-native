@@ -33,6 +33,8 @@ export interface MpvPlayerProps {
     onEnd?: () => void;
     onError?: (error: { error: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    onBuffering?: (data: { buffering: boolean }) => void;
+    onReadyForDisplay?: () => void;
     metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
     playInBackground?: boolean;
 }
@@ -156,6 +158,8 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
             onEnd={handleEnd}
             onError={handleError}
             onTracksChanged={handleTracksChanged}
+            onBuffering={(e: any) => props.onBuffering?.(e.nativeEvent)}
+            onReadyForDisplay={() => props.onReadyForDisplay?.()}
         />
     );
 });

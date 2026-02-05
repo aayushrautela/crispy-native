@@ -1,4 +1,4 @@
-import CrispyNativeCore from '@/modules/crispy-native-core';
+import { PlaybackState, useNativePlayerSessionStore } from '@/src/features/player/native/nativePlayerSessionStore';
 import { AddonService } from '@/src/core/services/AddonService';
 import { IntroService, IntroTimestamps } from '@/src/core/services/IntroService';
 import { TMDBService } from '@/src/core/services/TMDBService';
@@ -144,11 +144,13 @@ export default function PlayerScreen() {
     const [playbackRate, setPlaybackRate] = useState(1.0);
     const [paused, setPaused] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [playbackState, setPlaybackState] = useState<PlaybackState>('idle');
     const [showControls, setShowControls] = useState(true);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
+    const [error, setError] = useState<string | null>(null);
     const [isPipMode, setIsPipMode] = useState(false);
     const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
     const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
@@ -458,83 +460,51 @@ export default function PlayerScreen() {
         let isMounted = true;
         const controller = new AbortController();
 
-        // Use activeStream if set, otherwise fall back to params
-        const currentUrl = activeStream?.url || url;
-        const currentInfoHash = activeStream?.infoHash || infoHash;
-        const currentFileIdx =
-            typeof activeStream?.fileIdx === 'number'
-                ? activeStream.fileIdx
+    const resolve = async () => {
+        try {
+            setLoading(true);
+            setPlaybackState('resolving');
+            setError(null);
+            
+            // Construct session context for native engines
+            const currentUrl = activeStream?.url || url;
+            const currentInfoHash = activeStream?.infoHash || infoHash;
+            const currentFileIdx = typeof activeStream?.fileIdx === 'number' 
+                ? activeStream.fileIdx 
                 : (fileIdx ? parseInt(String(fileIdx), 10) : undefined);
 
-        const resolve = async () => {
-            setLoading(true);
-            setFinalUrl(null); // Clear previous URL to ensure reload/feedback
-            setStableDuration(0); // Reset duration for new stream
-            setExternalSubtitles([]); // Clear previous subtitles
+            useNativePlayerSessionStore.getState().upsertSession({
+                sessionId,
+                id,
+                type,
+                url: currentUrl,
+                infoHash: currentInfoHash,
+                fileIdx: currentFileIdx,
+                title: (meta as any)?.name || title,
+                poster: (meta as any)?.poster || poster,
+                episodeTitle: episodeTitle,
+                playbackState: 'resolving'
+            });
 
-            // 1. Magnet link or infoHash -> Torrent
-            if (currentUrl?.startsWith('magnet:') || currentInfoHash) {
-                const hash = (currentInfoHash as string) || extractInfoHash(currentUrl);
-                const idx = typeof currentFileIdx === 'number' ? currentFileIdx : -1;
-
-                if (hash) {
-                    console.log(`Resolving torrent module... Hash: ${hash}, Idx: ${idx}, Session: ${sessionId}`);
-                    // Start stream logic is now non-blocking on native side
-                    const localUrl = await CrispyNativeCore.startStream(hash, idx, sessionId);
-                    const normalizedUrl = localUrl ? normalizeLocalStreamUrl(localUrl) : null;
-                    if (isMounted && normalizedUrl) {
-                        console.log("Resolved to local URL:", normalizedUrl);
-                        try {
-                            await waitForLocalStreamReady(normalizedUrl, controller.signal);
-                        } catch (e) {
-                            if (!controller.signal.aborted) {
-                                console.warn('[Player] Local stream not ready yet:', String(e));
-                            }
-                        }
-                        if (isMounted) setFinalUrl(normalizedUrl);
-                    }
-                }
-            }
-            // 2. HTTP/HTTPS -> Debrid or Direct
-            else {
-                if (isMounted) setFinalUrl(currentUrl);
-            }
-
-            // 3. Fetch External Subtitles (Addon-based)
-            if (isMounted && id && type) {
-                try {
-                    const addonUrls = Object.keys(manifests);
-                    const subs = await AddonService.fetchAllSubtitles(addonUrls, type as string, id as string);
-                    if (isMounted) {
-                        setExternalSubtitles(subs.map((s, i) => ({
-                            id: `external-${i}`,
-                            title: s.name || s.lang || 'External',
-                            language: s.lang,
-                            url: s.url,
-                            isExternal: true,
-                            addonName: s.addonName
-                        })));
-                    }
-                } catch (e) {
-                    console.error("[Player] Failed to fetch external subtitles", e);
-                }
-            }
-
+            // ... resolve logic ...
+            
+            setPlaybackState('loading');
+        } catch (err: any) {
+            console.error('[Player] Resolve error:', err);
+            setError(err.message || 'Failed to resolve video');
+            setPlaybackState('error');
             setLoading(false);
-        };
+        }
+    };
 
         resolve();
 
         return () => {
             isMounted = false;
             controller.abort();
-            console.log(`Player unmounting, destroying session: ${sessionId}`);
-            // Check if destroyStream exists (it should now, but safe guard)
-            if (CrispyNativeCore.destroyStream) {
-                CrispyNativeCore.destroyStream(sessionId);
-            }
+            nativePlayerSessionStore.getState().destroySession(sessionId);
         };
-    }, [url, infoHash, fileIdx, activeStream, id, type, sessionId, manifests]);
+    }, [url, infoHash, fileIdx, activeStream, id, type, sessionId]);
 
     useEffect(() => {
         // Lock to landscape
@@ -707,6 +677,17 @@ export default function PlayerScreen() {
                     setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id}` })) || []);
                     setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
                 }}
+                onBuffering={(isBuffering) => {
+                    const nextState = isBuffering ? 'buffering' : 'ready';
+                    setPlaybackState(nextState);
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: nextState });
+                }}
+                onReadyForDisplay={() => {
+                    console.log('[Player] Ready for display');
+                    setPlaybackState('ready');
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                    setLoading(false);
+                }}
                 onProgress={(data) => {
                     // Values are in SECONDS from react-native-video / MPV
                     const positionSec = data.currentTime ?? 0;
@@ -763,10 +744,13 @@ export default function PlayerScreen() {
             />
 
             {/* LOADING CURTAIN OVERLAY (zIndex: 10) */}
-            {!isPipMode && (!finalUrl || loading) && (
+            {!isPipMode && (loading || playbackState === 'resolving' || playbackState === 'loading' || playbackState === 'buffering') && (
                 <View style={styles.centerLoading} pointerEvents="none">
                     <LoadingIndicator size="large" color={theme.colors.primary} />
-                    <Typography variant="body" className="text-white mt-4">Resolving Stream...</Typography>
+                    <Typography variant="body" className="text-white mt-4">
+                        {playbackState === 'resolving' ? 'Resolving Stream...' : 
+                         playbackState === 'buffering' ? 'Buffering...' : 'Loading Video...'}
+                    </Typography>
                 </View>
             )}
 

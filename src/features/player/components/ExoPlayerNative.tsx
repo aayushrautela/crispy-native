@@ -21,6 +21,8 @@ export interface ExoPlayerNativeProps {
     onEnd?: () => void;
     onError?: (error: { error: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    onBuffering?: (data: { buffering: boolean }) => void;
+    onReadyForDisplay?: () => void;
     metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
     playInBackground?: boolean;
 }
@@ -92,6 +94,8 @@ const ExoPlayerNative = forwardRef<ExoPlayerNativeRef, ExoPlayerNativeProps>((pr
             onEnd={props.onEnd}
             onError={handleError}
             onTracksChanged={handleTracksChanged}
+            onBuffering={(e: any) => props.onBuffering?.(e.nativeEvent)}
+            onReadyForDisplay={() => props.onReadyForDisplay?.()}
         />
     );
 });
