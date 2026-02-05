@@ -119,6 +119,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [showUpNext, setShowUpNext] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
     const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+    const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
 
     const pendingSeekAfterLoadRef = useRef<number | null>(null);
     const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,6 +130,38 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [activeSeason, setActiveSeason] = useState(currentSeason);
     useEffect(() => { setActiveSeason(currentSeason); }, [currentSeason]);
     const { meta, enriched, seasonEpisodes } = useMetaAggregator(baseId, String(contentType), activeSeason);
+
+    // Fetch Intro Data
+    useEffect(() => {
+        const fetchIntro = async () => {
+            if (contentType !== 'series' || !contentId) {
+                setIntroTimestamps(null);
+                return;
+            }
+
+            const season = pickSeasonFromId(contentId);
+            const episode = pickEpisodeFromId(contentId);
+            if (!episode) {
+                setIntroTimestamps(null);
+                return;
+            }
+
+            const imdbId = enriched?.imdbId || (contentId.startsWith('tt') ? contentId.split(':')[0] : null);
+            if (!imdbId) {
+                setIntroTimestamps(null);
+                return;
+            }
+
+            try {
+                const timestamps = await IntroService.getIntroTimestamps(imdbId, season, episode);
+                setIntroTimestamps(timestamps || null);
+            } catch {
+                setIntroTimestamps(null);
+            }
+        };
+
+        void fetchIntro();
+    }, [contentType, contentId, enriched?.imdbId]);
 
     const mediaMetadata: CrispyMediaMetadata = useMemo(() => ({
         title: episodeTitle || derivedTitle,
