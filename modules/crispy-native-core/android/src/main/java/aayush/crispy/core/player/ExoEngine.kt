@@ -96,8 +96,8 @@ class ExoEngine(
         listeners.forEach { it.onProgress(posSec, durSec) }
         mediaSessionHandler?.updatePosition(posSec)
         mediaSessionHandler?.updateDuration(durSec)
-      } catch (_: Throwable) {
-        // ignore
+      } catch (e: Throwable) {
+        Log.w(TAG, "Error in progressRunnable", e)
       } finally {
         mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
       }

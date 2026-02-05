@@ -935,27 +935,39 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun getReactContextUnsafe(): ReactContext? {
-    val app = application as? ReactApplication
-    val fromApp = app?.reactNativeHost?.reactInstanceManager?.currentReactContext
-    if (fromApp != null) return fromApp
+    try {
+      // 1. Try ReactActivity's instance manager (most reliable)
+      val ctx = reactInstanceManager.currentReactContext
+      if (ctx != null) return ctx
+    } catch (_: Exception) {}
 
-    return try {
-      reactNativeHost.reactInstanceManager.currentReactContext
-    } catch (_: Throwable) {
-      null
-    }
+    try {
+      // 2. Try Application if it is a ReactApplication
+      val app = application as? ReactApplication
+      val ctx = app?.reactNativeHost?.reactInstanceManager?.currentReactContext
+      if (ctx != null) return ctx
+    } catch (_: Exception) {}
+
+    return null
   }
 
   private fun emit(eventName: String, payload: Any?) {
     runOnUiThread {
-      val rc = getReactContextUnsafe() ?: return@runOnUiThread
-      if (!rc.hasActiveCatalystInstance()) return@runOnUiThread
+      val rc = getReactContextUnsafe()
+      if (rc == null) {
+          Log.w(TAG, "emit: ReactContext is null, cannot emit $eventName")
+          return@runOnUiThread
+      }
+      if (!rc.hasActiveCatalystInstance()) {
+          Log.w(TAG, "emit: No active Catalyst instance, cannot emit $eventName")
+          return@runOnUiThread
+      }
       try {
         rc
           .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
           .emit(eventName, payload)
-      } catch (_: Throwable) {
-        // ignore
+      } catch (e: Throwable) {
+        Log.e(TAG, "emit: Failed to emit $eventName", e)
       }
     }
   }
@@ -980,8 +992,15 @@ class PlayerActivity : ReactActivity() {
     }
 
     runOnUiThread {
-      val rc = getReactContextUnsafe() ?: return@runOnUiThread
-      if (!rc.hasActiveCatalystInstance()) return@runOnUiThread
+      val rc = getReactContextUnsafe()
+      if (rc == null) {
+          Log.w(TAG, "emitNativePlayerEvent: ReactContext is null, cannot emit $eventType")
+          return@runOnUiThread
+      }
+      if (!rc.hasActiveCatalystInstance()) {
+          Log.w(TAG, "emitNativePlayerEvent: No active Catalyst instance, cannot emit $eventType")
+          return@runOnUiThread
+      }
 
       try {
         if (pendingTracksEmit) {
@@ -1005,8 +1024,8 @@ class PlayerActivity : ReactActivity() {
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("nativePlayerEvent", map)
         }
-      } catch (_: Throwable) {
-        // ignore
+      } catch (e: Throwable) {
+        Log.e(TAG, "emitNativePlayerEvent: Failed to emit $eventType", e)
       }
     }
   }
