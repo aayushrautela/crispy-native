@@ -9,7 +9,7 @@ import { CustomSubtitles } from '@/src/features/player/components/subtitles/Cust
 import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, DeviceEventEmitter, Platform, StyleSheet, View } from 'react-native';
+ import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 // New Decomposed Components & Hooks
@@ -282,7 +282,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         let resolved = directUrl ? { url: directUrl } : null;
         if (!resolved && stream?.infoHash) {
             const localUrl = await CrispyNativeCore.startStream(stream.infoHash, stream.fileIdx ?? -1, sessionId);
-            if (localUrl) resolved = { url: localUrl, infoHash: stream.infoHash, fileIdx: stream.fileIdx };
+            if (localUrl) resolved = { url: localUrl };
         }
 
         if (!resolved) { setLastError('Failed to resolve'); setLoadingStreamSwitch(false); return; }

@@ -502,7 +502,7 @@ export default function PlayerScreen() {
         return () => {
             isMounted = false;
             controller.abort();
-            nativePlayerSessionStore.getState().destroySession(sessionId);
+            useNativePlayerSessionStore.getState().removeSession(sessionId);
         };
     }, [url, infoHash, fileIdx, activeStream, id, type, sessionId]);
 

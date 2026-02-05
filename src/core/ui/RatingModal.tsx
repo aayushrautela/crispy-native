@@ -84,7 +84,7 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
                 {/* Header */}
                 <View style={styles.header}>
                     <Typography variant="title-large" weight="bold" style={{ color: theme.colors.onSurface, textAlign: 'center' }}>
-                        Rate "{title}"
+                        Rate {`"${title}"`}
                     </Typography>
                     <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 4 }}>
                         What did you think?

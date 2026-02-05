@@ -110,6 +110,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
 
     const exoPlayerRef = useRef<ExoPlayerNativeRef>(null);
     const mpvPlayerRef = useRef<MpvPlayerRef>(null);
+    const iosPlayerRef = useRef<KSPlayerSurfaceRef>(null);
 
     const isSeeking = useRef(false);
     const isMounted = useRef(true);
@@ -220,7 +221,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     if (Platform.OS !== 'android') {
         return (
             <KSPlayerSurface
-                ref={useRef<KSPlayerSurfaceRef>(null) as any}
+                ref={iosPlayerRef as any}
                 source={source}
                 headers={headers}
                 paused={paused}

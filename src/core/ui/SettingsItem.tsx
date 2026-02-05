@@ -32,7 +32,6 @@ export function SettingsItem({
         <Touchable
             onPress={onPress}
             style={styles.container}
-            feedbackType="opacity"
         >
             <View style={styles.left}>
                 {Icon && (
@@ -43,7 +42,7 @@ export function SettingsItem({
                 <View style={styles.textContainer}>
                     <Typography
                         variant="body-large" // M3 uses larger body text for lists
-                        weight="regular"     // Regular weight is cleaner
+                        weight="normal"     // Regular weight is cleaner
                         style={{ color: theme.colors.onSurface }}
                     >
                         {label}

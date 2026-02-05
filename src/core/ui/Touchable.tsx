@@ -1,11 +1,12 @@
 import React from 'react';
-import { Pressable, PressableProps, ViewStyle, StyleProp } from 'react-native';
+import { Pressable, PressableProps, PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
-interface TouchableProps extends PressableProps {
+interface TouchableProps extends Omit<PressableProps, 'children'> {
     haptic?: Haptics.ImpactFeedbackStyle | 'selection' | 'success' | 'warning' | 'error' | 'off';
     containerStyle?: StyleProp<ViewStyle>;
     className?: string;
+    children?: React.ReactNode | ((state: PressableStateCallbackType) => React.ReactNode);
 }
 
 export const Touchable = ({
@@ -40,9 +41,7 @@ export const Touchable = ({
             style={style}
             {...props}
         >
-            {({ pressed }) => (
-                typeof children === 'function' ? children({ pressed }) : children
-            )}
+            {(state) => (typeof children === 'function' ? (children as (s: PressableStateCallbackType) => React.ReactNode)(state) : children)}
         </Pressable>
     );
 };

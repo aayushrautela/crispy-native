@@ -18,7 +18,7 @@ interface CommentsSectionProps {
     colors: any;
 }
 
-export const CommentsSection = memo(({ id, type, season, episode, colors }: CommentsSectionProps) => {
+export const CommentsSection = memo(function CommentsSection({ id, type, season, episode, colors }: CommentsSectionProps) {
     const { theme } = useTheme();
     const { comments, isLoading } = useTraktComments({ id, type, season, episode });
     const [selectedComment, setSelectedComment] = useState<TraktContentComment | null>(null);

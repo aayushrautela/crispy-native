@@ -139,6 +139,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     );
 });
 
+CustomBottomSheet.displayName = 'CustomBottomSheet';
+
 const styles = StyleSheet.create({
     modal: {
         // MD3 sheets are full width on mobile

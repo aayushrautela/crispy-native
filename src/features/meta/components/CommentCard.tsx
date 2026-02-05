@@ -14,7 +14,7 @@ interface CommentCardProps {
     palette: any;
 }
 
-export const CommentCard = memo(({ comment, onPress, palette }: CommentCardProps) => {
+export const CommentCard = memo(function CommentCard({ comment, onPress, palette }: CommentCardProps) {
     const { theme } = useTheme();
     const [isSpoilerRevealed, setIsSpoilerRevealed] = useState(false);
 

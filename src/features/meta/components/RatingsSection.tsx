@@ -9,7 +9,7 @@ import React, { memo, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { MetacriticIcon, RottenTomatoesIcon } from './RatingIcons';
 
-const RatingCard = memo(({ score, label, icon, palette }: { score: string; label: string; icon: React.ReactNode; palette: any }) => {
+const RatingCard = memo(function RatingCard({ score, label, icon, palette }: { score: string; label: string; icon: React.ReactNode; palette: any }) {
     const { theme } = useTheme();
     return (
         <View style={[styles.ratingCard, { backgroundColor: palette.secondaryContainer }]}>
@@ -30,7 +30,7 @@ interface RatingsSectionProps {
     palette: any;
 }
 
-export const RatingsSection = memo(({ enriched, colors, palette }: RatingsSectionProps) => {
+export const RatingsSection = memo(function RatingsSection({ enriched, colors, palette }: RatingsSectionProps) {
     const { theme } = useTheme();
     const [omdb, setOmdb] = useState<OmdbData | null>(null);
     const [isLoadingOmdb, setIsLoadingOmdb] = useState(false);

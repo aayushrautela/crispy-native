@@ -19,7 +19,7 @@ interface MetaActionRowProps {
     style?: ViewStyle;
 }
 
-export const MetaActionRow = memo(({
+export const MetaActionRow = memo(function MetaActionRow({
     isAuthenticated,
     isListed,
     isCollected,
@@ -32,7 +32,7 @@ export const MetaActionRow = memo(({
     onRatePress,
     palette,
     style
-}: MetaActionRowProps) => {
+}: MetaActionRowProps) {
     const { theme } = useTheme();
     const iconColor = theme.colors.onSurface;
     const itemBg = palette.secondaryContainer;
