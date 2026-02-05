@@ -67,13 +67,9 @@ export default function DiscoverScreen() {
 
     const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
 
-    // Exact item width ensuring a centered grid with even side margins.
-    const availableWidth = contentWidth - (padding * 2) - (gap * (numColumns - 1));
-    const itemWidth = Math.floor(availableWidth / numColumns);
-    const rowWidth = (itemWidth * numColumns) + (gap * (numColumns - 1));
-    const extraSpace = Math.max(0, contentWidth - (padding * 2) - rowWidth);
-    const listPaddingLeft = padding + Math.floor(extraSpace / 2);
-    const listPaddingRight = padding + Math.ceil(extraSpace / 2);
+    // Exact item width ensuring perfect fit with gaps.
+    // We use floating point precision for perfect alignment
+    const itemWidth = (contentWidth - (padding * 2) - (gap * (numColumns - 1))) / numColumns;
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -229,8 +225,7 @@ export default function DiscoverScreen() {
                     removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingLeft: listPaddingLeft,
-                        paddingRight: listPaddingRight,
+                        paddingHorizontal: padding,
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}
