@@ -8,6 +8,8 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.os.Looper
+import android.os.Handler
 import com.facebook.react.bridge.ReactContext
 import aayush.crispy.core.pip.PipController
 import aayush.crispy.core.player.PlayerActivity
@@ -159,7 +161,18 @@ class CrispyNativeCoreModule : Module() {
       }
 
       return@AsyncFunction try {
-        (activity ?: ctx).startActivity(intent)
+        val starter = (activity ?: ctx)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+          starter.startActivity(intent)
+        } else {
+          Handler(Looper.getMainLooper()).post {
+            try {
+              starter.startActivity(intent)
+            } catch (t: Throwable) {
+              Log.e("CrispyModule", "openPlayerActivity failed", t)
+            }
+          }
+        }
         true
       } catch (t: Throwable) {
         Log.e("CrispyModule", "openPlayerActivity failed", t)
@@ -168,125 +181,85 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("closePlayerActivity") {
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.finish()
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("closePlayerActivity") { it.finish() }
     }
 
     AsyncFunction("nativePlayerSetPaused") { paused: Boolean ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setPausedFromJs(paused)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetPaused") { it.setPausedFromJs(paused) }
     }
 
     AsyncFunction("nativePlayerSeek") { positionSec: Double ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.seekFromJs(positionSec)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSeek") { it.seekFromJs(positionSec) }
     }
 
     AsyncFunction("nativePlayerLoad") { url: String?, headers: Map<String, String>?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.loadFromJs(url, headers, paused, title, artist, artworkUrl)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerLoad") { it.loadFromJs(url, headers, paused, title, artist, artworkUrl) }
     }
 
     AsyncFunction("nativePlayerSetRate") { rate: Double ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setRateFromJs(rate)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetRate") { it.setRateFromJs(rate) }
     }
 
     AsyncFunction("nativePlayerSetVolume") { volume: Double ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setVolumeFromJs(volume)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetVolume") { it.setVolumeFromJs(volume) }
     }
 
     AsyncFunction("nativePlayerSetResizeMode") { mode: String? ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setResizeModeFromJs(mode)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetResizeMode") { it.setResizeModeFromJs(mode) }
     }
 
     AsyncFunction("nativePlayerSetAudioTrack") { trackId: Int ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setAudioTrackFromJs(trackId)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetAudioTrack") { it.setAudioTrackFromJs(trackId) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleTrack") { trackId: Int ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleTrackFromJs(trackId)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleTrack") { it.setSubtitleTrackFromJs(trackId) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleDelay") { delaySec: Double ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleDelayFromJs(delaySec)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleDelay") { it.setSubtitleDelayFromJs(delaySec) }
     }
 
     // MPV subtitle styling knobs (no-ops for Exo engine)
     AsyncFunction("nativePlayerSetSubtitleSize") { size: Int ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleSizeFromJs(size)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleSize") { it.setSubtitleSizeFromJs(size) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleColor") { color: String ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleColorFromJs(color)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleColor") { it.setSubtitleColorFromJs(color) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleBackgroundColor") { color: String, opacity: Float ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleBackgroundColorFromJs(color, opacity)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBackgroundColor") { it.setSubtitleBackgroundColorFromJs(color, opacity) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleBorderSize") { size: Int ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleBorderSizeFromJs(size)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBorderSize") { it.setSubtitleBorderSizeFromJs(size) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleBorderColor") { color: String ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleBorderColorFromJs(color)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBorderColor") { it.setSubtitleBorderColorFromJs(color) }
     }
 
     AsyncFunction("nativePlayerSetSubtitlePosition") { pos: Int ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitlePositionFromJs(pos)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitlePosition") { it.setSubtitlePositionFromJs(pos) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleBold") { bold: Boolean ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleBoldFromJs(bold)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBold") { it.setSubtitleBoldFromJs(bold) }
     }
 
     AsyncFunction("nativePlayerSetSubtitleItalic") { italic: Boolean ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setSubtitleItalicFromJs(italic)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleItalic") { it.setSubtitleItalicFromJs(italic) }
     }
 
     // MPV decoder/gpu mode knobs (applied on next init/source set)
     AsyncFunction("nativePlayerSetDecoderMode") { mode: String? ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setDecoderModeFromJs(mode)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetDecoderMode") { it.setDecoderModeFromJs(mode) }
     }
 
     AsyncFunction("nativePlayerSetGpuMode") { mode: String? ->
-      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
-      activity.setGpuModeFromJs(mode)
-      return@AsyncFunction true
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetGpuMode") { it.setGpuModeFromJs(mode) }
     }
 
     // --- VIDEO PLAYER VIEW ---
@@ -430,5 +403,17 @@ class CrispyNativeCoreModule : Module() {
           Log.e("CrispyModule", "Interrupted while waiting for service", e)
           return false
       }
+  }
+
+  private fun withPlayerActivityUi(action: String, fn: (PlayerActivity) -> Unit): Boolean {
+    val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return false
+    activity.runOnUiThread {
+      try {
+        fn(activity)
+      } catch (t: Throwable) {
+        Log.e("CrispyModule", "$action failed", t)
+      }
+    }
+    return true
   }
 }

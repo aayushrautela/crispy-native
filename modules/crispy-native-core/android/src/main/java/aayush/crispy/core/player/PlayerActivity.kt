@@ -82,6 +82,8 @@ class PlayerActivity : ReactActivity() {
 
   private var resizeMode: String? = null
 
+  private var exoFallbackToMpvAttempted: Boolean = false
+
   private var pendingTracksEmit: Boolean = false
   private var cachedAudioTracks: List<Map<String, Any>> = emptyList()
   private var cachedSubtitleTracks: List<Map<String, Any>> = emptyList()
@@ -171,6 +173,14 @@ class PlayerActivity : ReactActivity() {
 
   private fun installTextureBehindReact() {
     val content = findViewById<ViewGroup>(android.R.id.content) ?: return
+
+    // Ensure letterboxing area is true black (not theme default gray).
+    try {
+      content.setBackgroundColor(Color.BLACK)
+    } catch (_: Throwable) {
+      // ignore
+    }
+
     val reactRoot = content.getChildAt(0)
     try {
       reactRoot?.setBackgroundColor(Color.TRANSPARENT)
@@ -179,6 +189,11 @@ class PlayerActivity : ReactActivity() {
     }
 
     val tv = TextureView(this)
+    try {
+      tv.setBackgroundColor(Color.BLACK)
+    } catch (_: Throwable) {
+      // ignore
+    }
     tv.layoutParams = FrameLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT,
       ViewGroup.LayoutParams.MATCH_PARENT
@@ -388,6 +403,12 @@ class PlayerActivity : ReactActivity() {
 
     override fun onError(error: String) {
       Log.w(TAG, "Exo error: $error")
+
+      // If Exo fails (codec/decoder, etc.), fall back to MPV for this session.
+      if (maybeFallbackToMpvFromExo(error)) {
+        return
+      }
+
       emitNativePlayerEvent(
         "error",
         mapOf(
@@ -751,6 +772,18 @@ class PlayerActivity : ReactActivity() {
     val tv = textureView ?: return
     if (!tv.isAvailable) return
 
+    // MPV renders to the Surface with its own aspect/scale logic; applying a TextureView matrix
+    // here can double-scale (especially visible in PiP) and shrink the video.
+    if (engine == ENGINE_MPV) {
+      try {
+        tv.setTransform(null)
+        tv.invalidate()
+      } catch (_: Throwable) {
+        // ignore
+      }
+      return
+    }
+
     val viewW = if (surfaceW > 0) surfaceW else tv.width
     val viewH = if (surfaceH > 0) surfaceH else tv.height
     if (viewW <= 0 || viewH <= 0 || videoW <= 0 || videoH <= 0) {
@@ -798,6 +831,56 @@ class PlayerActivity : ReactActivity() {
     } catch (_: Throwable) {
       // ignore
     }
+  }
+
+  private fun maybeFallbackToMpvFromExo(exoError: String): Boolean {
+    if (engine != ENGINE_EXO) return false
+    if (exoFallbackToMpvAttempted) return false
+
+    val nextUrl = url
+    if (nextUrl.isNullOrBlank()) return false
+
+    exoFallbackToMpvAttempted = true
+    Log.w(TAG, "Falling back to MPV (session=$sessionId) due to Exo error: $exoError")
+
+    // Stop Exo playback best-effort.
+    try {
+      startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
+    } catch (_: Throwable) {
+      // ignore
+    }
+
+    try {
+      exoService?.removeListener(exoListener)
+      exoService?.unregisterClient()
+    } catch (_: Throwable) {
+      // ignore
+    }
+
+    try {
+      // Detach Exo from the TextureView before switching engines.
+      detachSurface()
+    } catch (_: Throwable) {
+      // ignore
+    }
+
+    if (bound) {
+      try {
+        unbindService(connection)
+      } catch (_: Throwable) {
+        // ignore
+      }
+      bound = false
+    }
+    exoService = null
+
+    // Switch engine and re-bind.
+    engine = ENGINE_MPV
+    videoW = 0
+    videoH = 0
+
+    bindPlaybackService()
+    return true
   }
 
   private fun computeSourceRectHint(): Rect? {
