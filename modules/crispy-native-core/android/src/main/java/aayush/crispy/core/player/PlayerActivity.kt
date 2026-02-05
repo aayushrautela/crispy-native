@@ -15,7 +15,8 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -67,10 +68,10 @@ class PlayerActivity : ReactActivity() {
   private var artist: String = ""
   private var artworkUrl: String? = null
 
-  private var textureView: TextureView? = null
+  private var surfaceView: SurfaceView? = null
   private var mpvSurface: Surface? = null
-  private var surfaceW: Int = 0
-  private var surfaceH: Int = 0
+  private var containerW: Int = 0
+  private var containerH: Int = 0
 
   private var mpvService: MpvPlaybackService? = null
   private var exoService: ExoPlaybackService? = null
@@ -188,47 +189,55 @@ class PlayerActivity : ReactActivity() {
       // ignore
     }
 
-    val tv = TextureView(this)
+    val sv = SurfaceView(this)
     try {
-      tv.setBackgroundColor(Color.BLACK)
+      sv.setBackgroundColor(Color.BLACK)
     } catch (_: Throwable) {
       // ignore
     }
-    tv.layoutParams = FrameLayout.LayoutParams(
+    sv.layoutParams = FrameLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT,
-      ViewGroup.LayoutParams.MATCH_PARENT
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      android.view.Gravity.CENTER
     )
-    tv.surfaceTextureListener = surfaceListener
-    textureView = tv
-    content.addView(tv, 0)
+    sv.holder.addCallback(surfaceCallback)
+    surfaceView = sv
+    content.addView(sv, 0)
+    
+    // Capture initial container size
+    content.post {
+        containerW = content.width
+        containerH = content.height
+        applyResizeTransform()
+    }
   }
 
-  private val surfaceListener = object : TextureView.SurfaceTextureListener {
-    override fun onSurfaceTextureAvailable(surfaceTexture: android.graphics.SurfaceTexture, width: Int, height: Int) {
-      surfaceW = width
-      surfaceH = height
+  private val surfaceCallback = object : SurfaceHolder.Callback {
+    override fun surfaceCreated(holder: SurfaceHolder) {
       attachSurfaceIfReady()
-      applyResizeTransform()
       updatePipParams()
     }
 
-    override fun onSurfaceTextureSizeChanged(surfaceTexture: android.graphics.SurfaceTexture, width: Int, height: Int) {
-      surfaceW = width
-      surfaceH = height
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+      // Surface size changed. If this was triggered by our own resize, we're good.
+      // But if the container changed (rotation?), we need to update container dims.
+      val content = findViewById<ViewGroup>(android.R.id.content)
+      if (content != null) {
+          containerW = content.width
+          containerH = content.height
+      }
+      
       if (engine == ENGINE_MPV) {
         mpvService?.setSurfaceSize(width, height)
       }
-      applyResizeTransform()
+      // Note: We don't call applyResizeTransform() here to avoid loops, 
+      // as applyResizeTransform modifies layout params which triggers surfaceChanged.
+      // Instead, we rely on video metadata load or explicit resizeMode calls.
       updatePipParams()
     }
 
-    override fun onSurfaceTextureDestroyed(surfaceTexture: android.graphics.SurfaceTexture): Boolean {
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
       detachSurface()
-      return true
-    }
-
-    override fun onSurfaceTextureUpdated(surfaceTexture: android.graphics.SurfaceTexture) {
-      // no-op
     }
   }
 
@@ -495,14 +504,17 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun attachSurfaceIfReady() {
-    val tv = textureView ?: return
-    if (!tv.isAvailable) return
+    val sv = surfaceView ?: return
+    val holder = sv.holder
+    if (holder.isCreating) return // Should be ready in surfaceCreated/Changed
 
     if (engine == ENGINE_MPV) {
-      val st = tv.surfaceTexture ?: return
-      val surface = mpvSurface ?: Surface(st).also { mpvSurface = it }
-      val w = if (surfaceW > 0) surfaceW else tv.width
-      val h = if (surfaceH > 0) surfaceH else tv.height
+      val surface = holder.surface
+      if (surface == null || !surface.isValid) return
+      
+      val w = if (sv.width > 0) sv.width else 1920
+      val h = if (sv.height > 0) sv.height else 1080
+      mpvSurface = surface
       mpvService?.attachSurface(surface, w, h)
       mpvService?.setSurfaceSize(w, h)
       return
@@ -510,9 +522,9 @@ class PlayerActivity : ReactActivity() {
 
     val player = exoService?.getPlayer() ?: return
     try {
-      player.setVideoTextureView(tv)
+      player.setVideoSurfaceView(sv)
     } catch (t: Throwable) {
-      Log.w(TAG, "Failed to attach Exo texture view", t)
+      Log.w(TAG, "Failed to attach Exo surface view", t)
     }
   }
 
@@ -523,19 +535,14 @@ class PlayerActivity : ReactActivity() {
       } catch (_: Throwable) {
         // ignore
       }
-      try {
-        mpvSurface?.release()
-      } catch (_: Throwable) {
-        // ignore
-      }
       mpvSurface = null
       return
     }
 
-    val tv = textureView ?: return
+    val sv = surfaceView ?: return
     val player = exoService?.getPlayer() ?: return
     try {
-      player.clearVideoTextureView(tv)
+      player.clearVideoSurfaceView(sv)
     } catch (_: Throwable) {
       // ignore
     }
@@ -769,67 +776,58 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun applyResizeTransform() {
-    val tv = textureView ?: return
-    if (!tv.isAvailable) return
-
-    // MPV renders to the Surface with its own aspect/scale logic; applying a TextureView matrix
-    // here can double-scale (especially visible in PiP) and shrink the video.
-    if (engine == ENGINE_MPV) {
-      try {
-        tv.setTransform(null)
-        tv.invalidate()
-      } catch (_: Throwable) {
-        // ignore
-      }
+    val sv = surfaceView ?: return
+    
+    // We resize the SurfaceView layout params directly.
+    
+    if (containerW <= 0 || containerH <= 0 || videoW <= 0 || videoH <= 0) {
+      // Not ready yet, keep full match_parent or previous state
       return
     }
-
-    val viewW = if (surfaceW > 0) surfaceW else tv.width
-    val viewH = if (surfaceH > 0) surfaceH else tv.height
-    if (viewW <= 0 || viewH <= 0 || videoW <= 0 || videoH <= 0) {
-      try {
-        tv.setTransform(null)
-      } catch (_: Throwable) {
-        // ignore
-      }
-      return
-    }
-
-    val st = tv.surfaceTexture
-    if (st != null) {
-      try {
-        st.setDefaultBufferSize(videoW, videoH)
-      } catch (_: Throwable) {
-        // ignore
-      }
-    }
-
+    
     val mode = (resizeMode ?: "contain").lowercase()
-    val m = Matrix()
-
-    val vw = viewW.toFloat()
-    val vh = viewH.toFloat()
-    val vidW = videoW.toFloat()
-    val vidH = videoH.toFloat()
-    val pivotX = vw / 2f
-    val pivotY = vh / 2f
-
+    
+    var targetW = containerW
+    var targetH = containerH
+    
     if (mode == "stretch") {
-      val sx = vw / vidW
-      val sy = vh / vidH
-      m.setScale(sx, sy, pivotX, pivotY)
+      targetW = containerW
+      targetH = containerH
     } else {
-      val sx = vw / vidW
-      val sy = vh / vidH
-      val scale = if (mode == "cover") kotlin.math.max(sx, sy) else kotlin.math.min(sx, sy)
-      m.setScale(scale, scale, pivotX, pivotY)
+      val videoRatio = videoW.toFloat() / videoH.toFloat()
+      val containerRatio = containerW.toFloat() / containerH.toFloat()
+      
+      if (mode == "contain") {
+        if (containerRatio > videoRatio) {
+          // Container is wider -> fit height, adjust width
+          targetH = containerH
+          targetW = (containerH * videoRatio).toInt()
+        } else {
+          // Container is taller -> fit width, adjust height
+          targetW = containerW
+          targetH = (containerW / videoRatio).toInt()
+        }
+      } else if (mode == "cover") {
+         if (containerRatio > videoRatio) {
+            // Container is wider -> match width, exceed height
+            targetW = containerW
+            targetH = (containerW / videoRatio).toInt()
+        } else {
+            // Container is taller -> match height, exceed width
+            targetH = containerH
+            targetW = (containerH * videoRatio).toInt()
+        }
+      }
     }
-
-    try {
-      tv.setTransform(m)
-      tv.invalidate()
-    } catch (_: Throwable) {
-      // ignore
+    
+    // Apply changes if needed
+    val params = sv.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(targetW, targetH)
+    if (params.width != targetW || params.height != targetH) {
+        params.width = targetW
+        params.height = targetH
+        params.gravity = android.view.Gravity.CENTER
+        sv.layoutParams = params
+        // This will trigger surfaceChanged
     }
   }
 
@@ -858,7 +856,7 @@ class PlayerActivity : ReactActivity() {
     }
 
     try {
-      // Detach Exo from the TextureView before switching engines.
+      // Detach Exo from the SurfaceView before switching engines.
       detachSurface()
     } catch (_: Throwable) {
       // ignore
@@ -884,33 +882,20 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun computeSourceRectHint(): Rect? {
-    val tv = textureView ?: return null
-    if (!tv.isAttachedToWindow) return null
+    val sv = surfaceView ?: return null
+    if (sv.width <= 0 || sv.height <= 0) return null
+    
     val out = Rect()
     val ok = try {
-      tv.getGlobalVisibleRect(out)
+      sv.getGlobalVisibleRect(out)
     } catch (_: Throwable) {
       false
     }
     if (!ok) return null
 
-    // Letterbox-aware hint when in "contain".
-    if (videoW <= 0 || videoH <= 0) return out
-    val mode = (resizeMode ?: "contain").lowercase()
-    if (mode != "contain") return out
-
-    val viewW = out.width()
-    val viewH = out.height()
-    if (viewW <= 0 || viewH <= 0) return out
-
-    val sx = viewW.toFloat() / videoW.toFloat()
-    val sy = viewH.toFloat() / videoH.toFloat()
-    val scale = kotlin.math.min(sx, sy)
-    val contentW = (videoW.toFloat() * scale).roundToInt().coerceAtLeast(1)
-    val contentH = (videoH.toFloat() * scale).roundToInt().coerceAtLeast(1)
-    val left = out.left + ((viewW - contentW) / 2)
-    val top = out.top + ((viewH - contentH) / 2)
-    return Rect(left, top, left + contentW, top + contentH)
+    // For SurfaceView resizing strategy, the View itself IS the content rect.
+    // So 'out' (the global rect of the view) should be correct for the PiP hint.
+    return out
   }
 
   private fun buildAspectRatio(width: Int, height: Int): Rational? {
