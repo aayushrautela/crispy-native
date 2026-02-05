@@ -20,6 +20,41 @@ import { PlayerTabSystem } from './components/PlayerTabSystem';
 import { usePlayerGestures } from './hooks/usePlayerGestures';
 
 const UP_NEXT_TRIGGER_SECONDS = 25;
+const LOCAL_STREAM_BASE = 'http://127.0.0.1:11470';
+
+const normalizeLocalStreamUrl = (url: string) => {
+    if (!url) return url;
+    return url
+        .replace('http://localhost:11470', LOCAL_STREAM_BASE)
+        .replace('http://127.0.0.1:11470', LOCAL_STREAM_BASE);
+};
+
+const isLocalStreamUrl = (url: string) => url.startsWith(LOCAL_STREAM_BASE);
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const waitForLocalStreamReady = async (url: string, timeoutMs = 60_000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        try {
+            const res = await fetch(url, {
+                method: 'GET',
+                headers: { Range: 'bytes=0-1' },
+            });
+            if (res.status === 200 || res.status === 206) return;
+            if (res.status === 503) {
+                await sleep(750);
+                continue;
+            }
+            const body = await res.text().catch(() => '');
+            throw new Error(`Unexpected status ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
+        } catch {
+            await sleep(750);
+        }
+    }
+    throw new Error(`Timed out waiting for local stream (${timeoutMs}ms)`);
+};
+
 type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
 
 interface PlayerOverlayRootProps {
@@ -306,19 +341,43 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             if (localUrl) resolved = { url: localUrl };
         }
 
-        if (!resolved) { setLastError('Failed to resolve'); setLoadingStreamSwitch(false); return; }
+        if (!resolved) {
+            setLastError('Failed to resolve');
+            setLoadingStreamSwitch(false);
+            setBuffering(false);
+            return;
+        }
+
+        const normalizedUrl = normalizeLocalStreamUrl(resolved.url || '');
+        if (!normalizedUrl) {
+            setLastError('Missing stream URL');
+            setLoadingStreamSwitch(false);
+            setBuffering(false);
+            return;
+        }
+
+        if (isLocalStreamUrl(normalizedUrl)) {
+            try {
+                await waitForLocalStreamReady(normalizedUrl);
+            } catch (e) {
+                setLastError('Torrent stream not ready. No peers yet.');
+                setLoadingStreamSwitch(false);
+                setBuffering(false);
+                return;
+            }
+        }
 
         const nextMd = { title: options?.nextEpisodeTitle || mediaMetadata.title, subtitle: options?.nextShowTitle || mediaMetadata.subtitle, artworkUrl: options?.nextPoster || mediaMetadata.artworkUrl };
         pendingSeekAfterLoadRef.current = pendingEpisode ? 0 : progress.position;
 
         useNativePlayerSessionStore.getState().patchSession(sessionId, {
             id: options?.nextContentId ?? contentId,
-            url: resolved.url,
+            url: normalizedUrl,
             paused,
             artworkUrl: nextMd.artworkUrl,
         });
 
-        await CrispyNativeCore.nativePlayerLoad({ url: resolved.url, headers: stream?.behaviorHints?.headers, paused, metadata: nextMd });
+        await CrispyNativeCore.nativePlayerLoad({ url: normalizedUrl, headers: stream?.behaviorHints?.headers, paused, metadata: nextMd });
         setActiveTab('none');
         setPendingEpisode(null);
     }, [sessionId, contentId, paused, progress.position, mediaMetadata, pendingEpisode]);

@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.frostwire.jlibtorrent.*
 import com.frostwire.jlibtorrent.alerts.*
+import com.frostwire.jlibtorrent.swig.settings_pack
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -141,12 +142,38 @@ class TorrentService : Service() {
         if (isSessionActive) return
         
         val settings = SettingsPack().apply {
-            connectionsLimit(200)
-            activeDownloads(1)
+            connectionsLimit(350)
+            maxPeerlistSize(2000)
+            activeDownloads(2)
             activeSeeds(0)
+            activeLimit(3)
+            activeTrackerLimit(50)
+            activeDhtLimit(50)
+            activeLsdLimit(10)
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
             listenInterfaces("0.0.0.0:0")
+            setEnableDht(true)
+            setEnableLsd(true)
+            setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
+            setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
+            setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
+            setBoolean(settings_pack.bool_types.prefer_udp_trackers.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_outgoing_tcp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_outgoing_utp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_incoming_tcp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_incoming_utp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
+            setBoolean(settings_pack.bool_types.prioritize_partial_pieces.swigValue(), true)
+            setBoolean(settings_pack.bool_types.auto_sequential.swigValue(), true)
+            setInteger(settings_pack.int_types.tracker_completion_timeout.swigValue(), 15)
+            setInteger(settings_pack.int_types.tracker_receive_timeout.swigValue(), 15)
+            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
+            setInteger(settings_pack.int_types.request_timeout.swigValue(), 20)
+            setInteger(settings_pack.int_types.inactivity_timeout.swigValue(), 120)
+            setInteger(settings_pack.int_types.min_reconnect_time.swigValue(), 2)
+            alertQueueSize(2000)
         }
         
         sessionManager = SessionManager().apply {

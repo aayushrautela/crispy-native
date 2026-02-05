@@ -111,11 +111,8 @@ export default function PlayerScreenAndroid() {
                     const localUrl = await CrispyNativeCore.startStream(resolvedInfoHash, resolvedFileIdx ?? -1, sessionId);
                     if (!localUrl) throw new Error('Failed to start stream');
                     finalUrl = normalizeLocalStreamUrl(localUrl);
-                    try {
-                        await waitForLocalStreamReady(finalUrl, controller.signal);
-                    } catch {
-                        // ok; PlayerActivity will handle buffering
-                    }
+                    setMessage('Connecting to peers...');
+                    await waitForLocalStreamReady(finalUrl, controller.signal, 60_000);
                 }
 
                 if (!finalUrl) {
