@@ -6,12 +6,13 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ActivityInfo
-import android.graphics.Matrix
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.Rational
@@ -28,6 +29,7 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.lang.ref.WeakReference
+import java.util.ArrayDeque
 import java.util.HashMap
 import kotlin.math.roundToInt
 
@@ -54,6 +56,12 @@ class PlayerActivity : ReactActivity() {
     private const val TAG = "PlayerActivity"
     private const val MAX_ASPECT = 2.39
     private const val MIN_ASPECT = 1.0 / MAX_ASPECT
+    private const val SURFACE_ATTACH_RETRY_MS = 200L
+    private const val MAX_SURFACE_ATTACH_RETRIES = 15
+    private const val JS_EMIT_RETRY_MS = 250L
+    private const val MAX_PENDING_JS_EVENTS = 96
+    private const val PENDING_JS_EVENT_TTL_MS = 12_000L
+    private const val REACT_CONTEXT_WARN_THROTTLE_MS = 2_000L
 
     private var activeRef: WeakReference<PlayerActivity>? = null
     fun getActive(): PlayerActivity? = activeRef?.get()
@@ -94,6 +102,35 @@ class PlayerActivity : ReactActivity() {
 
   private var wasInPip: Boolean = false
   private var activityStopped: Boolean = false
+  private val mainHandler = Handler(Looper.getMainLooper())
+
+  private var surfaceAttachRetryCount: Int = 0
+  private var surfaceAttachRetryScheduled: Boolean = false
+  private var surfaceAttachRetryReason: String = ""
+  private val surfaceAttachRetryRunnable = Runnable {
+    surfaceAttachRetryScheduled = false
+    surfaceAttachRetryCount += 1
+    ensureSurfaceAttached("retry:$surfaceAttachRetryReason", resetRetries = false)
+  }
+
+  private data class PendingJsEvent(
+    val eventName: String,
+    val payload: Any?,
+    val debugName: String,
+    val enqueuedAtMs: Long
+  )
+
+  private val pendingJsEvents: ArrayDeque<PendingJsEvent> = ArrayDeque()
+  private var jsEmitRetryScheduled: Boolean = false
+  private var lastReactContextWarnAtMs: Long = 0L
+  private val jsEmitRetryRunnable = Runnable {
+    jsEmitRetryScheduled = false
+    if (isFinishing || isDestroyedCompat()) return@Runnable
+    flushQueuedJsEventsOnUiThread()
+    if (pendingJsEvents.isNotEmpty()) {
+      scheduleJsEmitRetry()
+    }
+  }
 
   override fun getMainComponentName(): String = "PlayerOverlayRoot"
 
@@ -215,7 +252,7 @@ class PlayerActivity : ReactActivity() {
 
   private val surfaceCallback = object : SurfaceHolder.Callback {
     override fun surfaceCreated(holder: SurfaceHolder) {
-      attachSurfaceIfReady()
+      ensureSurfaceAttached("surfaceCreated")
       updatePipParams()
     }
 
@@ -234,10 +271,12 @@ class PlayerActivity : ReactActivity() {
       // Note: We don't call applyResizeTransform() here to avoid loops, 
       // as applyResizeTransform modifies layout params which triggers surfaceChanged.
       // Instead, we rely on video metadata load or explicit resizeMode calls.
+      ensureSurfaceAttached("surfaceChanged")
       updatePipParams()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+      cancelSurfaceAttachRetry()
       detachSurface()
     }
   }
@@ -274,7 +313,7 @@ class PlayerActivity : ReactActivity() {
         mpvService?.addListener(mpvListener)
 
         applyPendingLoadIfReady()
-        attachSurfaceIfReady()
+        ensureSurfaceAttached("mpvServiceConnected")
         updatePipParams()
         return
       }
@@ -285,7 +324,7 @@ class PlayerActivity : ReactActivity() {
       exoService?.addListener(exoListener)
 
       applyPendingLoadIfReady()
-      attachSurfaceIfReady()
+      ensureSurfaceAttached("exoServiceConnected")
       updatePipParams()
     }
 
@@ -504,28 +543,46 @@ class PlayerActivity : ReactActivity() {
     svc.setSource(nextUrl)
   }
 
-  private fun attachSurfaceIfReady() {
-    val sv = surfaceView ?: return
+  private fun attachSurfaceIfReady(reason: String): Boolean {
+    val sv = surfaceView ?: return false
     val holder = sv.holder
-    if (holder.isCreating) return // Should be ready in surfaceCreated/Changed
+    if (holder.isCreating) return false
 
     if (engine == ENGINE_MPV) {
+      val svc = mpvService ?: return false
       val surface = holder.surface
-      if (surface == null || !surface.isValid) return
-      
-      val w = if (sv.width > 0) sv.width else 1920
-      val h = if (sv.height > 0) sv.height else 1080
+      if (surface == null || !surface.isValid) return false
+
+      val frame = holder.surfaceFrame
+      val w = when {
+        frame.width() > 0 -> frame.width()
+        sv.width > 0 -> sv.width
+        else -> 1920
+      }
+      val h = when {
+        frame.height() > 0 -> frame.height()
+        sv.height > 0 -> sv.height
+        else -> 1080
+      }
+
       mpvSurface = surface
-      mpvService?.attachSurface(surface, w, h)
-      mpvService?.setSurfaceSize(w, h)
-      return
+      return try {
+        svc.attachSurface(surface, w, h)
+        svc.setSurfaceSize(w, h)
+        true
+      } catch (t: Throwable) {
+        Log.w(TAG, "Failed to attach MPV surface reason=$reason", t)
+        false
+      }
     }
 
-    val player = exoService?.getPlayer() ?: return
-    try {
+    val player = exoService?.getPlayer() ?: return false
+    return try {
       player.setVideoSurfaceView(sv)
+      true
     } catch (t: Throwable) {
-      Log.w(TAG, "Failed to attach Exo surface view", t)
+      Log.w(TAG, "Failed to attach Exo surface view reason=$reason", t)
+      false
     }
   }
 
@@ -546,6 +603,45 @@ class PlayerActivity : ReactActivity() {
       player.clearVideoSurfaceView(sv)
     } catch (_: Throwable) {
       // ignore
+    }
+  }
+
+  private fun ensureSurfaceAttached(reason: String, resetRetries: Boolean = true) {
+    if (isFinishing || isDestroyedCompat()) return
+    if (resetRetries) {
+      surfaceAttachRetryCount = 0
+    }
+
+    if (attachSurfaceIfReady(reason)) {
+      cancelSurfaceAttachRetry()
+      return
+    }
+
+    if (surfaceAttachRetryCount >= MAX_SURFACE_ATTACH_RETRIES) {
+      Log.e(TAG, "Surface did not attach after retries; reason=$reason engine=$engine")
+      return
+    }
+
+    scheduleSurfaceAttachRetry(reason)
+  }
+
+  private fun scheduleSurfaceAttachRetry(reason: String) {
+    surfaceAttachRetryReason = reason
+    if (surfaceAttachRetryScheduled) return
+    surfaceAttachRetryScheduled = true
+    mainHandler.postDelayed(surfaceAttachRetryRunnable, SURFACE_ATTACH_RETRY_MS)
+  }
+
+  private fun cancelSurfaceAttachRetry() {
+    surfaceAttachRetryScheduled = false
+    mainHandler.removeCallbacks(surfaceAttachRetryRunnable)
+  }
+
+  private fun isDestroyedCompat(): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+      isDestroyed
+    } else {
+      false
     }
   }
 
@@ -577,6 +673,12 @@ class PlayerActivity : ReactActivity() {
     super.onStart()
     activeRef = WeakReference(this)
     activityStopped = false
+    ensureSurfaceAttached("onStart")
+  }
+
+  override fun onResume() {
+    super.onResume()
+    ensureSurfaceAttached("onResume")
   }
 
   override fun onStop() {
@@ -597,6 +699,11 @@ class PlayerActivity : ReactActivity() {
       setPausedFromJs(true)
       emit("onPipDismissed", null)
       finish()
+      return
+    }
+
+    if (!isInPictureInPictureMode && was) {
+      ensureSurfaceAttached("exitPiP")
     }
   }
 
@@ -651,6 +758,10 @@ class PlayerActivity : ReactActivity() {
     mpvService = null
     exoService = null
     surfaceView = null
+
+    cancelSurfaceAttachRetry()
+    cancelJsEmitRetry()
+    pendingJsEvents.clear()
 
     val active = activeRef?.get()
     if (active === this) {
@@ -985,18 +1096,7 @@ class PlayerActivity : ReactActivity() {
 
   private fun emit(eventName: String, payload: Any?) {
     runOnUiThread {
-      val rc = getReactContextUnsafe()
-      if (rc == null) {
-          Log.w(TAG, "emit: ReactContext is null, cannot emit $eventName")
-          return@runOnUiThread
-      }
-      try {
-        rc
-          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          .emit(eventName, payload)
-      } catch (e: Throwable) {
-        Log.e(TAG, "emit: Failed to emit $eventName", e)
-      }
+      emitOrQueueJsEventOnUiThread(eventName, payload, eventName)
     }
   }
 
@@ -1020,37 +1120,111 @@ class PlayerActivity : ReactActivity() {
     }
 
     runOnUiThread {
-      val rc = getReactContextUnsafe()
-      if (rc == null) {
-          Log.w(TAG, "emitNativePlayerEvent: ReactContext is null, cannot emit $eventType")
-          return@runOnUiThread
+      if (pendingTracksEmit) {
+        val trackPayload = HashMap<String, Any>()
+        trackPayload["sessionId"] = sessionId
+        trackPayload["engine"] = engine
+        trackPayload["type"] = "tracks"
+        trackPayload["audioTracks"] = cachedAudioTracks
+        trackPayload["subtitleTracks"] = cachedSubtitleTracks
+
+        emitOrQueueJsEventOnUiThread(
+          "nativePlayerEvent",
+          Arguments.makeNativeMap(trackPayload),
+          "nativePlayerEvent:tracks"
+        )
+        pendingTracksEmit = false
       }
 
-      try {
-        if (pendingTracksEmit) {
-          val trackPayload = HashMap<String, Any>()
-          trackPayload["sessionId"] = sessionId
-          trackPayload["engine"] = engine
-          trackPayload["type"] = "tracks"
-          trackPayload["audioTracks"] = cachedAudioTracks
-          trackPayload["subtitleTracks"] = cachedSubtitleTracks
-
-          val trackMap = Arguments.makeNativeMap(trackPayload as Map<String, Any>)
-          rc
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("nativePlayerEvent", trackMap)
-          pendingTracksEmit = false
-        }
-
-        if (eventType != "tracks") {
-          val map = Arguments.makeNativeMap(payload as Map<String, Any>)
-          rc
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("nativePlayerEvent", map)
-        }
-      } catch (e: Throwable) {
-        Log.e(TAG, "emitNativePlayerEvent: Failed to emit $eventType", e)
+      if (eventType != "tracks") {
+        emitOrQueueJsEventOnUiThread(
+          "nativePlayerEvent",
+          Arguments.makeNativeMap(payload),
+          "nativePlayerEvent:$eventType"
+        )
       }
     }
+  }
+
+  private fun emitOrQueueJsEventOnUiThread(eventName: String, payload: Any?, debugName: String) {
+    if (tryEmitJsEvent(eventName, payload, debugName)) {
+      flushQueuedJsEventsOnUiThread()
+      return
+    }
+
+    enqueueJsEventOnUiThread(PendingJsEvent(eventName, payload, debugName, SystemClock.uptimeMillis()))
+    scheduleJsEmitRetry()
+  }
+
+  private fun tryEmitJsEvent(eventName: String, payload: Any?, debugName: String): Boolean {
+    val rc = getReactContextUnsafe()
+    if (rc == null) {
+      maybeLogReactContextUnavailable(debugName)
+      return false
+    }
+
+    return try {
+      rc
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit(eventName, payload)
+      true
+    } catch (t: Throwable) {
+      Log.e(TAG, "Failed to emit $debugName", t)
+      false
+    }
+  }
+
+  private fun enqueueJsEventOnUiThread(event: PendingJsEvent) {
+    pruneExpiredJsEventsOnUiThread(event.enqueuedAtMs)
+
+    while (pendingJsEvents.size >= MAX_PENDING_JS_EVENTS) {
+      pendingJsEvents.removeFirst()
+    }
+
+    pendingJsEvents.addLast(event)
+  }
+
+  private fun flushQueuedJsEventsOnUiThread() {
+    if (pendingJsEvents.isEmpty()) return
+
+    pruneExpiredJsEventsOnUiThread(SystemClock.uptimeMillis())
+
+    while (pendingJsEvents.isNotEmpty()) {
+      val next = pendingJsEvents.peekFirst() ?: break
+      if (!tryEmitJsEvent(next.eventName, next.payload, next.debugName)) {
+        scheduleJsEmitRetry()
+        return
+      }
+      pendingJsEvents.removeFirst()
+    }
+  }
+
+  private fun pruneExpiredJsEventsOnUiThread(nowMs: Long) {
+    while (pendingJsEvents.isNotEmpty()) {
+      val head = pendingJsEvents.peekFirst() ?: break
+      if (nowMs - head.enqueuedAtMs <= PENDING_JS_EVENT_TTL_MS) break
+      pendingJsEvents.removeFirst()
+    }
+  }
+
+  private fun scheduleJsEmitRetry() {
+    if (jsEmitRetryScheduled) return
+    jsEmitRetryScheduled = true
+    mainHandler.postDelayed(jsEmitRetryRunnable, JS_EMIT_RETRY_MS)
+  }
+
+  private fun cancelJsEmitRetry() {
+    jsEmitRetryScheduled = false
+    mainHandler.removeCallbacks(jsEmitRetryRunnable)
+  }
+
+  private fun maybeLogReactContextUnavailable(debugName: String) {
+    val now = SystemClock.uptimeMillis()
+    if (now - lastReactContextWarnAtMs < REACT_CONTEXT_WARN_THROTTLE_MS) return
+    lastReactContextWarnAtMs = now
+    Log.w(
+      TAG,
+      "ReactContext unavailable, queueing event=$debugName pending=${pendingJsEvents.size}"
+    )
   }
 }
