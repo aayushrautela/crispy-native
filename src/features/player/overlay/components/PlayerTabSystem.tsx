@@ -7,6 +7,7 @@ import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab
 import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SettingsTab } from '@/src/features/player/components/tabs/SettingsTab';
 import { InfoTab } from '@/src/features/player/components/tabs/InfoTab';
+import { MetaPalette } from '@/src/features/meta/hooks/useMetaAggregator';
 import CrispyNativeCore from '@/modules/crispy-native-core';
 
 interface PlayerTabSystemProps {
@@ -38,6 +39,8 @@ interface PlayerTabSystemProps {
     onSelectResizeMode: (mode: 'contain' | 'cover' | 'stretch') => void;
     meta: any;
     enriched: any;
+    seasonEpisodes: any[];
+    colors: MetaPalette;
 }
 
 export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
@@ -69,6 +72,8 @@ export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
     onSelectResizeMode,
     meta,
     enriched,
+    seasonEpisodes,
+    colors,
 }) => {
     const { theme } = useTheme();
 
@@ -129,15 +134,15 @@ export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
                 {activeTab === 'streams' && (
                     <StreamsTab
                         streams={availableStreams}
-                        loading={streamsLoading}
+                        isLoading={streamsLoading}
                         onSelectStream={onSwitchToStream}
                     />
                 )}
 
                 {activeTab === 'settings' && (
                     <SettingsTab
-                        playbackRate={playbackRate}
-                        onSelectPlaybackRate={onSelectSpeed}
+                        playbackSpeed={playbackRate}
+                        onSelectSpeed={onSelectSpeed}
                         resizeMode={resizeMode}
                         onSelectResizeMode={onSelectResizeMode}
                     />
@@ -145,8 +150,9 @@ export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
 
                 {activeTab === 'info' && (
                     <InfoTab
-                        meta={meta}
-                        enriched={enriched}
+                        meta={enriched && Object.keys(enriched).length > 0 ? enriched : (meta || {})}
+                        seasonEpisodes={seasonEpisodes}
+                        colors={colors}
                     />
                 )}
             </View>

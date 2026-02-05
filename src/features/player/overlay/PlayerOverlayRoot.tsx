@@ -182,7 +182,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const currentSeason = useMemo(() => (contentType === 'series' ? pickSeasonFromId(contentId) : 1), [contentId, contentType]);
     const [activeSeason, setActiveSeason] = useState(currentSeason);
     useEffect(() => { setActiveSeason(currentSeason); }, [currentSeason]);
-    const { meta, enriched, seasonEpisodes } = useMetaAggregator(baseId, String(contentType), activeSeason);
+    const { meta, enriched, seasonEpisodes, colors } = useMetaAggregator(baseId, String(contentType), activeSeason);
 
     // Fetch Intro Data
     useEffect(() => {
@@ -540,6 +540,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 onSelectResizeMode={(m) => { setResizeMode(m); CrispyNativeCore.nativePlayerSetResizeMode(m); }}
                 meta={meta}
                 enriched={enriched}
+                seasonEpisodes={seasonEpisodes}
+                colors={colors}
             />
         </View>
     );
