@@ -649,7 +649,7 @@ class PlayerActivity : ReactActivity() {
 
     mpvService = null
     exoService = null
-    textureView = null
+    surfaceView = null
 
     val active = activeRef?.get()
     if (active === this) {
