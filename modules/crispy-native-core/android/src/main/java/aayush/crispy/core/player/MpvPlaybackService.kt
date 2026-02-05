@@ -127,6 +127,14 @@ class MpvPlaybackService : Service(), MpvEngine.NotificationCallbacks, MpvEngine
     engine.setPaused(paused)
   }
 
+  fun setRate(rate: Double) {
+    engine.setRate(rate)
+  }
+
+  fun setVolume(volume: Double) {
+    engine.setVolume(volume)
+  }
+
   override fun onNotificationUpdated(notification: Notification) {
     // Called from MediaSessionHandler whenever it rebuilds the media notification.
     val playing = engine.isPlaying()

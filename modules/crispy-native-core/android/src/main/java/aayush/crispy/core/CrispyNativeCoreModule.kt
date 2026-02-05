@@ -168,26 +168,124 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("closePlayerActivity") {
-      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
       activity.finish()
       return@AsyncFunction true
     }
 
     AsyncFunction("nativePlayerSetPaused") { paused: Boolean ->
-      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
       activity.setPausedFromJs(paused)
       return@AsyncFunction true
     }
 
     AsyncFunction("nativePlayerSeek") { positionSec: Double ->
-      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
       activity.seekFromJs(positionSec)
       return@AsyncFunction true
     }
 
     AsyncFunction("nativePlayerLoad") { url: String?, headers: Map<String, String>?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
-      val activity = appContext.currentActivity as? PlayerActivity ?: return@AsyncFunction false
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
       activity.loadFromJs(url, headers, paused, title, artist, artworkUrl)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetRate") { rate: Double ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setRateFromJs(rate)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetVolume") { volume: Double ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setVolumeFromJs(volume)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetResizeMode") { mode: String? ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setResizeModeFromJs(mode)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetAudioTrack") { trackId: Int ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setAudioTrackFromJs(trackId)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleTrack") { trackId: Int ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleTrackFromJs(trackId)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleDelay") { delaySec: Double ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleDelayFromJs(delaySec)
+      return@AsyncFunction true
+    }
+
+    // MPV subtitle styling knobs (no-ops for Exo engine)
+    AsyncFunction("nativePlayerSetSubtitleSize") { size: Int ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleSizeFromJs(size)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleColor") { color: String ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleColorFromJs(color)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBackgroundColor") { color: String, opacity: Float ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleBackgroundColorFromJs(color, opacity)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBorderSize") { size: Int ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleBorderSizeFromJs(size)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBorderColor") { color: String ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleBorderColorFromJs(color)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitlePosition") { pos: Int ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitlePositionFromJs(pos)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBold") { bold: Boolean ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleBoldFromJs(bold)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleItalic") { italic: Boolean ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setSubtitleItalicFromJs(italic)
+      return@AsyncFunction true
+    }
+
+    // MPV decoder/gpu mode knobs (applied on next init/source set)
+    AsyncFunction("nativePlayerSetDecoderMode") { mode: String? ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setDecoderModeFromJs(mode)
+      return@AsyncFunction true
+    }
+
+    AsyncFunction("nativePlayerSetGpuMode") { mode: String? ->
+      val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return@AsyncFunction false
+      activity.setGpuModeFromJs(mode)
       return@AsyncFunction true
     }
 

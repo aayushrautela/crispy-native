@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ActivityInfo
+import android.graphics.Matrix
 import android.graphics.Color
 import android.graphics.Rect
 import android.os.Build
@@ -24,6 +25,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.lang.ref.WeakReference
 import java.util.HashMap
 import kotlin.math.roundToInt
 
@@ -50,6 +52,9 @@ class PlayerActivity : ReactActivity() {
     private const val TAG = "PlayerActivity"
     private const val MAX_ASPECT = 2.39
     private const val MIN_ASPECT = 1.0 / MAX_ASPECT
+
+    private var activeRef: WeakReference<PlayerActivity>? = null
+    fun getActive(): PlayerActivity? = activeRef?.get()
   }
 
   private var sessionId: String = ""
@@ -75,6 +80,8 @@ class PlayerActivity : ReactActivity() {
   private var videoH: Int = 0
   private var isPlaying: Boolean = false
 
+  private var resizeMode: String? = null
+
   private var lastProgressEmitMs: Long = 0L
 
   private var wasInPip: Boolean = false
@@ -99,6 +106,7 @@ class PlayerActivity : ReactActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    activeRef = WeakReference(this)
     parseIntent(intent)
 
     requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -181,6 +189,7 @@ class PlayerActivity : ReactActivity() {
       surfaceW = width
       surfaceH = height
       attachSurfaceIfReady()
+      applyResizeTransform()
       updatePipParams()
     }
 
@@ -190,6 +199,7 @@ class PlayerActivity : ReactActivity() {
       if (engine == ENGINE_MPV) {
         mpvService?.setSurfaceSize(width, height)
       }
+      applyResizeTransform()
       updatePipParams()
     }
 
@@ -261,6 +271,7 @@ class PlayerActivity : ReactActivity() {
       if (width > 0 && height > 0) {
         videoW = width
         videoH = height
+        applyResizeTransform()
         updatePipParams()
       }
 
@@ -311,6 +322,30 @@ class PlayerActivity : ReactActivity() {
         )
       )
     }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      this@PlayerActivity.isPlaying = isPlaying
+      updatePipParams()
+      emitNativePlayerEvent(
+        "isPlaying",
+        mapOf(
+          "isPlaying" to isPlaying
+        )
+      )
+    }
+
+    override fun onBufferingChanged(buffering: Boolean) {
+      emitNativePlayerEvent(
+        "buffering",
+        mapOf(
+          "buffering" to buffering
+        )
+      )
+    }
+
+    override fun onFirstFrameRendered() {
+      emitNativePlayerEvent("first-frame", emptyMap())
+    }
   }
 
   private val exoListener = object : ExoEngine.Listener {
@@ -318,6 +353,7 @@ class PlayerActivity : ReactActivity() {
       if (width > 0 && height > 0) {
         videoW = width
         videoH = height
+        applyResizeTransform()
         updatePipParams()
       }
 
@@ -364,6 +400,30 @@ class PlayerActivity : ReactActivity() {
           "subtitleTracks" to subtitleTracks
         )
       )
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      this@PlayerActivity.isPlaying = isPlaying
+      updatePipParams()
+      emitNativePlayerEvent(
+        "isPlaying",
+        mapOf(
+          "isPlaying" to isPlaying
+        )
+      )
+    }
+
+    override fun onBufferingChanged(buffering: Boolean) {
+      emitNativePlayerEvent(
+        "buffering",
+        mapOf(
+          "buffering" to buffering
+        )
+      )
+    }
+
+    override fun onFirstFrameRendered() {
+      emitNativePlayerEvent("first-frame", emptyMap())
     }
   }
 
@@ -482,6 +542,7 @@ class PlayerActivity : ReactActivity() {
 
   override fun onStart() {
     super.onStart()
+    activeRef = WeakReference(this)
     activityStopped = false
   }
 
@@ -558,7 +619,84 @@ class PlayerActivity : ReactActivity() {
     exoService = null
     textureView = null
 
+    val active = activeRef?.get()
+    if (active === this) {
+      activeRef = null
+    }
+
     super.onDestroy()
+  }
+
+  fun setRateFromJs(rate: Double) {
+    if (engine == ENGINE_MPV) mpvService?.setRate(rate) else exoService?.setRate(rate)
+  }
+
+  fun setVolumeFromJs(volume: Double) {
+    if (engine == ENGINE_MPV) mpvService?.setVolume(volume) else exoService?.setVolume(volume)
+  }
+
+  fun setResizeModeFromJs(mode: String?) {
+    resizeMode = mode
+    try {
+      // Keep mpv in sync for non-Activity view usage patterns.
+      if (engine == ENGINE_MPV) mpvService?.setResizeMode(mode)
+    } catch (_: Throwable) {
+      // ignore
+    }
+    applyResizeTransform()
+    updatePipParams()
+  }
+
+  fun setAudioTrackFromJs(trackId: Int) {
+    if (engine == ENGINE_MPV) mpvService?.setAudioTrack(trackId) else exoService?.setAudioTrack(trackId)
+  }
+
+  fun setSubtitleTrackFromJs(trackId: Int) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleTrack(trackId) else exoService?.setSubtitleTrack(trackId)
+  }
+
+  fun setSubtitleDelayFromJs(delaySec: Double) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleDelay(delaySec)
+  }
+
+  fun setSubtitleSizeFromJs(size: Int) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleSize(size)
+  }
+
+  fun setSubtitleColorFromJs(color: String) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleColor(color)
+  }
+
+  fun setSubtitleBackgroundColorFromJs(color: String, opacity: Float) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleBackgroundColor(color, opacity)
+  }
+
+  fun setSubtitleBorderSizeFromJs(size: Int) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleBorderSize(size)
+  }
+
+  fun setSubtitleBorderColorFromJs(color: String) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleBorderColor(color)
+  }
+
+  fun setSubtitlePositionFromJs(pos: Int) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitlePosition(pos)
+  }
+
+  fun setSubtitleBoldFromJs(bold: Boolean) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleBold(bold)
+  }
+
+  fun setSubtitleItalicFromJs(italic: Boolean) {
+    if (engine == ENGINE_MPV) mpvService?.setSubtitleItalic(italic)
+  }
+
+  fun setDecoderModeFromJs(mode: String?) {
+    if (engine == ENGINE_MPV) mpvService?.setDecoderMode(mode)
+  }
+
+  fun setGpuModeFromJs(mode: String?) {
+    if (engine == ENGINE_MPV) mpvService?.setGpuMode(mode)
   }
 
   private fun buildPipParams(): PictureInPictureParams {
@@ -605,6 +743,53 @@ class PlayerActivity : ReactActivity() {
     }
   }
 
+  private fun applyResizeTransform() {
+    val tv = textureView ?: return
+    if (!tv.isAvailable) return
+
+    val viewW = if (surfaceW > 0) surfaceW else tv.width
+    val viewH = if (surfaceH > 0) surfaceH else tv.height
+    if (viewW <= 0 || viewH <= 0 || videoW <= 0 || videoH <= 0) {
+      try {
+        tv.setTransform(null)
+      } catch (_: Throwable) {
+        // ignore
+      }
+      return
+    }
+
+    val mode = (resizeMode ?: "contain").lowercase()
+    val m = Matrix()
+
+    val vw = viewW.toFloat()
+    val vh = viewH.toFloat()
+    val vidW = videoW.toFloat()
+    val vidH = videoH.toFloat()
+
+    if (mode == "stretch") {
+      val sx = vw / vidW
+      val sy = vh / vidH
+      m.setScale(sx, sy)
+    } else {
+      val sx = vw / vidW
+      val sy = vh / vidH
+      val scale = if (mode == "cover") kotlin.math.max(sx, sy) else kotlin.math.min(sx, sy)
+      val scaledW = vidW * scale
+      val scaledH = vidH * scale
+      val dx = (vw - scaledW) / 2f
+      val dy = (vh - scaledH) / 2f
+      m.setScale(scale, scale)
+      m.postTranslate(dx, dy)
+    }
+
+    try {
+      tv.setTransform(m)
+      tv.invalidate()
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
   private fun computeSourceRectHint(): Rect? {
     val tv = textureView ?: return null
     if (!tv.isAttachedToWindow) return null
@@ -614,7 +799,25 @@ class PlayerActivity : ReactActivity() {
     } catch (_: Throwable) {
       false
     }
-    return if (ok) out else null
+    if (!ok) return null
+
+    // Letterbox-aware hint when in "contain".
+    if (videoW <= 0 || videoH <= 0) return out
+    val mode = (resizeMode ?: "contain").lowercase()
+    if (mode != "contain") return out
+
+    val viewW = out.width()
+    val viewH = out.height()
+    if (viewW <= 0 || viewH <= 0) return out
+
+    val sx = viewW.toFloat() / videoW.toFloat()
+    val sy = viewH.toFloat() / videoH.toFloat()
+    val scale = kotlin.math.min(sx, sy)
+    val contentW = (videoW.toFloat() * scale).roundToInt().coerceAtLeast(1)
+    val contentH = (videoH.toFloat() * scale).roundToInt().coerceAtLeast(1)
+    val left = out.left + ((viewW - contentW) / 2)
+    val top = out.top + ((viewH - contentH) / 2)
+    return Rect(left, top, left + contentW, top + contentH)
   }
 
   private fun buildAspectRatio(width: Int, height: Int): Rational? {

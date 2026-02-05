@@ -20,6 +20,10 @@ export interface CrispyPiPConfig {
 
 export type CrispyPlayerEngine = 'exoplayer' | 'mpv';
 
+export type CrispyResizeMode = 'contain' | 'cover' | 'stretch';
+export type CrispyDecoderMode = 'auto' | 'sw' | 'hw' | 'hw+';
+export type CrispyGpuMode = 'gpu' | 'gpu-next';
+
 export interface CrispyOpenPlayerActivityParams {
     sessionId: string;
     url: string;
@@ -40,9 +44,9 @@ export interface CrispyVideoViewProps extends ViewProps {
     source?: string;
     headers?: Record<string, string>;
     paused?: boolean;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
-    gpuMode?: 'gpu' | 'gpu-next';
+    resizeMode?: CrispyResizeMode;
+    decoderMode?: CrispyDecoderMode;
+    gpuMode?: CrispyGpuMode;
     metadata?: CrispyMediaMetadata;
     playInBackground?: boolean;
 
@@ -77,7 +81,7 @@ export interface CrispyExoVideoViewProps extends ViewProps {
     paused?: boolean;
     rate?: number;
     volume?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
+    resizeMode?: CrispyResizeMode;
     metadata?: CrispyMediaMetadata;
     playInBackground?: boolean;
 
@@ -303,6 +307,198 @@ export default {
             );
         } catch (e) {
             console.error('[CrispyNativeCore] nativePlayerLoad failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetRate(rate: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetRate) {
+                return await CrispyNativeCore.nativePlayerSetRate(rate);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetRate failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetVolume(volume: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetVolume) {
+                return await CrispyNativeCore.nativePlayerSetVolume(volume);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetVolume failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetResizeMode(mode: CrispyResizeMode): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetResizeMode) {
+                return await CrispyNativeCore.nativePlayerSetResizeMode(mode);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetResizeMode failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetAudioTrack(trackId: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetAudioTrack) {
+                return await CrispyNativeCore.nativePlayerSetAudioTrack(trackId);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetAudioTrack failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleTrack(trackId: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleTrack) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleTrack(trackId);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleTrack failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleDelay(delaySec: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleDelay) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleDelay(delaySec);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleDelay failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleSize(size: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleSize) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleSize(size);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleSize failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleColor(color: string): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleColor) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleColor(color);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleColor failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleBackgroundColor(color: string, opacity: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleBackgroundColor) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleBackgroundColor(color, opacity);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleBackgroundColor failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleBorderSize(size: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleBorderSize) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleBorderSize(size);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleBorderSize failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleBorderColor(color: string): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleBorderColor) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleBorderColor(color);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleBorderColor failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitlePosition(pos: number): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitlePosition) {
+                return await CrispyNativeCore.nativePlayerSetSubtitlePosition(pos);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitlePosition failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleBold(bold: boolean): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleBold) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleBold(bold);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleBold failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetSubtitleItalic(italic: boolean): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetSubtitleItalic) {
+                return await CrispyNativeCore.nativePlayerSetSubtitleItalic(italic);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetSubtitleItalic failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetDecoderMode(mode: CrispyDecoderMode): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetDecoderMode) {
+                return await CrispyNativeCore.nativePlayerSetDecoderMode(mode);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetDecoderMode failed:', e);
+            return false;
+        }
+    },
+
+    async nativePlayerSetGpuMode(mode: CrispyGpuMode): Promise<boolean> {
+        try {
+            if (CrispyNativeCore.nativePlayerSetGpuMode) {
+                return await CrispyNativeCore.nativePlayerSetGpuMode(mode);
+            }
+            return false;
+        } catch (e) {
+            console.error('[CrispyNativeCore] nativePlayerSetGpuMode failed:', e);
             return false;
         }
     },

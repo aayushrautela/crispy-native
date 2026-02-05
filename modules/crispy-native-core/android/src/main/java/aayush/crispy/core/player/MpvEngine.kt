@@ -37,6 +37,11 @@ class MpvEngine(
     fun onEnd()
     fun onError(error: String)
     fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>)
+
+    // Optional state callbacks (used by PlayerActivity overlay)
+    fun onIsPlayingChanged(isPlaying: Boolean) {}
+    fun onBufferingChanged(buffering: Boolean) {}
+    fun onFirstFrameRendered() {}
   }
 
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -57,6 +62,13 @@ class MpvEngine(
 
   private var requestedResizeMode: String? = null
   private var isPaused: Boolean = true
+
+  private var pendingRate: Double? = null
+  private var pendingVolume: Double? = null
+
+  private var lastEmittedIsPlaying: Boolean? = null
+  private var lastEmittedBuffering: Boolean? = null
+  private var firstFrameEmitted: Boolean = false
 
   private var durationSec: Double = 0.0
   private var lastPositionSec: Double = 0.0
@@ -146,6 +158,9 @@ class MpvEngine(
     durationSec = 0.0
     videoW = 0
     videoH = 0
+    firstFrameEmitted = false
+    lastEmittedBuffering = null
+    lastEmittedIsPlaying = null
 
     ensureInitialized()
     try {
@@ -156,6 +171,9 @@ class MpvEngine(
       ensureMediaSession()
       mediaSessionHandler?.updatePlaybackState(!isPaused)
       PipController.updateIsPlayingFromNative(!isPaused)
+
+      emitIsPlayingChangedIfNeeded(!isPaused)
+      emitBufferingChangedIfNeeded(false)
     } catch (t: Throwable) {
       emitError("Failed to load media")
     }
@@ -169,8 +187,32 @@ class MpvEngine(
       MPVLib.setPropertyBoolean("pause", paused)
       mediaSessionHandler?.updatePlaybackState(!paused)
       PipController.updateIsPlayingFromNative(!paused)
+      emitIsPlayingChangedIfNeeded(!paused)
     } catch (t: Throwable) {
       Log.w(TAG, "Failed to set pause", t)
+    }
+  }
+
+  fun setRate(rate: Double) {
+    val safe = rate.coerceIn(0.25, 4.0)
+    pendingRate = safe
+    if (!isInitialized) return
+    try {
+      MPVLib.setPropertyDouble("speed", safe)
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
+  fun setVolume(volume: Double) {
+    val safe = volume.coerceIn(0.0, 1.0)
+    pendingVolume = safe
+    if (!isInitialized) return
+    try {
+      // mpv volume is 0-100
+      MPVLib.setPropertyDouble("volume", safe * 100.0)
+    } catch (_: Throwable) {
+      // ignore
     }
   }
 
@@ -339,8 +381,18 @@ class MpvEngine(
 
       // Ensure pause state is applied after init/load.
       try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
+
+      // Apply any JS-driven knobs that may have been set pre-init.
+      pendingRate?.let { r ->
+        try { MPVLib.setPropertyDouble("speed", r) } catch (_: Throwable) {}
+      }
+      pendingVolume?.let { v ->
+        try { MPVLib.setPropertyDouble("volume", v * 100.0) } catch (_: Throwable) {}
+      }
+
       mediaSessionHandler?.updatePlaybackState(!isPaused)
       PipController.updateIsPlayingFromNative(!isPaused)
+      emitIsPlayingChangedIfNeeded(!isPaused)
     } catch (t: Throwable) {
       emitError("Failed to initialize player")
     }
@@ -435,12 +487,36 @@ class MpvEngine(
       MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
       MPVLib.observeProperty("eof-reached", MPV_FORMAT_FLAG)
       MPVLib.observeProperty("pause", MPV_FORMAT_FLAG)
+      MPVLib.observeProperty("paused-for-cache", MPV_FORMAT_FLAG)
       MPVLib.observeProperty("track-list", MPV_FORMAT_NONE)
       MPVLib.observeProperty("width", MPV_FORMAT_INT64)
       MPVLib.observeProperty("height", MPV_FORMAT_INT64)
+
+      // First-frame-ish signal.
+      MPVLib.observeProperty("vo-configured", MPV_FORMAT_FLAG)
     } catch (_: Throwable) {
       // ignore
     }
+  }
+
+  private fun emitIsPlayingChangedIfNeeded(isPlaying: Boolean) {
+    val prev = lastEmittedIsPlaying
+    if (prev != null && prev == isPlaying) return
+    lastEmittedIsPlaying = isPlaying
+    safeEmit { listeners.forEach { it.onIsPlayingChanged(isPlaying) } }
+  }
+
+  private fun emitBufferingChangedIfNeeded(buffering: Boolean) {
+    val prev = lastEmittedBuffering
+    if (prev != null && prev == buffering) return
+    lastEmittedBuffering = buffering
+    safeEmit { listeners.forEach { it.onBufferingChanged(buffering) } }
+  }
+
+  private fun emitFirstFrameRenderedIfNeeded() {
+    if (firstFrameEmitted) return
+    firstFrameEmitted = true
+    safeEmit { listeners.forEach { it.onFirstFrameRendered() } }
   }
 
   private fun applyResizeMode(mode: String?) {
@@ -575,6 +651,13 @@ class MpvEngine(
         ensureMediaSession()
         mediaSessionHandler?.updatePlaybackState(!value)
         PipController.updateIsPlayingFromNative(!value)
+        emitIsPlayingChangedIfNeeded(!value)
+      }
+      "paused-for-cache" -> {
+        emitBufferingChangedIfNeeded(value)
+      }
+      "vo-configured" -> {
+        if (value) emitFirstFrameRenderedIfNeeded()
       }
       "eof-reached" -> {
         if (value) {

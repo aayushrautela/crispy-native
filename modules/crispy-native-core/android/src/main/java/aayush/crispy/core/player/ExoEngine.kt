@@ -45,6 +45,11 @@ class ExoEngine(
     fun onEnd()
     fun onError(error: String)
     fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>)
+
+    // Optional state callbacks (used by PlayerActivity overlay)
+    fun onIsPlayingChanged(isPlaying: Boolean) {}
+    fun onBufferingChanged(buffering: Boolean) {}
+    fun onFirstFrameRendered() {}
   }
 
   private val listeners = CopyOnWriteArraySet<Listener>()
@@ -65,6 +70,10 @@ class ExoEngine(
   private var isPaused: Boolean = true
   private var hasLoadEventFired: Boolean = false
   private var lastVideoSize: VideoSize? = null
+
+  private var lastEmittedIsPlaying: Boolean? = null
+  private var lastEmittedBuffering: Boolean? = null
+  private var firstFrameEmitted: Boolean = false
 
   // Track mapping for index-based selection from JS
   private data class TrackRef(
@@ -101,6 +110,9 @@ class ExoEngine(
 
     player.addListener(object : Player.Listener {
       override fun onPlaybackStateChanged(playbackState: Int) {
+        val buffering = playbackState == Player.STATE_BUFFERING
+        emitBufferingChangedIfNeeded(buffering)
+
         if (playbackState == Player.STATE_READY) {
           emitLoadIfNeeded()
         } else if (playbackState == Player.STATE_ENDED) {
@@ -120,6 +132,15 @@ class ExoEngine(
         isPaused = !isPlaying
         PipController.updateIsPlayingFromNative(isPlaying)
         mediaSessionHandler?.updatePlaybackState(isPlaying)
+
+        emitIsPlayingChangedIfNeeded(isPlaying)
+      }
+
+      override fun onRenderedFirstFrame() {
+        if (firstFrameEmitted) return
+        firstFrameEmitted = true
+        listeners.forEach { it.onFirstFrameRendered() }
+        emitBufferingChangedIfNeeded(false)
       }
 
       override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -172,6 +193,9 @@ class ExoEngine(
   fun setSource(url: String?) {
     if (url.isNullOrBlank()) return
     hasLoadEventFired = false
+    firstFrameEmitted = false
+    lastEmittedBuffering = null
+    lastEmittedIsPlaying = null
 
     try {
       player.setMediaItem(MediaItem.fromUri(url))
@@ -302,6 +326,20 @@ class ExoEngine(
     val durationSec = durMs.toDouble() / 1000.0
     hasLoadEventFired = true
     listeners.forEach { it.onLoad(durationSec, vs.width, vs.height) }
+  }
+
+  private fun emitIsPlayingChangedIfNeeded(isPlaying: Boolean) {
+    val prev = lastEmittedIsPlaying
+    if (prev != null && prev == isPlaying) return
+    lastEmittedIsPlaying = isPlaying
+    listeners.forEach { it.onIsPlayingChanged(isPlaying) }
+  }
+
+  private fun emitBufferingChangedIfNeeded(buffering: Boolean) {
+    val prev = lastEmittedBuffering
+    if (prev != null && prev == buffering) return
+    lastEmittedBuffering = buffering
+    listeners.forEach { it.onBufferingChanged(buffering) }
   }
 
   private fun parseAndSendTracks(tracks: androidx.media3.common.Tracks) {
