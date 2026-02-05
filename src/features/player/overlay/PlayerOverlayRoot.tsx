@@ -571,10 +571,10 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     // Native player events
     useEffect(() => {
-        if (!sessionId) return;
-
         const nativeEvents = DeviceEventEmitter.addListener('nativePlayerEvent', (evt: NativePlayerEvent) => {
-            if (!evt || evt.sessionId !== sessionId) return;
+            if (!evt) return;
+            const incomingSessionId = (evt as any).sessionId as string | undefined;
+            if (sessionId && incomingSessionId && incomingSessionId !== sessionId) return;
 
             const type = evt.type;
             if (type === 'load') {
@@ -608,6 +608,11 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
                 if (!isSeeking) {
                     setProgress({ position, duration });
+                }
+
+                if (position > 0) {
+                    setFirstFrameRendered(true);
+                    setBuffering(false);
                 }
 
                 if (contentType === 'series' && duration > 0) {

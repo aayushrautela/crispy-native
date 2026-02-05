@@ -82,6 +82,10 @@ class PlayerActivity : ReactActivity() {
 
   private var resizeMode: String? = null
 
+  private var pendingTracksEmit: Boolean = false
+  private var cachedAudioTracks: List<Map<String, Any>> = emptyList()
+  private var cachedSubtitleTracks: List<Map<String, Any>> = emptyList()
+
   private var lastProgressEmitMs: Long = 0L
 
   private var wasInPip: Boolean = false
@@ -758,6 +762,15 @@ class PlayerActivity : ReactActivity() {
       return
     }
 
+    val st = tv.surfaceTexture
+    if (st != null) {
+      try {
+        st.setDefaultBufferSize(videoW, videoH)
+      } catch (_: Throwable) {
+        // ignore
+      }
+    }
+
     val mode = (resizeMode ?: "contain").lowercase()
     val m = Matrix()
 
@@ -765,21 +778,18 @@ class PlayerActivity : ReactActivity() {
     val vh = viewH.toFloat()
     val vidW = videoW.toFloat()
     val vidH = videoH.toFloat()
+    val pivotX = vw / 2f
+    val pivotY = vh / 2f
 
     if (mode == "stretch") {
       val sx = vw / vidW
       val sy = vh / vidH
-      m.setScale(sx, sy)
+      m.setScale(sx, sy, pivotX, pivotY)
     } else {
       val sx = vw / vidW
       val sy = vh / vidH
       val scale = if (mode == "cover") kotlin.math.max(sx, sy) else kotlin.math.min(sx, sy)
-      val scaledW = vidW * scale
-      val scaledH = vidH * scale
-      val dx = (vw - scaledW) / 2f
-      val dy = (vh - scaledH) / 2f
-      m.setScale(scale, scale)
-      m.postTranslate(dx, dy)
+      m.setScale(scale, scale, pivotX, pivotY)
     }
 
     try {
@@ -842,23 +852,41 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun getReactContextUnsafe(): ReactContext? {
-    val app = application as? ReactApplication ?: return null
-    return app.reactNativeHost.reactInstanceManager.currentReactContext
+    val app = application as? ReactApplication
+    val fromApp = app?.reactNativeHost?.reactInstanceManager?.currentReactContext
+    if (fromApp != null) return fromApp
+
+    return try {
+      reactNativeHost.reactInstanceManager.currentReactContext
+    } catch (_: Throwable) {
+      null
+    }
   }
 
   private fun emit(eventName: String, payload: Any?) {
-    val rc = getReactContextUnsafe() ?: return
-    try {
-      rc
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit(eventName, payload)
-    } catch (_: Throwable) {
-      // ignore
+    runOnUiThread {
+      val rc = getReactContextUnsafe() ?: return@runOnUiThread
+      if (!rc.hasActiveCatalystInstance()) return@runOnUiThread
+      try {
+        rc
+          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          .emit(eventName, payload)
+      } catch (_: Throwable) {
+        // ignore
+      }
     }
   }
 
   private fun emitNativePlayerEvent(eventType: String, extras: Map<String, Any>) {
-    val rc = getReactContextUnsafe() ?: return
+    if (eventType == "tracks") {
+      @Suppress("UNCHECKED_CAST")
+      val audio = extras["audioTracks"] as? List<Map<String, Any>>
+      @Suppress("UNCHECKED_CAST")
+      val subs = extras["subtitleTracks"] as? List<Map<String, Any>>
+      cachedAudioTracks = audio ?: emptyList()
+      cachedSubtitleTracks = subs ?: emptyList()
+      pendingTracksEmit = true
+    }
 
     val payload = HashMap<String, Any>()
     payload["sessionId"] = sessionId
@@ -868,13 +896,35 @@ class PlayerActivity : ReactActivity() {
       payload[k] = v
     }
 
-    try {
-      val map = Arguments.makeNativeMap(payload as Map<String, Any>)
-      rc
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("nativePlayerEvent", map)
-    } catch (_: Throwable) {
-      // ignore
+    runOnUiThread {
+      val rc = getReactContextUnsafe() ?: return@runOnUiThread
+      if (!rc.hasActiveCatalystInstance()) return@runOnUiThread
+
+      try {
+        if (pendingTracksEmit) {
+          val trackPayload = HashMap<String, Any>()
+          trackPayload["sessionId"] = sessionId
+          trackPayload["engine"] = engine
+          trackPayload["type"] = "tracks"
+          trackPayload["audioTracks"] = cachedAudioTracks
+          trackPayload["subtitleTracks"] = cachedSubtitleTracks
+
+          val trackMap = Arguments.makeNativeMap(trackPayload as Map<String, Any>)
+          rc
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("nativePlayerEvent", trackMap)
+          pendingTracksEmit = false
+        }
+
+        if (eventType != "tracks") {
+          val map = Arguments.makeNativeMap(payload as Map<String, Any>)
+          rc
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("nativePlayerEvent", map)
+        }
+      } catch (_: Throwable) {
+        // ignore
+      }
     }
   }
 }
