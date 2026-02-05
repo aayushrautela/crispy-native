@@ -2,6 +2,7 @@ package aayush.crispy.core.player
 
 import android.app.PictureInPictureParams
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ActivityInfo
@@ -933,6 +934,52 @@ class PlayerActivity : ReactActivity() {
       if (ctx != null) return ctx
     } catch (_: Exception) {}
 
+    // 3. Bridgeless fallback: try ReactHost#getCurrentReactContext via reflection.
+    val fromActivityHost = getReactContextFromReactHost(this)
+    if (fromActivityHost != null) return fromActivityHost
+
+    val fromAppHost = getReactContextFromReactHost(application)
+    if (fromAppHost != null) return fromAppHost
+
+    // 4. Fallback to the mounted React root view context.
+    val content = findViewById<ViewGroup>(android.R.id.content)
+    if (content != null) {
+      for (i in 0 until content.childCount) {
+        val child = content.getChildAt(i) ?: continue
+        val ctx = unwrapReactContext(child.context)
+        if (ctx != null) return ctx
+      }
+    }
+
+    return null
+  }
+
+  private fun getReactContextFromReactHost(hostOwner: Any?): ReactContext? {
+    if (hostOwner == null) return null
+    return try {
+      val getReactHost = hostOwner.javaClass.methods.firstOrNull {
+        it.name == "getReactHost" && it.parameterTypes.isEmpty()
+      } ?: return null
+
+      val reactHost = getReactHost.invoke(hostOwner) ?: return null
+      val getCurrentReactContext = reactHost.javaClass.methods.firstOrNull {
+        it.name == "getCurrentReactContext" && it.parameterTypes.isEmpty()
+      } ?: return null
+
+      getCurrentReactContext.invoke(reactHost) as? ReactContext
+    } catch (_: Throwable) {
+      null
+    }
+  }
+
+  private fun unwrapReactContext(context: Context?): ReactContext? {
+    var current = context
+    var guard = 0
+    while (current != null && guard < 12) {
+      if (current is ReactContext) return current
+      current = (current as? ContextWrapper)?.baseContext
+      guard += 1
+    }
     return null
   }
 
@@ -941,10 +988,6 @@ class PlayerActivity : ReactActivity() {
       val rc = getReactContextUnsafe()
       if (rc == null) {
           Log.w(TAG, "emit: ReactContext is null, cannot emit $eventName")
-          return@runOnUiThread
-      }
-      if (!rc.hasActiveCatalystInstance()) {
-          Log.w(TAG, "emit: No active Catalyst instance, cannot emit $eventName")
           return@runOnUiThread
       }
       try {
@@ -980,10 +1023,6 @@ class PlayerActivity : ReactActivity() {
       val rc = getReactContextUnsafe()
       if (rc == null) {
           Log.w(TAG, "emitNativePlayerEvent: ReactContext is null, cannot emit $eventType")
-          return@runOnUiThread
-      }
-      if (!rc.hasActiveCatalystInstance()) {
-          Log.w(TAG, "emitNativePlayerEvent: No active Catalyst instance, cannot emit $eventType")
           return@runOnUiThread
       }
 

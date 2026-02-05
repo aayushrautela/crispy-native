@@ -97,6 +97,24 @@ const pickEpisodeFromId = (rawId: string): number | null => {
     return null;
 };
 
+const normalizePipMode = (payload: any): boolean => {
+    if (typeof payload === 'boolean') return payload;
+    if (typeof payload === 'number') return payload === 1;
+    if (payload && typeof payload === 'object') {
+        if (typeof payload.isInPictureInPictureMode === 'boolean') return payload.isInPictureInPictureMode;
+        if (typeof payload.isPip === 'boolean') return payload.isPip;
+        if (typeof payload.inPip === 'boolean') return payload.inPip;
+        if (payload.nativeEvent) return normalizePipMode(payload.nativeEvent);
+    }
+    return !!payload;
+};
+
+const toFiniteNumber = (value: any): number => {
+    const parsed = typeof value === 'string' ? Number.parseFloat(value) : Number(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return parsed;
+};
+
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { theme } = useTheme();
     const settings = useUserStore((s) => s.settings);
@@ -247,33 +265,42 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     // --- Native Events ---
     useEffect(() => {
-        const sub = DeviceEventEmitter.addListener('nativePlayerEvent', (evt: any) => {
+        const sub = DeviceEventEmitter.addListener('nativePlayerEvent', (incoming: any) => {
+            const evt = incoming?.nativeEvent ?? incoming;
+            if (!evt || typeof evt !== 'object') return;
             if (sessionId && evt.sessionId && evt.sessionId !== sessionId) return;
             switch (evt.type) {
                 case 'load':
-                    setLastError(null);
-                    setStableDuration(evt.duration || 0);
-                    setProgress(p => ({ ...p, duration: evt.duration || 0 }));
-                    setLoadingStreamSwitch(false);
-                    setFirstFrameRendered(true);
-                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
-                    if (pendingSeekAfterLoadRef.current !== null) {
-                        void CrispyNativeCore.nativePlayerSeek(pendingSeekAfterLoadRef.current);
-                        pendingSeekAfterLoadRef.current = null;
-                    }
-                    break;
-                case 'progress':
-                    if (!isSeeking) setProgress({ position: evt.position, duration: evt.duration });
-                    if (evt.position > 0) {
+                    {
+                        const duration = toFiniteNumber(evt.duration);
+                        setLastError(null);
+                        setStableDuration(duration);
+                        setProgress(p => ({ ...p, duration }));
+                        setLoadingStreamSwitch(false);
                         setFirstFrameRendered(true);
-                        setBuffering(false);
                         useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                        if (pendingSeekAfterLoadRef.current !== null) {
+                            void CrispyNativeCore.nativePlayerSeek(pendingSeekAfterLoadRef.current);
+                            pendingSeekAfterLoadRef.current = null;
+                        }
+                        break;
                     }
-                    if (contentType === 'series' && evt.duration > 0) {
-                        const timeLeft = evt.duration - evt.position;
-                        setShowUpNext(timeLeft <= UP_NEXT_TRIGGER_SECONDS && timeLeft > 0);
+                case 'progress':
+                    {
+                        const position = toFiniteNumber(evt.position ?? evt.currentTime);
+                        const duration = toFiniteNumber(evt.duration);
+                        if (!isSeeking) setProgress({ position, duration });
+                        if (position > 0) {
+                            setFirstFrameRendered(true);
+                            setBuffering(false);
+                            useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                        }
+                        if (contentType === 'series' && duration > 0) {
+                            const timeLeft = duration - position;
+                            setShowUpNext(timeLeft <= UP_NEXT_TRIGGER_SECONDS && timeLeft > 0);
+                        }
+                        break;
                     }
-                    break;
                 case 'tracks':
                     setAudioTracks(evt.audioTracks || []);
                     setSubtitleTracks(evt.subtitleTracks || []);
@@ -289,9 +316,12 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     }
                     break;
                 case 'buffering':
-                    setBuffering(!!evt.buffering);
-                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: evt.buffering ? 'buffering' : 'ready' });
-                    break;
+                    {
+                        const isBuffering = !!evt.buffering;
+                        setBuffering(isBuffering);
+                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: isBuffering ? 'buffering' : 'ready' });
+                        break;
+                    }
                 case 'first-frame':
                     setFirstFrameRendered(true);
                     setBuffering(false);
@@ -384,7 +414,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     // --- Lifecycle ---
     useEffect(() => {
-        const sub = DeviceEventEmitter.addListener('onPipModeChanged', (isPip: boolean) => {
+        const sub = DeviceEventEmitter.addListener('onPipModeChanged', (payload: any) => {
+            const isPip = normalizePipMode(payload);
             setIsPipMode(isPip);
             setShowControls(!isPip);
             if (isPip) setActiveTab('none');

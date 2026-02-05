@@ -50,7 +50,12 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     const { theme } = useTheme();
     const { width } = useWindowDimensions();
 
-    const duration = useMemo(() => stableDuration || progress.duration || 1, [stableDuration, progress.duration]);
+    const duration = useMemo(() => {
+        const next = stableDuration > 0 ? stableDuration : progress.duration;
+        if (!Number.isFinite(next) || next <= 0) return 0;
+        return next;
+    }, [stableDuration, progress.duration]);
+    const seekableDuration = duration > 0 ? duration : 1;
 
     if (!visible) return null;
 
@@ -111,7 +116,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                         setIsSeeking(true);
                         const { pageX } = e.nativeEvent;
                         const percentage = Math.max(0, Math.min(1, pageX / width));
-                        const targetPos = duration * percentage;
+                        const targetPos = seekableDuration * percentage;
                         void CrispyNativeCore.nativePlayerSeek(targetPos);
                         resetControlsTimer();
                         setProgress((p: any) => ({ ...p, position: targetPos }));
@@ -119,7 +124,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     onResponderMove={(e) => {
                         const { pageX } = e.nativeEvent;
                         const percentage = Math.max(0, Math.min(1, pageX / width));
-                        const targetPos = duration * percentage;
+                        const targetPos = seekableDuration * percentage;
                         void CrispyNativeCore.nativePlayerSeek(targetPos);
                         resetControlsTimer();
                         setProgress((p: any) => ({ ...p, position: targetPos }));
@@ -129,7 +134,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     }}
                 >
                     {(() => {
-                        const percent = Math.max(0, Math.min(100, (progress.position / duration) * 100));
+                        const percent = Math.max(0, Math.min(100, (progress.position / seekableDuration) * 100));
                         const fillWidth = Math.max(0, percent - 0.8);
                         const inactiveLeft = Math.min(100, percent + 0.8);
 
