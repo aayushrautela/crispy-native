@@ -9,7 +9,7 @@ import { CustomSubtitles } from '@/src/features/player/components/subtitles/Cust
 import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
- import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 // New Decomposed Components & Hooks
@@ -220,6 +220,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     setStableDuration(evt.duration || 0);
                     setProgress(p => ({ ...p, duration: evt.duration || 0 }));
                     setLoadingStreamSwitch(false);
+                    setFirstFrameRendered(true);
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
                     if (pendingSeekAfterLoadRef.current !== null) {
                         void CrispyNativeCore.nativePlayerSeek(pendingSeekAfterLoadRef.current);
                         pendingSeekAfterLoadRef.current = null;
@@ -227,7 +229,11 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     break;
                 case 'progress':
                     if (!isSeeking) setProgress({ position: evt.position, duration: evt.duration });
-                    if (evt.position > 0) { setFirstFrameRendered(true); setBuffering(false); }
+                    if (evt.position > 0) {
+                        setFirstFrameRendered(true);
+                        setBuffering(false);
+                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                    }
                     if (contentType === 'series' && evt.duration > 0) {
                         const timeLeft = evt.duration - evt.position;
                         setShowUpNext(timeLeft <= UP_NEXT_TRIGGER_SECONDS && timeLeft > 0);
@@ -242,10 +248,25 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 case 'isPlaying':
                     setPaused(!evt.isPlaying);
                     useNativePlayerSessionStore.getState().patchSession(sessionId, { paused: !evt.isPlaying });
+                    if (evt.isPlaying) {
+                        setFirstFrameRendered(true);
+                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                    }
                     break;
-                case 'buffering': setBuffering(!!evt.buffering); break;
-                case 'first-frame': setFirstFrameRendered(true); setBuffering(false); break;
-                case 'error': setLastError(evt.message); setLoadingStreamSwitch(false); break;
+                case 'buffering':
+                    setBuffering(!!evt.buffering);
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: evt.buffering ? 'buffering' : 'ready' });
+                    break;
+                case 'first-frame':
+                    setFirstFrameRendered(true);
+                    setBuffering(false);
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                    break;
+                case 'error':
+                    setLastError(evt.message);
+                    setLoadingStreamSwitch(false);
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'error' });
+                    break;
                 case 'end': void CrispyNativeCore.closePlayerActivity(); break;
             }
         });
@@ -310,6 +331,31 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             if (isPip) setActiveTab('none');
         });
         return () => sub.remove();
+    }, []);
+
+    useEffect(() => {
+        let mounted = true;
+
+        const syncPipState = async () => {
+            const inPip = await CrispyNativeCore.isInPiPMode();
+            if (!mounted) return;
+            setIsPipMode(inPip);
+            setShowControls(!inPip);
+            if (inPip) setActiveTab('none');
+        };
+
+        void syncPipState();
+
+        const sub = AppState.addEventListener('change', (state) => {
+            if (state === 'active') {
+                void syncPipState();
+            }
+        });
+
+        return () => {
+            mounted = false;
+            sub.remove();
+        };
     }, []);
 
     const subtitleOptions = useMemo(() => [

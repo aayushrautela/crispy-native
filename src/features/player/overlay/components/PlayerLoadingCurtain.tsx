@@ -35,7 +35,7 @@ export const PlayerLoadingCurtain: React.FC<PlayerLoadingCurtainProps> = ({
         if (buffering) return true;
         
         const pState = session?.playbackState || 'idle';
-        const ready = pState === 'ready' || (firstFrameRendered && (position > 0 || stableDuration > 0));
+        const ready = pState === 'ready' || firstFrameRendered || position > 0 || stableDuration > 0;
         if (!ready && !lastError) return true;
         return false;
     }, [isPipMode, loadingStreamSwitch, buffering, session?.playbackState, firstFrameRendered, position, stableDuration, lastError]);
@@ -44,10 +44,12 @@ export const PlayerLoadingCurtain: React.FC<PlayerLoadingCurtainProps> = ({
 
     return (
         <View style={styles.centerLoading} pointerEvents="none">
-            <LoadingIndicator size="large" color={theme.colors.primary} />
-            <Typography variant="body" className="text-white mt-4">
-                {loadingStreamSwitch ? 'Switching Stream...' : buffering ? 'Buffering...' : 'Loading...'}
-            </Typography>
+            <View style={styles.loadingBadge}>
+                <LoadingIndicator size="large" color={theme.colors.primary} />
+                <Typography variant="body" className="text-white mt-2">
+                    {loadingStreamSwitch ? 'Switching Stream...' : buffering ? 'Buffering...' : 'Loading...'}
+                </Typography>
+            </View>
         </View>
     );
 };
@@ -55,9 +57,15 @@ export const PlayerLoadingCurtain: React.FC<PlayerLoadingCurtainProps> = ({
 const styles = StyleSheet.create({
     centerLoading: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'black',
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
+    },
+    loadingBadge: {
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        alignItems: 'center',
     },
 });
