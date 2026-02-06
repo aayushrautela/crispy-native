@@ -21,7 +21,7 @@ export interface CrispyPiPConfig {
 export type CrispyPlayerEngine = 'exoplayer' | 'mpv';
 
 export type CrispyResizeMode = 'contain' | 'cover' | 'stretch';
-export type CrispyDecoderMode = 'auto' | 'sw' | 'hw';
+export type CrispyDecoderMode = 'auto' | 'sw' | 'hw' | 'hw+';
 export type CrispyGpuMode = 'gpu' | 'gpu-next';
 
 export interface CrispyOpenPlayerActivityParams {

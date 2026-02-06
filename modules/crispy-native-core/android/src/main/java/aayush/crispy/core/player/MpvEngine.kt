@@ -525,7 +525,7 @@ class MpvEngine(
     MPVLib.setOptionString("profile", "fast")
 
     val normalizedVo = normalizeGpuMode(gpuMode)
-    val requestedHwdec = resolveRequestedHwdec(decoderMode)
+    val requestedHwdec = resolveRequestedHwdec()
 
     MPVLib.setOptionString("vo", normalizedVo)
     MPVLib.setOptionString("gpu-context", "android")
@@ -577,8 +577,9 @@ class MpvEngine(
     return when ((mode ?: "auto").lowercase()) {
       "sw" -> "sw"
       "hw" -> "hw"
-      // Legacy values: preserve acceleration semantics but remove copy mode.
-      "hw+", "copy" -> "hw"
+      "hw+" -> "hw+"
+      // Legacy value: used to mean mediacodec-copy.
+      "copy" -> "hw+"
       else -> "auto"
     }
   }
@@ -588,10 +589,6 @@ class MpvEngine(
       "gpu-next" -> "gpu-next"
       else -> "gpu"
     }
-  }
-
-  private fun resolveRequestedHwdec(mode: String): String {
-    return if (mode == "sw") "no" else "mediacodec"
   }
 
   /**
@@ -646,14 +643,23 @@ class MpvEngine(
       return
     }
 
-    // Hardware supported - use recommended mode
-    currentDecoderStage = when (probeResult.recommendedHwdec) {
-      "mediacodec-copy" -> DecoderStage.MEDIACODEC_COPY
-      "no" -> DecoderStage.SOFTWARE
-      else -> DecoderStage.MEDIACODEC
+    // Hardware supported
+    currentDecoderStage = when (decoderMode) {
+      "hw" -> DecoderStage.MEDIACODEC
+      "hw+" -> DecoderStage.MEDIACODEC_COPY
+      else -> when (probeResult.recommendedHwdec) {
+        "mediacodec-copy" -> DecoderStage.MEDIACODEC_COPY
+        "no" -> DecoderStage.SOFTWARE
+        else -> DecoderStage.MEDIACODEC
+      }
     }
 
-    Log.i(TAG, "Decoder: ${currentDecoderStage.name} (probe: ${probeResult.codecName ?: "unknown"})")
+    val selectionReason = when (decoderMode) {
+      "hw" -> "user-selected"
+      "hw+" -> "user-selected"
+      else -> "probe: ${probeResult.codecName ?: "unknown"}"
+    }
+    Log.i(TAG, "Decoder: ${currentDecoderStage.name} ($selectionReason)")
   }
 
   /**
@@ -681,7 +687,7 @@ class MpvEngine(
 
     // Don't schedule if already at software or if user explicitly set decoder mode
     if (currentDecoderStage == DecoderStage.SOFTWARE) return
-    if (decoderMode == "sw" || decoderMode == "hw") return
+    if (decoderMode == "sw" || decoderMode == "hw" || decoderMode == "hw+") return
 
     val generation = activeSourceGeneration
     val task = Runnable {
@@ -747,13 +753,16 @@ class MpvEngine(
   private fun attemptIncrementalFallback(reason: String) {
     if (!isInitialized) return
     if (decoderMode == "sw") return // User explicitly wants software
-    if (decoderMode == "hw" && currentDecoderStage == DecoderStage.SOFTWARE) return // User wants hardware, already fell back
+    if (decoderMode == "hw+") return // User explicitly wants mediacodec-copy
 
     val nextStage = when (currentDecoderStage) {
       DecoderStage.MEDIACODEC -> DecoderStage.MEDIACODEC_COPY
       DecoderStage.MEDIACODEC_COPY -> DecoderStage.SOFTWARE
       DecoderStage.SOFTWARE -> return // Already at software, nothing to do
     }
+
+    // If user explicitly selected a hardware mode, never fall back to software.
+    if (decoderMode != "auto" && nextStage == DecoderStage.SOFTWARE) return
 
     Log.w(TAG, "Decoder fallback: ${currentDecoderStage.name} -> ${nextStage.name}; reason=$reason")
     logHardwareFailure(reason)

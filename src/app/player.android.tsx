@@ -88,7 +88,7 @@ export default function PlayerScreenAndroid() {
     const [status, setStatus] = useState<'resolving' | 'launching' | 'failed'>('resolving');
     const [message, setMessage] = useState<string>('Resolving stream...');
 
-    const engine = useMemo<'exoplayer' | 'mpv'>(() => {
+    const preferredEngine = useMemo<'exoplayer' | 'mpv'>(() => {
         if (settings.videoPlayerEngine === 'mpv') return 'mpv';
         return 'exoplayer';
     }, [settings.videoPlayerEngine]);
@@ -124,43 +124,50 @@ export default function PlayerScreenAndroid() {
                 setStatus('launching');
                 setMessage('Opening player...');
 
-                useNativePlayerSessionStore.getState().upsertSession({
-                    sessionId,
-                    id,
-                    type,
+                 useNativePlayerSessionStore.getState().upsertSession({
+                     sessionId,
+                     id,
+                     type,
                     title,
                     poster,
                     episodeTitle,
                     url: finalUrl,
                     headers,
-                    streams: warmStreams,
-                    infoHash: resolvedInfoHash,
-                    fileIdx: resolvedFileIdx,
-                    engine,
-                    paused: false,
-                    artist: type === 'movie' ? 'Movie' : title,
-                    artworkUrl: poster,
-                });
+                     streams: warmStreams,
+                     infoHash: resolvedInfoHash,
+                     fileIdx: resolvedFileIdx,
+                     engine: preferredEngine,
+                     paused: false,
+                     artist: type === 'movie' ? 'Movie' : title,
+                     artworkUrl: poster,
+                 });
 
                 if (launchedRef.current) return;
                 launchedRef.current = true;
 
-                const ok = await CrispyNativeCore.openPlayerActivity({
-                    sessionId,
-                    url: finalUrl,
-                    headers,
-                    engine,
-                    paused: false,
-                    metadata: {
-                        title: episodeTitle || title || 'Now Playing',
-                        subtitle: type === 'movie' ? 'Movie' : title || 'Series',
-                        artworkUrl: poster || undefined,
-                    },
-                });
+                 const tryOpen = (engineToUse: 'exoplayer' | 'mpv') => CrispyNativeCore.openPlayerActivity({
+                     sessionId,
+                     url: finalUrl,
+                     headers,
+                     engine: engineToUse,
+                     paused: false,
+                     metadata: {
+                         title: episodeTitle || title || 'Now Playing',
+                         subtitle: type === 'movie' ? 'Movie' : title || 'Series',
+                         artworkUrl: poster || undefined,
+                     },
+                 });
 
-                if (!ok) throw new Error('Failed to open native player');
-                handoffRef.current = true;
-                router.back();
+                 let ok = await tryOpen(preferredEngine);
+                 if (!ok && settings.videoPlayerEngine === 'auto' && preferredEngine === 'exoplayer') {
+                     console.warn('[player.android] ExoPlayer open failed; retrying with MPV');
+                     useNativePlayerSessionStore.getState().patchSession(sessionId, { engine: 'mpv' });
+                     ok = await tryOpen('mpv');
+                 }
+
+                 if (!ok) throw new Error('Failed to open native player');
+                 handoffRef.current = true;
+                 router.back();
             } catch (e: any) {
                 if (!mounted) return;
                 console.error('[player.android] launch failed', e);
@@ -181,7 +188,7 @@ export default function PlayerScreenAndroid() {
                 // ignore
             }
         };
-    }, [engine, episodeTitle, fileIdx, headers, id, infoHash, poster, router, sessionId, title, type, urlParam, warmStreams]);
+     }, [preferredEngine, episodeTitle, fileIdx, headers, id, infoHash, poster, router, sessionId, settings.videoPlayerEngine, title, type, urlParam, warmStreams]);
 
     return (
         <View style={styles.root}>

@@ -11,15 +11,15 @@ import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const ENGINES = [
     { label: 'Auto', value: 'auto' },
-    { label: 'ExoPlayer', value: 'exoplayer' },
     { label: 'MPV', value: 'mpv' },
-];
+] as const;
 
 const DECODER_MODES = [
     { label: 'Auto', value: 'auto' },
+    { label: 'HW+', value: 'hw+' },
     { label: 'HW', value: 'hw' },
     { label: 'SW', value: 'sw' },
-];
+] as const;
 
 const GPU_MODES = [
     { label: 'Default (GPU)', value: 'gpu' },
@@ -37,6 +37,8 @@ export default function PlaybackScreen() {
     const { settings, updateSettings } = useUserStore();
     const { videoPlayerEngine, autoplayEnabled, introSkipMode, decoderMode, gpuMode } = settings;
 
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
+
     return (
         <SettingsSubpage title="Playback">
             <View>
@@ -44,7 +46,7 @@ export default function PlaybackScreen() {
                     <SettingsItem
                         icon={Settings2}
                         label="Video Engine"
-                        description="Select the library used for playback"
+                        description="Auto starts with ExoPlayer and falls back to MPV"
                         showChevron={false}
                     />
                     <View style={styles.pickerContainer}>
@@ -58,11 +60,11 @@ export default function PlaybackScreen() {
                                 return (
                                     <TouchableOpacity
                                         key={engine.value}
-                                        onPress={() => updateSettings({ videoPlayerEngine: engine.value as any })}
+                                        onPress={() => updateSettings({ videoPlayerEngine: engine.value })}
                                         style={[
                                             styles.chip,
                                             {
-                                                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
                                             }
                                         ]}
                                     >
@@ -79,83 +81,81 @@ export default function PlaybackScreen() {
                     </View>
                 </SettingsGroup>
 
-                {videoPlayerEngine === 'mpv' && (
-                    <SettingsGroup title="MPV Settings">
-                        <SettingsItem
-                            icon={Zap}
-                            label="Decoder Mode"
-                            description="Auto tries hardware first and falls back to software"
-                            showChevron={false}
-                        />
-                        <View style={styles.pickerContainer}>
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.pickerScroll}
-                            >
-                                {DECODER_MODES.map((mode) => {
-                                    const isSelected = decoderMode === mode.value;
-                                    return (
-                                        <TouchableOpacity
-                                            key={mode.value}
-                                            onPress={() => updateSettings({ decoderMode: mode.value as any })}
-                                            style={[
-                                                styles.chip,
-                                                {
-                                                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
-                                                }
-                                            ]}
+                <SettingsGroup title="MPV Settings">
+                    <SettingsItem
+                        icon={Zap}
+                        label="Decoder Mode"
+                        description="Used by MPV (and Auto fallback)"
+                        showChevron={false}
+                    />
+                    <View style={styles.pickerContainer}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.pickerScroll}
+                        >
+                            {DECODER_MODES.map((mode) => {
+                                const isSelected = decoderMode === mode.value;
+                                return (
+                                    <TouchableOpacity
+                                        key={mode.value}
+                                        onPress={() => updateSettings({ decoderMode: mode.value })}
+                                        style={[
+                                            styles.chip,
+                                            {
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
+                                            }
+                                        ]}
+                                    >
+                                        <Typography
+                                            variant="label-large"
+                                            style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.onSurface }}
                                         >
-                                            <Typography
-                                                variant="label-large"
-                                                style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.onSurface }}
-                                            >
-                                                {mode.label}
-                                            </Typography>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        </View>
+                                            {mode.label}
+                                        </Typography>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
 
-                        <SettingsItem
-                            icon={Cpu}
-                            label="GPU Renderer"
-                            description="Select GPU rendering quality"
-                            showChevron={false}
-                        />
-                        <View style={styles.pickerContainer}>
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.pickerScroll}
-                            >
-                                {GPU_MODES.map((mode) => {
-                                    const isSelected = gpuMode === mode.value;
-                                    return (
-                                        <TouchableOpacity
-                                            key={mode.value}
-                                            onPress={() => updateSettings({ gpuMode: mode.value as any })}
-                                            style={[
-                                                styles.chip,
-                                                {
-                                                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
-                                                }
-                                            ]}
+                    <SettingsItem
+                        icon={Cpu}
+                        label="GPU Renderer"
+                        description="Select GPU rendering quality"
+                        showChevron={false}
+                    />
+                    <View style={styles.pickerContainer}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.pickerScroll}
+                        >
+                            {GPU_MODES.map((mode) => {
+                                const isSelected = gpuMode === mode.value;
+                                return (
+                                    <TouchableOpacity
+                                        key={mode.value}
+                                        onPress={() => updateSettings({ gpuMode: mode.value as any })}
+                                        style={[
+                                            styles.chip,
+                                            {
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
+                                            }
+                                        ]}
+                                    >
+                                        <Typography
+                                            variant="label-large"
+                                            style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.onSurface }}
                                         >
-                                            <Typography
-                                                variant="label-large"
-                                                style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.onSurface }}
-                                            >
-                                                {mode.label}
-                                            </Typography>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        </View>
-                    </SettingsGroup>
-                )}
+                                            {mode.label}
+                                        </Typography>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                </SettingsGroup>
 
                 <SettingsGroup title="Behavior">
                     <SettingsItem
@@ -191,7 +191,7 @@ export default function PlaybackScreen() {
                                         style={[
                                             styles.chip,
                                             {
-                                                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
                                             }
                                         ]}
                                     >

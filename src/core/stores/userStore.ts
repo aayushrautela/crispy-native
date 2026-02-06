@@ -29,12 +29,19 @@ export interface AppSettings {
     accentColor: string;
     amoledMode: boolean;
     useMaterialYou: boolean;
-    videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
+    // Playback engine preference. "auto" starts with ExoPlayer and falls back to MPV when needed.
+    videoPlayerEngine: 'auto' | 'mpv';
 
     // Player engine tuning (used by MPV surface)
-    decoderMode?: 'auto' | 'sw' | 'hw';
+    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
     gpuMode?: 'gpu' | 'gpu-next';
     updatedAt?: number;
+}
+
+function normalizeVideoPlayerEngine(value: unknown): AppSettings['videoPlayerEngine'] {
+    const engine = typeof value === 'string' ? value.toLowerCase() : '';
+    // Legacy values: treat explicit Exo selection as Auto.
+    return engine === 'mpv' ? 'mpv' : 'auto';
 }
 
 function normalizeDecoderMode(value: unknown): AppSettings['decoderMode'] {
@@ -44,10 +51,11 @@ function normalizeDecoderMode(value: unknown): AppSettings['decoderMode'] {
             return 'sw';
         case 'hw':
             return 'hw';
-        // Legacy values kept for backward compatibility with persisted settings.
         case 'hw+':
+            return 'hw+';
+        // Legacy values kept for backward compatibility with persisted settings.
         case 'copy':
-            return 'hw';
+            return 'hw+';
         default:
             return 'auto';
     }
@@ -124,7 +132,7 @@ function getDefaultSettings(): AppSettings {
         accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
         useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
-        videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
+        videoPlayerEngine: normalizeVideoPlayerEngine(StorageService.getUser<string>('crispy-video-engine')),
 
         decoderMode: normalizeDecoderMode(StorageService.getUser<string>('crispy-decoder-mode')),
         gpuMode: normalizeGpuMode(StorageService.getUser<string>('crispy-gpu-mode')),
