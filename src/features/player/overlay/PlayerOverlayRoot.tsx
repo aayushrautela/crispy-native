@@ -125,7 +125,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const session = useNativePlayerSessionStore((s) => (sessionId ? s.sessionsById[sessionId] : undefined));
     const playbackEngine = useMemo(() => {
         const raw = (session?.engine || props.engine || 'exoplayer').toLowerCase();
-        return raw === 'mpv' ? 'mpv' : 'exoplayer';
+        return raw === 'vlc' ? 'vlc' : 'exoplayer';
     }, [props.engine, session?.engine]);
 
     const contentId = useMemo(() => session?.id || '', [session?.id]);
@@ -344,7 +344,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     useEffect(() => {
         if (Platform.OS !== 'android') return;
-        if (playbackEngine !== 'mpv') return;
+        if (playbackEngine !== 'vlc') return;
 
         const decoderMode = settings.decoderMode || 'auto';
         const gpuMode = settings.gpuMode || 'gpu';

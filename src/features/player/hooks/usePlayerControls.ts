@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 const END_EPSILON = 0.3;
 
 export const usePlayerControls = (
-    mpvPlayerRef: any,
+    vlcPlayerRef: any,
     paused: boolean,
     setPaused: (paused: boolean) => void,
     currentTime: number,
@@ -40,10 +40,10 @@ export const usePlayerControls = (
             return;
         }
 
-        // MPV Player
-        if (mpvPlayerRef?.current && duration > 0) {
+        // VLC Player
+        if (vlcPlayerRef?.current && duration > 0) {
             isSeeking.current = true;
-            mpvPlayerRef.current.seek(timeInSeconds);
+            vlcPlayerRef.current.seek(timeInSeconds);
 
             setTimeout(() => {
                 if (isMounted.current) {
@@ -52,7 +52,7 @@ export const usePlayerControls = (
             }, 500);
             return;
         }
-    }, [duration, mpvPlayerRef, exoPlayerRef, useExoPlayer, isSeeking, isMounted]);
+    }, [duration, vlcPlayerRef, exoPlayerRef, useExoPlayer, isSeeking, isMounted]);
 
     const skip = useCallback((seconds: number) => {
         seekToTime(currentTime + seconds);

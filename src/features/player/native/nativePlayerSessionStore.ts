@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type PlayerContentType = 'movie' | 'series';
-export type NativePlayerEngine = 'exoplayer' | 'mpv';
+export type NativePlayerEngine = 'exoplayer' | 'vlc';
 export type PlaybackState = 'idle' | 'resolving' | 'loading' | 'buffering' | 'ready' | 'error';
 
 export interface NativePlayerSessionContext {

@@ -18,7 +18,7 @@ export interface CrispyPiPConfig {
     height?: number;
 }
 
-export type CrispyPlayerEngine = 'exoplayer' | 'mpv';
+export type CrispyPlayerEngine = 'exoplayer' | 'vlc';
 
 export type CrispyResizeMode = 'contain' | 'cover' | 'stretch';
 export type CrispyDecoderMode = 'auto' | 'sw' | 'hw' | 'hw+';
@@ -72,10 +72,10 @@ type NativeView<P> = React.ForwardRefExoticComponent<React.PropsWithoutRef<P> & 
 
 export const CrispyVideoView = requireNativeViewManager('CrispyNativeCore') as NativeView<CrispyVideoViewProps>;
 
-// MPV view (native: CrispyMpvVideoView). Keep CrispyVideoView export for backwards compatibility.
-export const CrispyMpvVideoView = CrispyVideoView;
-export type CrispyMpvVideoViewProps = CrispyVideoViewProps;
-export type CrispyMpvVideoViewRef = CrispyVideoViewRef;
+// VLC view (native: CrispyVlcVideoView). Keep CrispyVideoView export for backwards compatibility.
+export const CrispyVlcVideoView = CrispyVideoView;
+export type CrispyVlcVideoViewProps = CrispyVideoViewProps;
+export type CrispyVlcVideoViewRef = CrispyVideoViewRef;
 
 export interface CrispyExoVideoViewProps extends ViewProps {
     source?: string;

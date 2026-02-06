@@ -11,7 +11,7 @@ import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const ENGINES = [
     { label: 'Auto', value: 'auto' },
-    { label: 'MPV', value: 'mpv' },
+    { label: 'VLC', value: 'vlc' },
 ] as const;
 
 const DECODER_MODES = [
@@ -81,11 +81,11 @@ export default function PlaybackScreen() {
                     </View>
                 </SettingsGroup>
 
-                <SettingsGroup title="MPV Settings">
+                <SettingsGroup title="VLC Settings">
                     <SettingsItem
                         icon={Zap}
                         label="Decoder Mode"
-                        description="Used by MPV (and Auto fallback)"
+                        description="Used by VLC (and Auto fallback)"
                         showChevron={false}
                     />
                     <View style={styles.pickerContainer}>

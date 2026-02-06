@@ -30,7 +30,7 @@ export interface AppSettings {
     amoledMode: boolean;
     useMaterialYou: boolean;
     // Playback engine preference. "auto" starts with ExoPlayer and falls back to MPV when needed.
-    videoPlayerEngine: 'auto' | 'mpv';
+    videoPlayerEngine: 'auto' | 'vlc';
 
     // Player engine tuning (used by MPV surface)
     decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
@@ -41,7 +41,7 @@ export interface AppSettings {
 function normalizeVideoPlayerEngine(value: unknown): AppSettings['videoPlayerEngine'] {
     const engine = typeof value === 'string' ? value.toLowerCase() : '';
     // Legacy values: treat explicit Exo selection as Auto.
-    return engine === 'mpv' ? 'mpv' : 'auto';
+    return engine === 'vlc' ? 'vlc' : 'auto';
 }
 
 function normalizeDecoderMode(value: unknown): AppSettings['decoderMode'] {
@@ -228,6 +228,8 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
                 'amoledMode': 'crispy-amoled-mode',
                 'useMaterialYou': 'crispy-material-you',
                 'videoPlayerEngine': 'crispy-video-engine',
+        'decoderMode': 'crispy-decoder-mode',
+        'gpuMode': 'crispy-gpu-mode',
                 'audioLanguage': 'crispy-audio-language',
                 'subtitleLanguage': 'crispy-subtitle-language',
                 'subtitleSize': 'crispy-subtitle-size',

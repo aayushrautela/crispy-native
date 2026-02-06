@@ -124,7 +124,7 @@ const withProGuardRules = (config) => {
 
 /**
  * Force NDK version in top-level build.gradle.
- * Required for libmpv compatibility (NDK r29).
+ * Required for native player compatibility.
  */
 const withNdkFix = (config) => {
     return withProjectBuildGradle(config, (config) => {
@@ -153,39 +153,9 @@ const withNdkFix = (config) => {
  * Handle local AAR dependencies and file copying.
  */
 const withLocalAarDependencies = (config) => {
-    // Step 1: Copy AAR files to android/app/libs
-    config = withDangerousMod(config, [
-        'android',
-        async (config) => {
-            const sourcePath = path.join(config.modRequest.projectRoot, 'modules/crispy-native-core/android/libs');
-            const targetPath = path.join(config.modRequest.platformProjectRoot, 'app/libs');
-
-            if (!fs.existsSync(targetPath)) fs.mkdirSync(targetPath, { recursive: true });
-
-            const aarFiles = ['libmpv-release.aar', 'lib-decoder-ffmpeg-release.aar'];
-            for (const aarFile of aarFiles) {
-                const sourceFile = path.join(sourcePath, aarFile);
-                if (fs.existsSync(sourceFile)) {
-                    fs.copyFileSync(sourceFile, path.join(targetPath, aarFile));
-                }
-            }
-            return config;
-        },
-    ]);
-
-    // Step 2: Inject AAR dependencies into app build.gradle
-    return withAppBuildGradle(config, (config) => {
-        if (config.modResults.language === 'groovy') {
-            if (!config.modResults.contents.includes('libmpv-release.aar')) {
-                const aarDependencies = `
-    implementation files("libs/lib-decoder-ffmpeg-release.aar")
-    implementation files("libs/libmpv-release.aar")
-`;
-                config.modResults.contents = config.modResults.contents.replace(/dependencies\s*\{/, `dependencies {${aarDependencies}`);
-            }
-        }
-        return config;
-    });
+    // VLC is now loaded via Maven, no manual AAR copying needed
+    // jlibtorrent JARs are handled by the library build.gradle
+    return config;
 };
 
 /**

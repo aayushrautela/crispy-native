@@ -1,8 +1,8 @@
-import { CrispyMpvVideoView } from '@/modules/crispy-native-core';
+import { CrispyVlcVideoView } from '@/modules/crispy-native-core';
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
-export interface MpvPlayerRef {
+export interface VlcPlayerRef {
     seek: (positionSeconds: number) => void;
     setAudioTrack: (trackId: number) => void;
     setSubtitleTrack: (trackId: number) => void;
@@ -18,7 +18,7 @@ export interface MpvPlayerRef {
     enterPiP: () => void;
 }
 
-export interface MpvPlayerProps {
+export interface VlcPlayerProps {
     source: string;
     headers?: Record<string, string>;
     paused?: boolean;
@@ -59,16 +59,16 @@ interface ExpoNativeRef {
     enterPiP?: () => Promise<void>;
 }
 
-const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
+const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
     const nativeRef = useRef<ExpoNativeRef | null>(null);
 
     useImperativeHandle(ref, () => ({
         seek: (positionSeconds: number) => {
-            console.log('[MpvPlayer] seek called:', positionSeconds);
+            console.log('[VlcPlayer] seek called:', positionSeconds);
             nativeRef.current?.seek?.(positionSeconds);
         },
         setAudioTrack: (trackId: number) => {
-            console.log('[MpvPlayer] setAudioTrack called:', trackId);
+            console.log('[VlcPlayer] setAudioTrack called:', trackId);
             nativeRef.current?.setAudioTrack?.(trackId);
         },
         setSubtitleTrack: (trackId: number) => {
@@ -111,7 +111,7 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
     }
 
     const handleLoad = (event: any) => {
-        console.log('[MpvPlayer] Native onLoad event:', event?.nativeEvent);
+        console.log('[VlcPlayer] Native onLoad event:', event?.nativeEvent);
         props.onLoad?.(event?.nativeEvent);
     };
 
@@ -127,22 +127,22 @@ const MpvPlayer = forwardRef<MpvPlayerRef, MpvPlayerProps>((props, ref) => {
     };
 
     const handleEnd = () => {
-        console.log('[MpvPlayer] Native onEnd event');
+        console.log('[VlcPlayer] Native onEnd event');
         props.onEnd?.();
     };
 
     const handleError = (event: any) => {
-        console.log('[MpvPlayer] Native onError event:', event?.nativeEvent);
+        console.log('[VlcPlayer] Native onError event:', event?.nativeEvent);
         props.onError?.(event?.nativeEvent);
     };
 
     const handleTracksChanged = (event: any) => {
-        console.log('[MpvPlayer] Native onTracksChanged event:', event?.nativeEvent);
+        console.log('[VlcPlayer] Native onTracksChanged event:', event?.nativeEvent);
         props.onTracksChanged?.(event?.nativeEvent);
     };
 
     return (
-        <CrispyMpvVideoView
+        <CrispyVlcVideoView
             ref={nativeRef as any}
             style={[styles.container, props.style]}
             source={props.source}
@@ -171,6 +171,6 @@ const styles = StyleSheet.create({
     },
 });
 
-MpvPlayer.displayName = 'MpvPlayer';
+VlcPlayer.displayName = 'VlcPlayer';
 
-export default MpvPlayer;
+export default VlcPlayer;

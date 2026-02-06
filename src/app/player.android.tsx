@@ -88,8 +88,8 @@ export default function PlayerScreenAndroid() {
     const [status, setStatus] = useState<'resolving' | 'launching' | 'failed'>('resolving');
     const [message, setMessage] = useState<string>('Resolving stream...');
 
-    const preferredEngine = useMemo<'exoplayer' | 'mpv'>(() => {
-        if (settings.videoPlayerEngine === 'mpv') return 'mpv';
+    const preferredEngine = useMemo<'exoplayer' | 'vlc'>(() => {
+        if (settings.videoPlayerEngine === 'vlc') return 'vlc';
         return 'exoplayer';
     }, [settings.videoPlayerEngine]);
 
@@ -145,7 +145,7 @@ export default function PlayerScreenAndroid() {
                 if (launchedRef.current) return;
                 launchedRef.current = true;
 
-                 const tryOpen = (engineToUse: 'exoplayer' | 'mpv') => CrispyNativeCore.openPlayerActivity({
+                 const tryOpen = (engineToUse: 'exoplayer' | 'vlc') => CrispyNativeCore.openPlayerActivity({
                      sessionId,
                      url: finalUrl,
                      headers,
@@ -160,9 +160,9 @@ export default function PlayerScreenAndroid() {
 
                  let ok = await tryOpen(preferredEngine);
                  if (!ok && settings.videoPlayerEngine === 'auto' && preferredEngine === 'exoplayer') {
-                     console.warn('[player.android] ExoPlayer open failed; retrying with MPV');
-                     useNativePlayerSessionStore.getState().patchSession(sessionId, { engine: 'mpv' });
-                     ok = await tryOpen('mpv');
+                     console.warn('[player.android] ExoPlayer open failed; retrying with VLC');
+                     useNativePlayerSessionStore.getState().patchSession(sessionId, { engine: 'vlc' });
+                     ok = await tryOpen('vlc');
                  }
 
                  if (!ok) throw new Error('Failed to open native player');
