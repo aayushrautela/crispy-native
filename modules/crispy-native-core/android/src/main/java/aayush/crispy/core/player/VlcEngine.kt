@@ -21,7 +21,7 @@ class VlcEngine(
   private val appContext: Context,
   private val notificationCallbacks: NotificationCallbacks? = null,
   private val serviceCallbacks: ServiceCallbacks? = null
-) : IVLCVout.Callback {
+) : IVLCVout.Callback, IVLCVout.OnNewVideoLayoutListener {
 
   companion object {
     private const val TAG = "VlcEngine"
