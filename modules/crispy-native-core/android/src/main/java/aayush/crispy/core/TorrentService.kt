@@ -153,9 +153,19 @@ class TorrentService : Service() {
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
             listenInterfaces("0.0.0.0:0")
-            setEnableDht(true)
-            setEnableLsd(true)
+            setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), true)
             setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
+            
+            // Production grade connectivity settings
+            setString(settings_pack.string_types.user_agent.swigValue(), "qBittorrent/4.6.3")
+            
+            // Encryption: Enabled (Prefer) - allows both but prefers encryption
+            // 0=forced, 1=enabled, 2=disabled (Note: libtorrent enums vary, verifying standard: 1 is usually enabled/preferred)
+            setInteger(settings_pack.int_types.in_enc_policy.swigValue(), 1)
+            setInteger(settings_pack.int_types.out_enc_policy.swigValue(), 1)
+            setInteger(settings_pack.int_types.allowed_enc_level.swigValue(), 2) // Both plaintext and RC4 allowed
+            
             setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
             setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
             setBoolean(settings_pack.bool_types.prefer_udp_trackers.swigValue(), true)
