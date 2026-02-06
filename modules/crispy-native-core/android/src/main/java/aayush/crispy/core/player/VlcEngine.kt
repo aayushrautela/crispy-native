@@ -371,16 +371,16 @@ class VlcEngine(
   }
   
   // IVLCVout.Callback implementation
-  override fun onSurfacesCreated(vlcVout: IVLCVout?) {
+  override fun onSurfacesCreated(vlcVout: IVLCVout) {
       Log.d(TAG, "Surfaces created")
   }
   
-  override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {
+  override fun onSurfacesDestroyed(vlcVout: IVLCVout) {
       Log.d(TAG, "Surfaces destroyed")
   }
   
   override fun onNewVideoLayout(
-      vlcVout: IVLCVout?,
+      vlcVout: IVLCVout,
       width: Int,
       height: Int,
       visibleWidth: Int,
