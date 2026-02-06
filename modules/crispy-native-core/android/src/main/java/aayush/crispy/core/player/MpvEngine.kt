@@ -75,6 +75,7 @@ class MpvEngine(
   private var videoW: Int = 0
   private var videoH: Int = 0
   private var hasLoadEventFired = false
+  private var isSourceLoaded = false
 
   private var latestTitle: String = ""
   private var latestArtist: String = ""
@@ -127,6 +128,7 @@ class MpvEngine(
       Log.w(TAG, "attachSurface failed", t)
     }
     setSurfaceSize(width, height)
+    checkAndLoad()
   }
 
   fun detachSurface() {
@@ -155,6 +157,7 @@ class MpvEngine(
     if (url.isNullOrBlank()) return
     pendingSource = url
     hasLoadEventFired = false
+    isSourceLoaded = false
     durationSec = 0.0
     videoW = 0
     videoH = 0
@@ -163,20 +166,7 @@ class MpvEngine(
     lastEmittedIsPlaying = null
 
     ensureInitialized()
-    try {
-      MPVLib.command(arrayOf("loadfile", url))
-
-      // Apply the latest pause state immediately (setPaused() may have been called before init).
-      try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
-      ensureMediaSession()
-      mediaSessionHandler?.updatePlaybackState(!isPaused)
-      PipController.updateIsPlayingFromNative(!isPaused)
-
-      emitIsPlayingChangedIfNeeded(!isPaused)
-      emitBufferingChangedIfNeeded(false)
-    } catch (t: Throwable) {
-      emitError("Failed to load media")
-    }
+    checkAndLoad()
   }
 
   fun setPaused(paused: Boolean) {
@@ -354,6 +344,44 @@ class MpvEngine(
     setPaused(true)
   }
 
+  private fun checkAndLoad() {
+    if (!isInitialized) return
+    if (isSourceLoaded) return
+    val url = pendingSource ?: return
+    
+    // Defer load until surface is attached.
+    // This prevents "Client requested ByteBuffer mode decoder w/o color format set" errors
+    // which occur when MediaCodec is initialized without a surface (vo=gpu requirement).
+    if (currentSurfaceRef?.get() == null) {
+      Log.i(TAG, "checkAndLoad: Deferring load until surface is attached")
+      return
+    }
+
+    try {
+      MPVLib.command(arrayOf("loadfile", url))
+      isSourceLoaded = true
+
+      // Apply the latest pause state immediately
+      try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
+      ensureMediaSession()
+      mediaSessionHandler?.updatePlaybackState(!isPaused)
+      PipController.updateIsPlayingFromNative(!isPaused)
+
+      // Apply pending overrides that might have been waiting
+      pendingRate?.let { r ->
+         try { MPVLib.setPropertyDouble("speed", r) } catch (_: Throwable) {}
+      }
+      pendingVolume?.let { v ->
+         try { MPVLib.setPropertyDouble("volume", v * 100.0) } catch (_: Throwable) {}
+      }
+
+      emitIsPlayingChangedIfNeeded(!isPaused)
+      emitBufferingChangedIfNeeded(false)
+    } catch (t: Throwable) {
+      emitError("Failed to load media: ${t.message}")
+    }
+  }
+
   private fun ensureInitialized() {
     ensureCreated() ?: return
     if (isInitialized) return
@@ -375,9 +403,7 @@ class MpvEngine(
       }
 
       // If source was set before init.
-      pendingSource?.let {
-        try { MPVLib.command(arrayOf("loadfile", it)) } catch (_: Throwable) {}
-      }
+      checkAndLoad()
 
       // Ensure pause state is applied after init/load.
       try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
