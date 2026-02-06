@@ -192,6 +192,11 @@ class VlcEngine(
   fun attachSurface(surface: Surface, width: Int, height: Int) {
       val mp = mediaPlayer ?: return
       val vout = mp.vlcVout
+      
+      // Store dimensions for resize mode calculations
+      surfaceWidth = width
+      surfaceHeight = height
+
       if (!vout.areViewsAttached()) {
           vout.setVideoSurface(surface, null)
           vout.setWindowSize(width, height)
@@ -202,6 +207,8 @@ class VlcEngine(
           // Update size if already attached
           vout.setWindowSize(width, height)
       }
+      
+      applyResizeMode()
   }
 
   fun setSurfaceSize(width: Int, height: Int) {
@@ -223,7 +230,8 @@ class VlcEngine(
 
   /**
    * Apply resize mode to VLC video output.
-   * Maps resize modes to VLC's aspect ratio, crop, and scale settings.
+   * Since PlayerActivity handles the actual SurfaceView resizing, we mostly
+   * just need to tell VLC to fill the provided surface dimensions exactly.
    */
   private fun applyResizeMode() {
       val mp = mediaPlayer ?: return
@@ -233,52 +241,24 @@ class VlcEngine(
           return
       }
       
-      when (resizeMode) {
-          "stretch" -> {
-              // Stretch: Fill the surface regardless of aspect ratio
-              // Use aspect ratio to force fill the entire surface
-              mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
-              // mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}") // Not supported in this LibVLC version
-          }
-          "cover" -> {
-              // Cover: Fill surface while maintaining aspect ratio (may crop)
-              // NOTE: setCropGeometry is missing in this LibVLC version, so accurate "cover" (crop) is not possible.
-              // We fall back to standard aspect ratio handling (contain) or could try scale if supported.
-              // For now, this will behave similar to "contain" regarding the image bounds, but without black bars it implies we can't crop.
-              // Actually, without crop, we can't do cover.
-              mp.aspectRatio = null
-              // Calculate crop to fill surface - DISABLED due to missing API
-              /*
-              val videoRatio = cachedWidth.toFloat() / cachedHeight.toFloat()
-              val surfaceRatio = surfaceWidth.toFloat() / surfaceHeight.toFloat()
-              
-              if (surfaceRatio > videoRatio) {
-                  // Surface is wider than video - crop top/bottom
-                  val targetHeight = (surfaceWidth / videoRatio).toInt()
-                  val cropY = ((targetHeight - surfaceHeight) / 2).coerceAtLeast(0)
-                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+0+${cropY}")
-              } else {
-                  // Surface is taller than video - crop left/right
-                  val targetWidth = (surfaceHeight * videoRatio).toInt()
-                  val cropX = ((targetWidth - surfaceWidth) / 2).coerceAtLeast(0)
-                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+${cropX}+0")
+      try {
+          when (resizeMode) {
+              "stretch", "cover" -> {
+                  // For Stretch and Cover, we want to fill the surface exactly.
+                  // In PlayerActivity, the surface has been resized to achieve the crop/stretch.
+                  // In other views, this will force a fill (stretch).
+                  mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
               }
-              */
+              else -> {
+                  // For Contain and Original: Use the video's native display aspect ratio (DAR).
+                  // We use the DAR-adjusted cachedWidth/cachedHeight here.
+                  // If the surface matches this ratio (as in PlayerActivity's contain mode), it fills perfectly.
+                  // If the surface is larger (as in CrispyVlcVideoView), VLC adds black bars (standard contain).
+                  mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
+              }
           }
-          "original" -> {
-              // Original: Use video's native dimensions (1:1 pixel mapping)
-              mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
-              // mp.setCropGeometry(null)
-          }
-          else -> {
-              // Contain: Fit within surface while maintaining aspect ratio (default)
-              // This is VLC's default behavior with proper aspect ratio
-              val gcd = greatestCommonDivisor(cachedWidth, cachedHeight)
-              val aspectW = cachedWidth / gcd
-              val aspectH = cachedHeight / gcd
-              mp.aspectRatio = "${aspectW}:${aspectH}"
-              // mp.setCropGeometry(null)
-          }
+      } catch (e: Exception) {
+          Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
       }
   }
 
@@ -533,10 +513,19 @@ class VlcEngine(
       sarNum: Int,
       sarDen: Int
   ) {
-      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight})")
+      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight}, sar: ${sarNum}:${sarDen})")
       if (width > 0 && height > 0) {
-          cachedWidth = width
+          // Calculate Display Aspect Ratio (DAR) width based on Sample Aspect Ratio (SAR).
+          // This ensures that anamorphic content is correctly scaled.
+          val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
+              (width.toDouble() * sarNum / sarDen).toInt()
+          } else {
+              width
+          }
+
+          cachedWidth = darWidth
           cachedHeight = height
+          
           // Apply resize mode with new video dimensions
           applyResizeMode()
           // Try to fire load event now that we have dimensions
