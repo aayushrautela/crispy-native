@@ -20,18 +20,6 @@ const SKIP_MODES = [
     { label: 'Auto', value: 'auto' },
 ];
 
-const SKIP_MODES = [
-    { label: 'Off', value: 'off' },
-    { label: 'Manual', value: 'manual' },
-    { label: 'Auto', value: 'auto' },
-];
-
-const SKIP_MODES = [
-    { label: 'Off', value: 'off' },
-    { label: 'Manual', value: 'manual' },
-    { label: 'Auto', value: 'auto' },
-];
-
 export default function PlaybackScreen() {
     const { theme } = useTheme();
     const { settings, updateSettings } = useUserStore();

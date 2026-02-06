@@ -359,16 +359,15 @@ class VlcEngine(
       // We can get it from media tracks
       val media = mp.media
       if (media != null) {
-          for (i in 0 until media.trackCount) {
-             val t = media.getTrack(i)
-             if (t.type == Media.Track.Type.Video) {
-                 val vid = t as Media.VideoTrack
-                 if (vid.width > 0 && vid.height > 0) {
-                     cachedWidth = vid.width
-                     cachedHeight = vid.height
-                     break
-                 }
-             }
+          val trackList = media.tracks
+          for (t in trackList) {
+              if (t is Media.VideoTrack) {
+                  if (t.width > 0 && t.height > 0) {
+                      cachedWidth = t.width
+                      cachedHeight = t.height
+                      break
+                  }
+              }
           }
       }
       

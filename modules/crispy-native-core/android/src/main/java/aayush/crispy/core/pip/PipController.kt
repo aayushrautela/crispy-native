@@ -20,7 +20,7 @@ import java.lang.ref.WeakReference
 import kotlin.math.roundToInt
 
 import aayush.crispy.core.player.ExoPlaybackService
-import aayush.crispy.core.player.MpvPlaybackService
+import aayush.crispy.core.player.VlcPlaybackService
 import aayush.crispy.core.player.PlayerActivity
 
 /**
@@ -210,7 +210,7 @@ object PipController {
   private fun stopPlaybackServices() {
     val app = application ?: return
     try {
-      app.stopService(Intent(app, MpvPlaybackService::class.java))
+      app.stopService(Intent(app, VlcPlaybackService::class.java))
     } catch (_: Throwable) {
       // ignore
     }
