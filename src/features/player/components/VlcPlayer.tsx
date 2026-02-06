@@ -139,14 +139,11 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
         props.onTracksChanged?.(event?.nativeEvent);
     };
 
-    // Encode URL to handle spaces and special characters that VLC can't process
-    const encodedSource = props.source ? encodeURI(props.source) : props.source;
-
     return (
         <CrispyVlcVideoView
             ref={nativeRef as any}
             style={[styles.container, props.style]}
-            source={encodedSource}
+            source={props.source}
             headers={props.headers}
             paused={props.paused ?? true}
             resizeMode={props.resizeMode ?? 'contain'}

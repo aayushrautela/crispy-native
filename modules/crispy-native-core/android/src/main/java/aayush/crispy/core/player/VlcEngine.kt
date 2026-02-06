@@ -7,6 +7,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import java.net.URI
+import java.net.URLDecoder
+import java.net.URLEncoder
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -232,9 +235,12 @@ class VlcEngine(
     val mp = mediaPlayer ?: return
     val lib = libVLC ?: return
 
+    // Encode the URL to handle spaces and special characters that VLC treats as file paths
+    val encodedUrl = encodeUrlForVlc(url)
+
     try {
       mp.stop()
-      val media = Media(lib, Uri.parse(url))
+      val media = Media(lib, Uri.parse(encodedUrl))
       
       // Optimization: Hardware decoding
       media.setHWDecoderEnabled(true, false)
@@ -499,5 +505,81 @@ class VlcEngine(
     mediaPlayer = null
     libVLC = null
     latestMetadata = null
+  }
+
+  /**
+   * Encodes a URL for VLC playback, ensuring special characters (especially spaces)
+   * are properly percent-encoded. VLC's input_item_SetURI treats URLs with unencoded
+   * spaces as local file paths, causing playback to fail.
+   *
+   * This function:
+   * - Preserves already-encoded characters (no double-encoding)
+   * - Only encodes the path component (scheme, host, port, query preserved)
+   * - Handles edge cases like malformed URLs gracefully
+   * - Falls back to the original URL if encoding fails
+   */
+  private fun encodeUrlForVlc(url: String): String {
+    // Quick check: if no problematic characters, return as-is
+    if (!url.contains(' ') && !url.contains('[') && !url.contains(']')) {
+      return url
+    }
+
+    return try {
+      // Parse the URL to extract components
+      val uri = URI(url)
+      val scheme = uri.scheme ?: return url
+      val host = uri.host ?: return url
+      val port = uri.port
+      val path = uri.rawPath ?: ""
+      val query = uri.rawQuery
+      val fragment = uri.rawFragment
+
+      // Encode the path: decode first to avoid double-encoding, then re-encode
+      val encodedPath = if (path.isNotEmpty()) {
+        path.split("/").joinToString("/") { segment ->
+          if (segment.isEmpty()) {
+            segment
+          } else {
+            // Decode first to normalize (handles already-encoded chars)
+            val decoded = try {
+              URLDecoder.decode(segment, "UTF-8")
+            } catch (_: Throwable) {
+              segment
+            }
+            // Re-encode with proper escaping
+            URLEncoder.encode(decoded, "UTF-8")
+              .replace("+", "%20")  // URLEncoder uses + for space, we need %20
+              .replace("%2F", "/")  // Don't escape path separators (shouldn't happen after split)
+              .replace("%3A", ":")  // Preserve colons in path (e.g., timestamps)
+          }
+        }
+      } else {
+        path
+      }
+
+      // Reconstruct the URL
+      buildString {
+        append(scheme)
+        append("://")
+        append(host)
+        if (port != -1) {
+          append(":")
+          append(port)
+        }
+        append(encodedPath)
+        if (!query.isNullOrEmpty()) {
+          append("?")
+          append(query)
+        }
+        if (!fragment.isNullOrEmpty()) {
+          append("#")
+          append(fragment)
+        }
+      }
+    } catch (e: Throwable) {
+      Log.w(TAG, "Failed to encode URL for VLC, using original: ${e.message}")
+      // Fallback: simple space replacement (better than nothing)
+      url.replace(" ", "%20")
+    }
   }
 }
