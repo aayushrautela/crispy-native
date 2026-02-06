@@ -38,21 +38,21 @@ import kotlin.math.roundToInt
  * Native-first player host for Android:
  * - SurfaceView-backed video surface owned by the Activity
  * - React UI overlay mounted as a normal RN root (same JS runtime)
- * - Playback engines remain Service-owned (MpvPlaybackService / ExoPlaybackService)
+ * - Playback engines remain Service-owned (VlcPlaybackService / ExoPlaybackService)
  */
 class PlayerActivity : ReactActivity() {
   companion object {
     const val EXTRA_SESSION_ID = "crispy.player.sessionId"
     const val EXTRA_URL = "crispy.player.url"
     const val EXTRA_HEADERS = "crispy.player.headers"
-    const val EXTRA_ENGINE = "crispy.player.engine" // "exoplayer" | "mpv"
+    const val EXTRA_ENGINE = "crispy.player.engine" // "exoplayer" | "vlc"
     const val EXTRA_PAUSED = "crispy.player.paused"
     const val EXTRA_TITLE = "crispy.player.title"
     const val EXTRA_ARTIST = "crispy.player.artist"
     const val EXTRA_ARTWORK_URL = "crispy.player.artworkUrl"
 
     const val ENGINE_EXO = "exoplayer"
-    const val ENGINE_MPV = "mpv"
+    const val ENGINE_VLC = "vlc"
 
     private const val TAG = "PlayerActivity"
     private const val MAX_ASPECT = 2.39
@@ -79,11 +79,10 @@ class PlayerActivity : ReactActivity() {
   private var artworkUrl: String? = null
 
   private var surfaceView: SurfaceView? = null
-  private var mpvSurface: Surface? = null
   private var containerW: Int = 0
   private var containerH: Int = 0
 
-  private var mpvService: MpvPlaybackService? = null
+  private var vlcService: VlcPlaybackService? = null
   private var exoService: ExoPlaybackService? = null
   private var bound: Boolean = false
 
@@ -93,7 +92,7 @@ class PlayerActivity : ReactActivity() {
 
   private var resizeMode: String? = null
 
-  private var exoFallbackToMpvAttempted: Boolean = false
+  private var exoFallbackToVlcAttempted: Boolean = false
 
   private var pendingTracksEmit: Boolean = false
   private var cachedAudioTracks: List<Map<String, Any>> = emptyList()
@@ -176,8 +175,10 @@ class PlayerActivity : ReactActivity() {
 
     val rawEngine = (intent.getStringExtra(EXTRA_ENGINE) ?: engine).lowercase()
     engine = when (rawEngine) {
-      ENGINE_MPV -> ENGINE_MPV
+      ENGINE_VLC -> ENGINE_VLC
       ENGINE_EXO -> ENGINE_EXO
+      // Legacy fallback
+      "mpv" -> ENGINE_VLC
       else -> ENGINE_EXO
     }
 
@@ -268,16 +269,14 @@ class PlayerActivity : ReactActivity() {
           containerH = content.height
       }
       
-      if (engine == ENGINE_MPV) {
-        mpvService?.setSurfaceSize(width, height)
+      if (engine == ENGINE_VLC) {
+        vlcService?.setSurfaceSize(width, height)
       }
       if (width <= 0 || height <= 0) {
         scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
         return
       }
-      // Note: We don't call applyResizeTransform() here to avoid loops, 
-      // as applyResizeTransform modifies layout params which triggers surfaceChanged.
-      // Instead, we rely on video metadata load or explicit resizeMode calls.
+      // Note: We don't call applyResizeTransform() here to avoid loops.
       ensureSurfaceAttached("surfaceChanged")
       updatePipParams()
     }
@@ -291,8 +290,8 @@ class PlayerActivity : ReactActivity() {
   private fun bindPlaybackService() {
     if (bound) return
 
-    val serviceIntent = if (engine == ENGINE_MPV) {
-      Intent(this, MpvPlaybackService::class.java)
+    val serviceIntent = if (engine == ENGINE_VLC) {
+      Intent(this, VlcPlaybackService::class.java)
     } else {
       Intent(this, ExoPlaybackService::class.java)
     }
@@ -313,14 +312,14 @@ class PlayerActivity : ReactActivity() {
 
   private val connection = object : ServiceConnection {
     override fun onServiceConnected(name: android.content.ComponentName, service: IBinder) {
-      if (engine == ENGINE_MPV) {
-        val binder = service as MpvPlaybackService.LocalBinder
-        mpvService = binder.getService()
-        mpvService?.registerClient()
-        mpvService?.addListener(mpvListener)
+      if (engine == ENGINE_VLC) {
+        val binder = service as VlcPlaybackService.LocalBinder
+        vlcService = binder.getService()
+        vlcService?.registerClient()
+        vlcService?.addListener(vlcListener)
 
         applyPendingLoadIfReady()
-        ensureSurfaceAttached("mpvServiceConnected")
+        ensureSurfaceAttached("vlcServiceConnected")
         updatePipParams()
         return
       }
@@ -336,12 +335,12 @@ class PlayerActivity : ReactActivity() {
     }
 
     override fun onServiceDisconnected(name: android.content.ComponentName) {
-      mpvService = null
+      vlcService = null
       exoService = null
     }
   }
 
-  private val mpvListener = object : MpvEngine.Listener {
+  private val vlcListener = object : VlcEngine.Listener {
     override fun onLoad(duration: Double, width: Int, height: Int) {
       if (width > 0 && height > 0) {
         videoW = width
@@ -379,7 +378,7 @@ class PlayerActivity : ReactActivity() {
     }
 
     override fun onError(error: String) {
-      Log.w(TAG, "MPV error: $error")
+      Log.w(TAG, "VLC error: $error")
       emitNativePlayerEvent(
         "error",
         mapOf(
@@ -460,8 +459,8 @@ class PlayerActivity : ReactActivity() {
     override fun onError(error: String) {
       Log.w(TAG, "Exo error: $error")
 
-      // If Exo fails (codec/decoder, etc.), fall back to MPV for this session.
-      if (maybeFallbackToMpvFromExo(error)) {
+      // If Exo fails (codec/decoder, etc.), fall back to VLC for this session.
+      if (maybeFallbackToVlcFromExo(error)) {
         return
       }
 
@@ -534,8 +533,8 @@ class PlayerActivity : ReactActivity() {
     isPlaying = !startPaused
     updatePipParams()
 
-    if (engine == ENGINE_MPV) {
-      val svc = mpvService ?: return
+    if (engine == ENGINE_VLC) {
+      val svc = vlcService ?: return
       headers?.let { svc.setHeaders(it) }
       svc.setMetadata(title, artist, artworkUrl)
       svc.setPaused(startPaused)
@@ -555,8 +554,8 @@ class PlayerActivity : ReactActivity() {
     val holder = sv.holder
     if (holder.isCreating) return false
 
-    if (engine == ENGINE_MPV) {
-      val svc = mpvService ?: return false
+    if (engine == ENGINE_VLC) {
+      val svc = vlcService ?: return false
       val surface = holder.surface
       if (surface == null || !surface.isValid) return false
 
@@ -572,19 +571,11 @@ class PlayerActivity : ReactActivity() {
         else -> 1080
       }
 
-      mpvSurface = surface
       return try {
-        try {
-          // Force release of any stale producer/consumer binding first.
-          svc.detachSurface()
-        } catch (_: Throwable) {
-          // ignore
-        }
         svc.attachSurface(surface, w, h)
-        svc.setSurfaceSize(w, h)
         true
       } catch (t: Throwable) {
-        Log.w(TAG, "Failed to attach MPV surface reason=$reason", t)
+        Log.w(TAG, "Failed to attach VLC surface reason=$reason", t)
         false
       }
     }
@@ -605,13 +596,12 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun detachSurface() {
-    if (engine == ENGINE_MPV) {
+    if (engine == ENGINE_VLC) {
       try {
-        mpvService?.detachSurface()
+        vlcService?.detachSurface()
       } catch (_: Throwable) {
         // ignore
       }
-      mpvSurface = null
       return
     }
 
@@ -666,12 +656,12 @@ class PlayerActivity : ReactActivity() {
   fun setPausedFromJs(paused: Boolean) {
     startPaused = paused
     isPlaying = !paused
-    if (engine == ENGINE_MPV) mpvService?.setPaused(paused) else exoService?.setPaused(paused)
+    if (engine == ENGINE_VLC) vlcService?.setPaused(paused) else exoService?.setPaused(paused)
     updatePipParams()
   }
 
   fun seekFromJs(positionSec: Double) {
-    if (engine == ENGINE_MPV) mpvService?.seek(positionSec) else exoService?.seek(positionSec)
+    if (engine == ENGINE_VLC) vlcService?.seek(positionSec) else exoService?.seek(positionSec)
   }
 
   override fun onUserLeaveHint() {
@@ -735,8 +725,8 @@ class PlayerActivity : ReactActivity() {
 
   private fun stopPlaybackAndFinish() {
     try {
-      if (engine == ENGINE_MPV) {
-        startService(Intent(this, MpvPlaybackService::class.java).setAction(MpvPlaybackService.ACTION_STOP))
+      if (engine == ENGINE_VLC) {
+        startService(Intent(this, VlcPlaybackService::class.java).setAction(VlcPlaybackService.ACTION_STOP))
       } else {
         startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
       }
@@ -751,9 +741,9 @@ class PlayerActivity : ReactActivity() {
     emit("onNativePlayerClosed", sessionId)
 
     try {
-      if (engine == ENGINE_MPV) {
-        mpvService?.removeListener(mpvListener)
-        mpvService?.unregisterClient()
+      if (engine == ENGINE_VLC) {
+        vlcService?.removeListener(vlcListener)
+        vlcService?.unregisterClient()
       } else {
         exoService?.removeListener(exoListener)
         exoService?.unregisterClient()
@@ -777,7 +767,7 @@ class PlayerActivity : ReactActivity() {
       bound = false
     }
 
-    mpvService = null
+    vlcService = null
     exoService = null
     surfaceView = null
 
@@ -794,76 +784,42 @@ class PlayerActivity : ReactActivity() {
   }
 
   fun setRateFromJs(rate: Double) {
-    if (engine == ENGINE_MPV) mpvService?.setRate(rate) else exoService?.setRate(rate)
+    if (engine == ENGINE_VLC) vlcService?.setRate(rate) else exoService?.setRate(rate)
   }
 
   fun setVolumeFromJs(volume: Double) {
-    if (engine == ENGINE_MPV) mpvService?.setVolume(volume) else exoService?.setVolume(volume)
+    if (engine == ENGINE_VLC) vlcService?.setVolume(volume) else exoService?.setVolume(volume)
   }
 
   fun setResizeModeFromJs(mode: String?) {
     resizeMode = mode
-    try {
-      // Keep mpv in sync for non-Activity view usage patterns.
-      if (engine == ENGINE_MPV) mpvService?.setResizeMode(mode)
-    } catch (_: Throwable) {
-      // ignore
-    }
     applyResizeTransform()
     updatePipParams()
   }
 
   fun setAudioTrackFromJs(trackId: Int) {
-    if (engine == ENGINE_MPV) mpvService?.setAudioTrack(trackId) else exoService?.setAudioTrack(trackId)
+    if (engine == ENGINE_VLC) vlcService?.setAudioTrack(trackId) else exoService?.setAudioTrack(trackId)
   }
 
   fun setSubtitleTrackFromJs(trackId: Int) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleTrack(trackId) else exoService?.setSubtitleTrack(trackId)
+    if (engine == ENGINE_VLC) vlcService?.setSubtitleTrack(trackId) else exoService?.setSubtitleTrack(trackId)
   }
 
   fun setSubtitleDelayFromJs(delaySec: Double) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleDelay(delaySec)
+    if (engine == ENGINE_VLC) vlcService?.setSubtitleDelay(delaySec)
   }
 
-  fun setSubtitleSizeFromJs(size: Int) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleSize(size)
-  }
-
-  fun setSubtitleColorFromJs(color: String) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleColor(color)
-  }
-
-  fun setSubtitleBackgroundColorFromJs(color: String, opacity: Float) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleBackgroundColor(color, opacity)
-  }
-
-  fun setSubtitleBorderSizeFromJs(size: Int) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleBorderSize(size)
-  }
-
-  fun setSubtitleBorderColorFromJs(color: String) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleBorderColor(color)
-  }
-
-  fun setSubtitlePositionFromJs(pos: Int) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitlePosition(pos)
-  }
-
-  fun setSubtitleBoldFromJs(bold: Boolean) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleBold(bold)
-  }
-
-  fun setSubtitleItalicFromJs(italic: Boolean) {
-    if (engine == ENGINE_MPV) mpvService?.setSubtitleItalic(italic)
-  }
-
-  fun setDecoderModeFromJs(mode: String?) {
-    if (engine == ENGINE_MPV) mpvService?.setDecoderMode(mode)
-  }
-
-  fun setGpuModeFromJs(mode: String?) {
-    if (engine == ENGINE_MPV) mpvService?.setGpuMode(mode)
-  }
+  // --- VLC/MPV stubs ---
+  fun setSubtitleSizeFromJs(size: Int) {}
+  fun setSubtitleColorFromJs(color: String) {}
+  fun setSubtitleBackgroundColorFromJs(color: String, opacity: Float) {}
+  fun setSubtitleBorderSizeFromJs(size: Int) {}
+  fun setSubtitleBorderColorFromJs(color: String) {}
+  fun setSubtitlePositionFromJs(pos: Int) {}
+  fun setSubtitleBoldFromJs(bold: Boolean) {}
+  fun setSubtitleItalicFromJs(italic: Boolean) {}
+  fun setDecoderModeFromJs(mode: String?) {}
+  fun setGpuModeFromJs(mode: String?) {}
 
   private fun buildPipParams(): PictureInPictureParams {
     val builder = PictureInPictureParams.Builder()
@@ -965,15 +921,15 @@ class PlayerActivity : ReactActivity() {
     }
   }
 
-  private fun maybeFallbackToMpvFromExo(exoError: String): Boolean {
+  private fun maybeFallbackToVlcFromExo(exoError: String): Boolean {
     if (engine != ENGINE_EXO) return false
-    if (exoFallbackToMpvAttempted) return false
+    if (exoFallbackToVlcAttempted) return false
 
     val nextUrl = url
     if (nextUrl.isNullOrBlank()) return false
 
-    exoFallbackToMpvAttempted = true
-    Log.w(TAG, "Falling back to MPV (session=$sessionId) due to Exo error: $exoError")
+    exoFallbackToVlcAttempted = true
+    Log.w(TAG, "Falling back to VLC (session=$sessionId) due to Exo error: $exoError")
 
     // Stop Exo playback best-effort.
     try {
@@ -1007,7 +963,7 @@ class PlayerActivity : ReactActivity() {
     exoService = null
 
     // Switch engine and re-bind.
-    engine = ENGINE_MPV
+    engine = ENGINE_VLC
     videoW = 0
     videoH = 0
 

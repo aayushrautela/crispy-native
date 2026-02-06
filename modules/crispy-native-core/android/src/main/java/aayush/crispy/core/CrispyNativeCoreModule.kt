@@ -220,7 +220,7 @@ class CrispyNativeCoreModule : Module() {
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleDelay") { it.setSubtitleDelayFromJs(delaySec) }
     }
 
-    // MPV subtitle styling knobs (no-ops for Exo engine)
+    // VLC/MPV compatibility stubs
     AsyncFunction("nativePlayerSetSubtitleSize") { size: Int ->
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleSize") { it.setSubtitleSizeFromJs(size) }
     }
@@ -253,7 +253,6 @@ class CrispyNativeCoreModule : Module() {
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleItalic") { it.setSubtitleItalicFromJs(italic) }
     }
 
-    // MPV decoder/gpu mode knobs (applied on next init/source set)
     AsyncFunction("nativePlayerSetDecoderMode") { mode: String? ->
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetDecoderMode") { it.setDecoderModeFromJs(mode) }
     }
@@ -263,103 +262,80 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- VIDEO PLAYER VIEW ---
-    View(CrispyMpvVideoView::class) {
-      Prop("source") { view: CrispyMpvVideoView, url: String? ->
+    View(CrispyVlcVideoView::class) {
+      Prop("source") { view: CrispyVlcVideoView, url: String? ->
         view.setSource(url)
       }
 
-      Prop("headers") { view: CrispyMpvVideoView, headers: Map<String, String>? ->
+      Prop("headers") { view: CrispyVlcVideoView, headers: Map<String, String>? ->
         view.setHeaders(headers)
       }
 
-      Prop("paused") { view: CrispyMpvVideoView, paused: Boolean ->
+      Prop("paused") { view: CrispyVlcVideoView, paused: Boolean ->
         view.setPaused(paused)
       }
 
-      Prop("resizeMode") { view: CrispyMpvVideoView, mode: String? ->
+      Prop("resizeMode") { view: CrispyVlcVideoView, mode: String? ->
         view.setResizeMode(mode)
       }
+      
+      Prop("playInBackground") { view: CrispyVlcVideoView, playInBackground: Boolean ->
+        view.setPlayInBackground(playInBackground)
+      }
 
-      Prop("decoderMode") { view: CrispyMpvVideoView, mode: String ->
+      // Legacy/Compat Props
+      Prop("decoderMode") { view: CrispyVlcVideoView, mode: String ->
         view.decoderMode = mode
       }
 
-      Prop("gpuMode") { view: CrispyMpvVideoView, mode: String ->
+      Prop("gpuMode") { view: CrispyVlcVideoView, mode: String ->
         view.gpuMode = mode
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
 
-      AsyncFunction("seek") { view: CrispyMpvVideoView, positionSec: Double ->
+      AsyncFunction("seek") { view: CrispyVlcVideoView, positionSec: Double ->
         view.seek(positionSec)
       }
 
-      // Convenience for the player screen ref API.
-      // (There is also a module-level enterPiP(width,height) for aspect-ratio overrides.)
-      AsyncFunction("enterPiP") { _: CrispyMpvVideoView ->
+      AsyncFunction("enterPiP") { _: CrispyVlcVideoView ->
         val activity = appContext.currentActivity ?: return@AsyncFunction false
         return@AsyncFunction PipController.enterPiP(activity, null, null)
       }
 
-      AsyncFunction("setAudioTrack") { view: CrispyMpvVideoView, trackId: Int ->
+      AsyncFunction("setAudioTrack") { view: CrispyVlcVideoView, trackId: Int ->
         view.setAudioTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleTrack") { view: CrispyMpvVideoView, trackId: Int ->
+      AsyncFunction("setSubtitleTrack") { view: CrispyVlcVideoView, trackId: Int ->
         view.setSubtitleTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleSize") { view: CrispyMpvVideoView, size: Int ->
-        view.setSubtitleSize(size)
-      }
-
-      AsyncFunction("setSubtitleColor") { view: CrispyMpvVideoView, color: String ->
-        view.setSubtitleColor(color)
-      }
-
-      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyMpvVideoView, color: String, opacity: Float ->
-        view.setSubtitleBackgroundColor(color, opacity)
-      }
-
-      AsyncFunction("setSubtitleBorderSize") { view: CrispyMpvVideoView, size: Int ->
-        view.setSubtitleBorderSize(size)
-      }
-
-      AsyncFunction("setSubtitleBorderColor") { view: CrispyMpvVideoView, color: String ->
-        view.setSubtitleBorderColor(color)
-      }
-
-      AsyncFunction("setSubtitlePosition") { view: CrispyMpvVideoView, pos: Int ->
-        view.setSubtitlePosition(pos)
-      }
-
-      AsyncFunction("setSubtitleDelay") { view: CrispyMpvVideoView, delay: Double ->
+      AsyncFunction("setSubtitleDelay") { view: CrispyVlcVideoView, delay: Double ->
         view.setSubtitleDelay(delay)
       }
-
-      AsyncFunction("setSubtitleBold") { view: CrispyMpvVideoView, bold: Boolean ->
-        view.setSubtitleBold(bold)
+      
+      AsyncFunction("setMetadata") { view: CrispyVlcVideoView, title: String, artist: String, artworkUrl: String? ->
+        view.setMetadata(title, artist, artworkUrl)
       }
 
-      AsyncFunction("setSubtitleItalic") { view: CrispyMpvVideoView, italic: Boolean ->
-        view.setSubtitleItalic(italic)
-      }
+      // Compat Stubs
+      AsyncFunction("setSubtitleSize") { view: CrispyVlcVideoView, size: Int -> view.setSubtitleSize(size) }
+      AsyncFunction("setSubtitleColor") { view: CrispyVlcVideoView, color: String -> view.setSubtitleColor(color) }
+      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyVlcVideoView, color: String, opacity: Float -> view.setSubtitleBackgroundColor(color, opacity) }
+      AsyncFunction("setSubtitleBorderSize") { view: CrispyVlcVideoView, size: Int -> view.setSubtitleBorderSize(size) }
+      AsyncFunction("setSubtitleBorderColor") { view: CrispyVlcVideoView, color: String -> view.setSubtitleBorderColor(color) }
+      AsyncFunction("setSubtitlePosition") { view: CrispyVlcVideoView, pos: Int -> view.setSubtitlePosition(pos) }
+      AsyncFunction("setSubtitleBold") { view: CrispyVlcVideoView, bold: Boolean -> view.setSubtitleBold(bold) }
+      AsyncFunction("setSubtitleItalic") { view: CrispyVlcVideoView, italic: Boolean -> view.setSubtitleItalic(italic) }
 
-      Prop("metadata") { view: CrispyMpvVideoView, metadata: Map<String, Any>? ->
+      Prop("metadata") { view: CrispyVlcVideoView, metadata: Map<String, Any>? ->
         metadata?.let {
           val title = it["title"] as? String ?: ""
           val artist = (it["artist"] as? String) ?: (it["subtitle"] as? String) ?: ""
           val artworkUrl = it["artworkUrl"] as? String
           view.setMetadata(title, artist, artworkUrl)
         }
-      }
-
-      Prop("playInBackground") { view: CrispyMpvVideoView, playInBackground: Boolean ->
-        view.setPlayInBackground(playInBackground)
-      }
-
-      AsyncFunction("setMetadata") { view: CrispyMpvVideoView, title: String, artist: String, artworkUrl: String? ->
-        view.setMetadata(title, artist, artworkUrl)
       }
     }
   }

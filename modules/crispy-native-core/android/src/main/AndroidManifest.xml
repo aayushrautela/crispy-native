@@ -1,12 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools"
   package="aayush.crispy.core">
-  <uses-sdk tools:overrideLibrary="dev.jdtech.mpv"/>
-
-  <uses-permission android:name="android.permission.INTERNET" />
-  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
   <application>
@@ -24,7 +18,7 @@
       android:foregroundServiceType="dataSync" />
 
     <service
-      android:name=".player.MpvPlaybackService"
+      android:name=".player.VlcPlaybackService"
       android:enabled="true"
       android:exported="false"
       android:foregroundServiceType="mediaPlayback" />
