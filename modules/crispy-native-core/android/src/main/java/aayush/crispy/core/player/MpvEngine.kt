@@ -20,7 +20,32 @@ class MpvEngine(
 
   companion object {
     private const val TAG = "MpvEngine"
-    private const val AUTO_SW_FALLBACK_TIMEOUT_MS = 4_000L
+
+    /**
+     * Fallback stages for hardware decoder issues.
+     * We use an incremental approach instead of jumping straight to software:
+     * 1. mediacodec - Direct rendering (best performance)
+     * 2. mediacodec-copy - Copy-back mode (more stable)
+     * 3. no - Software decoding (guaranteed to work)
+     */
+    enum class DecoderStage {
+      MEDIACODEC,       // Direct hardware rendering
+      MEDIACODEC_COPY,  // Hardware with copy-back (more stable)
+      SOFTWARE          // Pure software decoding
+    }
+
+    /**
+     * Safety net timeout - only triggers if event-driven detection completely fails.
+     * This is a last resort and should rarely/never trigger in practice.
+     * Set high (15s) to avoid false positives on slow networks/4K content.
+     */
+    private const val SAFETY_NET_TIMEOUT_MS = 15_000L
+
+    /**
+     * Delay before checking hwdec-current after file load.
+     * MediaCodec needs a moment to report its actual state.
+     */
+    private const val HWDEC_CHECK_DELAY_MS = 500L
   }
 
   interface NotificationCallbacks {
@@ -62,11 +87,22 @@ class MpvEngine(
   private var gpuMode: String = "gpu"
   private var activeDecoderValue: String = "mediacodec"
   private var activeGpuValue: String = "gpu"
-  private var autoSwFallbackAttempted: Boolean = false
+
+  // Incremental fallback state - tracks which decoder stages we've tried
+  private var currentDecoderStage: DecoderStage = DecoderStage.MEDIACODEC
+  private var hwdecFailureDetected: Boolean = false
+  private var isBuffering: Boolean = false
+
   private var pendingSeekAfterReloadSec: Double? = null
   private var activeSourceGeneration: Long = 0L
   private var loadedSourceGeneration: Long = 0L
-  private var autoFallbackWatchdog: Runnable? = null
+  
+  // Watchdogs for event-driven fallback
+  private var safetyNetWatchdog: Runnable? = null
+  private var hwdecCheckTask: Runnable? = null
+
+  // Hardware capability probe result for current source
+  private var lastProbeResult: HardwareCapabilityProber.ProbeResult? = null
 
   private var requestedResizeMode: String? = null
   private var isPaused: Boolean = true
@@ -112,7 +148,10 @@ class MpvEngine(
     if (decoderMode == next) return
 
     decoderMode = next
-    autoSwFallbackAttempted = false
+    resetFallbackState()
+    
+    // Re-probe if we have a pending source
+    pendingSource?.let { probeAndSelectDecoder(it) }
 
     if (!isInitialized) return
     applyRuntimeVideoOptions(reason = "decoder-mode-change", reloadIfNeeded = true)
@@ -179,7 +218,6 @@ class MpvEngine(
     pendingSource = url
     activeSourceGeneration += 1L
     loadedSourceGeneration = 0L
-    autoSwFallbackAttempted = false
     pendingSeekAfterReloadSec = null
     hasLoadEventFired = false
     isSourceLoaded = false
@@ -189,6 +227,10 @@ class MpvEngine(
     firstFrameEmitted = false
     lastEmittedBuffering = null
     lastEmittedIsPlaying = null
+
+    // Reset fallback state and probe hardware capabilities for new source
+    resetFallbackState()
+    probeAndSelectDecoder(url)
 
     ensureInitialized()
     if (isInitialized) {
@@ -295,7 +337,8 @@ class MpvEngine(
   fun setSubtitleItalic(italic: Boolean) = setPropBoolean("sub-italic", italic)
 
   fun release() {
-    cancelAutoFallbackWatchdog()
+    cancelSafetyNetWatchdog()
+    cancelHwdecCheckTask()
     listeners.clear()
     try {
       mediaSessionHandler?.release()
@@ -355,7 +398,8 @@ class MpvEngine(
   fun isPlaying(): Boolean = isInitialized && !isPaused
 
   fun stopPlayback() {
-    cancelAutoFallbackWatchdog()
+    cancelSafetyNetWatchdog()
+    cancelHwdecCheckTask()
     pendingSource = null
     durationSec = 0.0
     videoW = 0
@@ -411,7 +455,12 @@ class MpvEngine(
 
       emitIsPlayingChangedIfNeeded(!isPaused)
       emitBufferingChangedIfNeeded(false)
-      maybeScheduleAutoFallbackWatchdog()
+
+      // Schedule event-driven failure detection
+      scheduleHwdecCheck()
+      maybeScheduleSafetyNetWatchdog()
+      
+      Log.i(TAG, "Loaded source; stage=${currentDecoderStage.name}, hwdec=${activeDecoderValue}")
     } catch (t: Throwable) {
       emitError("Failed to load media: ${t.message}")
     }
@@ -545,6 +594,210 @@ class MpvEngine(
     return if (mode == "sw") "no" else "mediacodec"
   }
 
+  /**
+   * Resolves the hwdec value based on decoder mode and current fallback stage.
+   * This method is used at runtime to determine the actual hwdec value.
+   */
+  private fun resolveRequestedHwdec(): String {
+    // If user explicitly set sw mode, always use software
+    if (decoderMode == "sw") return "no"
+    
+    // If user explicitly set hw mode, use current stage (allows incremental fallback)
+    // If auto mode, also use current stage
+    return when (currentDecoderStage) {
+      DecoderStage.MEDIACODEC -> "mediacodec"
+      DecoderStage.MEDIACODEC_COPY -> "mediacodec-copy"
+      DecoderStage.SOFTWARE -> "no"
+    }
+  }
+
+  /**
+   * Resets fallback state for a new source.
+   */
+  private fun resetFallbackState() {
+    cancelSafetyNetWatchdog()
+    cancelHwdecCheckTask()
+    currentDecoderStage = DecoderStage.MEDIACODEC
+    hwdecFailureDetected = false
+    lastProbeResult = null
+  }
+
+  /**
+   * Probes hardware capabilities and selects the appropriate decoder stage.
+   * Called before loading a new source.
+   */
+  private fun probeAndSelectDecoder(url: String) {
+    // If user explicitly set software mode, skip probing
+    if (decoderMode == "sw") {
+      currentDecoderStage = DecoderStage.SOFTWARE
+      Log.i(TAG, "Decoder: software (user-selected)")
+      return
+    }
+
+    // Probe hardware capabilities
+    val mimeType = HardwareCapabilityProber.guessMimeType(url)
+    val probeResult = HardwareCapabilityProber.probe(mimeType)
+    lastProbeResult = probeResult
+
+    if (!probeResult.isHardwareSupported) {
+      // Hardware not supported - go straight to software
+      currentDecoderStage = DecoderStage.SOFTWARE
+      Log.i(TAG, "Decoder: software (probe: ${probeResult.reason})")
+      return
+    }
+
+    // Hardware supported - use recommended mode
+    currentDecoderStage = when (probeResult.recommendedHwdec) {
+      "mediacodec-copy" -> DecoderStage.MEDIACODEC_COPY
+      "no" -> DecoderStage.SOFTWARE
+      else -> DecoderStage.MEDIACODEC
+    }
+
+    Log.i(TAG, "Decoder: ${currentDecoderStage.name} (probe: ${probeResult.codecName ?: "unknown"})")
+  }
+
+  /**
+   * Cancels the safety net watchdog.
+   */
+  private fun cancelSafetyNetWatchdog() {
+    safetyNetWatchdog?.let { mainHandler.removeCallbacks(it) }
+    safetyNetWatchdog = null
+  }
+
+  /**
+   * Cancels the hwdec check task.
+   */
+  private fun cancelHwdecCheckTask() {
+    hwdecCheckTask?.let { mainHandler.removeCallbacks(it) }
+    hwdecCheckTask = null
+  }
+
+  /**
+   * Schedules a safety net watchdog as an absolute last resort.
+   * This should rarely trigger if event-driven detection is working properly.
+   */
+  private fun maybeScheduleSafetyNetWatchdog() {
+    cancelSafetyNetWatchdog()
+
+    // Don't schedule if already at software or if user explicitly set decoder mode
+    if (currentDecoderStage == DecoderStage.SOFTWARE) return
+    if (decoderMode == "sw" || decoderMode == "hw") return
+
+    val generation = activeSourceGeneration
+    val task = Runnable {
+      if (!isInitialized || !isSourceLoaded) return@Runnable
+      if (generation != activeSourceGeneration || generation != loadedSourceGeneration) return@Runnable
+      if (firstFrameEmitted) return@Runnable
+
+      Log.w(TAG, "Safety net watchdog triggered - attempting fallback")
+      attemptIncrementalFallback("safety-net-timeout")
+    }
+
+    safetyNetWatchdog = task
+    mainHandler.postDelayed(task, SAFETY_NET_TIMEOUT_MS)
+  }
+
+  /**
+   * Schedules a check for hwdec-current shortly after file load.
+   * This provides immediate failure detection without waiting for vo-configured.
+   */
+  private fun scheduleHwdecCheck() {
+    cancelHwdecCheckTask()
+
+    if (currentDecoderStage == DecoderStage.SOFTWARE) return
+
+    val generation = activeSourceGeneration
+    val task = Runnable {
+      if (!isInitialized || !isSourceLoaded) return@Runnable
+      if (generation != activeSourceGeneration) return@Runnable
+      if (firstFrameEmitted) return@Runnable
+
+      checkHwdecStatus()
+    }
+
+    hwdecCheckTask = task
+    mainHandler.postDelayed(task, HWDEC_CHECK_DELAY_MS)
+  }
+
+  /**
+   * Checks the current hwdec status and triggers fallback if needed.
+   */
+  private fun checkHwdecStatus() {
+    if (!isInitialized) return
+
+    try {
+      val hwdecCurrent = MPVLib.getPropertyString("hwdec-current")
+      Log.d(TAG, "hwdec-current: $hwdecCurrent (expected: ${resolveRequestedHwdec()})")
+
+      // If we requested hardware but got "no", hardware failed
+      if (currentDecoderStage != DecoderStage.SOFTWARE && hwdecCurrent == "no") {
+        Log.w(TAG, "Hardware decoder failed to initialize (hwdec-current=no)")
+        hwdecFailureDetected = true
+        attemptIncrementalFallback("hwdec-current-no")
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "Failed to check hwdec-current", t)
+    }
+  }
+
+  /**
+   * Attempts to fall back to the next decoder stage.
+   * Uses an incremental approach: mediacodec -> mediacodec-copy -> software
+   */
+  private fun attemptIncrementalFallback(reason: String) {
+    if (!isInitialized) return
+    if (decoderMode == "sw") return // User explicitly wants software
+    if (decoderMode == "hw" && currentDecoderStage == DecoderStage.SOFTWARE) return // User wants hardware, already fell back
+
+    val nextStage = when (currentDecoderStage) {
+      DecoderStage.MEDIACODEC -> DecoderStage.MEDIACODEC_COPY
+      DecoderStage.MEDIACODEC_COPY -> DecoderStage.SOFTWARE
+      DecoderStage.SOFTWARE -> return // Already at software, nothing to do
+    }
+
+    Log.w(TAG, "Decoder fallback: ${currentDecoderStage.name} -> ${nextStage.name}; reason=$reason")
+    logHardwareFailure(reason)
+
+    currentDecoderStage = nextStage
+    hwdecFailureDetected = false
+
+    // Apply the new decoder setting
+    try {
+      val newHwdec = resolveRequestedHwdec()
+      MPVLib.setPropertyString("hwdec", newHwdec)
+      activeDecoderValue = newHwdec
+      Log.i(TAG, "Applied hwdec=$newHwdec (stage=${currentDecoderStage.name})")
+    } catch (t: Throwable) {
+      Log.w(TAG, "Failed to apply hwdec fallback", t)
+    }
+
+    // Reload the source with the new decoder
+    if (isSourceLoaded) {
+      reloadCurrentSourcePreservingState("fallback:$reason")
+    }
+  }
+
+  /**
+   * Logs hardware failure for pattern analysis.
+   */
+  private fun logHardwareFailure(reason: String) {
+    val probeResult = lastProbeResult
+    Log.w(TAG, buildString {
+      append("Hardware decoder failure report:\n")
+      append("  reason: $reason\n")
+      append("  stage: ${currentDecoderStage.name}\n")
+      append("  device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
+      append("  android: ${android.os.Build.VERSION.SDK_INT}\n")
+      append("  soc: ${android.os.Build.HARDWARE}\n")
+      if (probeResult != null) {
+        append("  codec: ${probeResult.codecName ?: "unknown"}\n")
+        append("  probe_reason: ${probeResult.reason}\n")
+      }
+      append("  video: ${videoW}x${videoH}\n")
+      append("  source: ${pendingSource?.take(50) ?: "null"}...")
+    })
+  }
+
   private fun applyRuntimeVideoOptions(reason: String, reloadIfNeeded: Boolean) {
     if (!isInitialized) return
 
@@ -563,12 +816,13 @@ class MpvEngine(
       }
     }
 
-    val requestedHwdec = resolveRequestedHwdec(decoderMode)
+    val requestedHwdec = resolveRequestedHwdec()
     if (requestedHwdec != activeDecoderValue) {
       try {
         MPVLib.setPropertyString("hwdec", requestedHwdec)
         activeDecoderValue = requestedHwdec
         changed = true
+        Log.i(TAG, "Applied hwdec=$requestedHwdec (stage=${currentDecoderStage.name})")
       } catch (t: Throwable) {
         Log.w(TAG, "Failed to apply hwdec=$requestedHwdec", t)
       }
@@ -576,12 +830,6 @@ class MpvEngine(
 
     if (reloadIfNeeded && changed && isSourceLoaded) {
       reloadCurrentSourcePreservingState(reason)
-    }
-
-    if (decoderMode == "auto") {
-      maybeScheduleAutoFallbackWatchdog()
-    } else {
-      cancelAutoFallbackWatchdog()
     }
   }
 
@@ -598,9 +846,11 @@ class MpvEngine(
     videoW = 0
     videoH = 0
     isSourceLoaded = false
+    hwdecFailureDetected = false
     emitBufferingChangedIfNeeded(true)
 
-    cancelAutoFallbackWatchdog()
+    cancelSafetyNetWatchdog()
+    cancelHwdecCheckTask()
 
     try {
       MPVLib.command(arrayOf("loadfile", source, "replace"))
@@ -616,8 +866,11 @@ class MpvEngine(
       PipController.updateIsPlayingFromNative(!isPaused)
       emitIsPlayingChangedIfNeeded(!isPaused)
 
-      maybeScheduleAutoFallbackWatchdog()
-      Log.i(TAG, "Reloaded source after runtime video option change; reason=$reason")
+      // Schedule event-driven failure detection
+      scheduleHwdecCheck()
+      maybeScheduleSafetyNetWatchdog()
+      
+      Log.i(TAG, "Reloaded source; reason=$reason, stage=${currentDecoderStage.name}")
     } catch (t: Throwable) {
       pendingSeekAfterReloadSec = null
       emitError("Failed to reload media: ${t.message}")
@@ -688,6 +941,7 @@ class MpvEngine(
       val MPV_FORMAT_FLAG = 3
       val MPV_FORMAT_INT64 = 4
       val MPV_FORMAT_NONE = 0
+      val MPV_FORMAT_STRING = 1
 
       MPVLib.observeProperty("time-pos", MPV_FORMAT_DOUBLE)
       MPVLib.observeProperty("duration", MPV_FORMAT_DOUBLE)
@@ -700,6 +954,9 @@ class MpvEngine(
 
       // First-frame-ish signal.
       MPVLib.observeProperty("vo-configured", MPV_FORMAT_FLAG)
+      
+      // Hardware decoder status - for immediate failure detection
+      MPVLib.observeProperty("hwdec-current", MPV_FORMAT_STRING)
     } catch (_: Throwable) {
       // ignore
     }
