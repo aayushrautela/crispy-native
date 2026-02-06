@@ -78,6 +78,10 @@ class VlcEngine(
   
   // Resize mode: contain (fit), cover (fill), stretch, original
   private var resizeMode: String = "contain"
+  
+  // Pending seek after source change - VLC needs to be fully ready before seeking
+  private var pendingSeekPositionSec: Double? = null
+  private var isSeekable: Boolean = false
 
   // Track mapping - kept for backward compatibility but now using VLC track IDs directly
   private data class TrackInfo(val id: Int, val name: String, val language: String)
@@ -134,12 +138,15 @@ class VlcEngine(
           MediaPlayer.Event.Playing -> {
             emitIsPlayingChangedIfNeeded(true)
             emitBufferingChangedIfNeeded(false)
+            // Apply pending seek when playback starts (player is ready)
+            applyPendingSeekIfReady()
           }
           MediaPlayer.Event.Paused -> {
             emitIsPlayingChangedIfNeeded(false)
           }
           MediaPlayer.Event.Stopped -> {
             emitIsPlayingChangedIfNeeded(false)
+            isSeekable = false
           }
           MediaPlayer.Event.EndReached -> {
              emitIsPlayingChangedIfNeeded(false)
@@ -152,6 +159,17 @@ class VlcEngine(
             // event.getBuffering() returns float 0-100
             val buffering = event.buffering < 100f
             emitBufferingChangedIfNeeded(buffering)
+            // When buffering completes, try to apply pending seek
+            if (!buffering) {
+              applyPendingSeekIfReady()
+            }
+          }
+          MediaPlayer.Event.SeekableChanged -> {
+            // VLC reports when the media becomes seekable
+            isSeekable = event.seekable
+            if (isSeekable) {
+              applyPendingSeekIfReady()
+            }
           }
           MediaPlayer.Event.Vout -> {
              // Vout count changed, surface attached/detached or resized
@@ -312,6 +330,8 @@ class VlcEngine(
     cachedDuration = 0
     cachedWidth = 0
     cachedHeight = 0
+    pendingSeekPositionSec = null
+    isSeekable = false
     
     val mp = mediaPlayer ?: return
     val lib = libVLC ?: return
@@ -371,9 +391,48 @@ class VlcEngine(
   }
 
   fun seek(positionSec: Double) {
+    val mp = mediaPlayer ?: return
+    
+    // If seeking to 0 or very close to start, just do it directly
+    if (positionSec <= 0.5) {
+      try {
+        mp.time = (positionSec * 1000.0).toLong()
+      } catch (_: Throwable) {}
+      return
+    }
+    
+    // Check if player is ready to seek
+    val canSeekNow = isSeekable && hasLoadEventFired && mp.length > 0
+    
+    if (canSeekNow) {
+      try {
+        mp.time = (positionSec * 1000.0).toLong()
+        Log.d(TAG, "Seek applied immediately to ${positionSec}s")
+      } catch (_: Throwable) {}
+    } else {
+      // Queue the seek for when the player is ready
+      pendingSeekPositionSec = positionSec
+      Log.d(TAG, "Seek queued: ${positionSec}s (seekable=$isSeekable, loaded=$hasLoadEventFired, length=${mp.length})")
+    }
+  }
+  
+  private fun applyPendingSeekIfReady() {
+    val seekPos = pendingSeekPositionSec ?: return
+    val mp = mediaPlayer ?: return
+    
+    // Check if player is truly ready
+    if (!isSeekable || mp.length <= 0) {
+      return
+    }
+    
+    pendingSeekPositionSec = null
+    
     try {
-      mediaPlayer?.time = (positionSec * 1000.0).toLong()
-    } catch (_: Throwable) {}
+      mp.time = (seekPos * 1000.0).toLong()
+      Log.d(TAG, "Pending seek applied: ${seekPos}s")
+    } catch (e: Throwable) {
+      Log.w(TAG, "Failed to apply pending seek", e)
+    }
   }
 
   fun setRate(rate: Double) {

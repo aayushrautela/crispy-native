@@ -6,7 +6,8 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 interface AudioTrack {
     id: string | number;
-    title: string;
+    title?: string;
+    name?: string;
     language?: string;
 }
 
@@ -62,7 +63,7 @@ export function AudioTab({
                                     : theme.colors.onSurface
                             }}
                         >
-                            {item.title}
+                            {item.name || item.title || `Track ${item.id}`}
                         </Typography>
                         {isSelected && (
                             <Check
