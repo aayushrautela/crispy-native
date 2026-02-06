@@ -57,11 +57,14 @@ const withAudioConfig = (config) => {
         const androidManifest = config.modResults.manifest;
 
         // 1. Add Permissions
-        const permissionsToAdd = [
-            'android.permission.RECORD_AUDIO',
-            'android.permission.MODIFY_AUDIO_SETTINGS',
-            'android.permission.BLUETOOTH_CONNECT',
-        ];
+    const permissionsToAdd = [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+      'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+    ];
 
         if (!androidManifest['uses-permission']) {
             androidManifest['uses-permission'] = [];

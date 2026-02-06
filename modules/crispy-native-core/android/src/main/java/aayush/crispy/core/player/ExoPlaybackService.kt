@@ -146,7 +146,10 @@ class ExoPlaybackService : Service(), ExoEngine.NotificationCallbacks, ExoEngine
     if (playing) {
       if (!isForeground) {
         try {
+          startForeground(MediaSessionHandler.NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
           startForeground(MediaSessionHandler.NOTIFICATION_ID, notification)
+        }
           isForeground = true
         } catch (t: Throwable) {
           Log.w(TAG, "startForeground failed", t)
