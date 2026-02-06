@@ -105,8 +105,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
-            style={styles.modal}
-            containerStyle={isTablet ? { width: sheetWidth, marginHorizontal: 'auto' } : undefined}
+            style={isTablet ? [styles.modal, { width: sheetWidth, alignSelf: 'center' }] : styles.modal}
             onDismiss={() => {
                 setIsOpen(false);
                 onDismiss?.();
