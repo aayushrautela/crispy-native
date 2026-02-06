@@ -8,6 +8,7 @@ import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
 import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
+import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
@@ -20,40 +21,7 @@ import { PlayerTabSystem } from './components/PlayerTabSystem';
 import { usePlayerGestures } from './hooks/usePlayerGestures';
 
 const UP_NEXT_TRIGGER_SECONDS = 25;
-const LOCAL_STREAM_BASE = 'http://127.0.0.1:11470';
 
-const normalizeLocalStreamUrl = (url: string) => {
-    if (!url) return url;
-    return url
-        .replace('http://localhost:11470', LOCAL_STREAM_BASE)
-        .replace('http://127.0.0.1:11470', LOCAL_STREAM_BASE);
-};
-
-const isLocalStreamUrl = (url: string) => url.startsWith(LOCAL_STREAM_BASE);
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-const waitForLocalStreamReady = async (url: string, timeoutMs = 60_000) => {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
-        try {
-            const res = await fetch(url, {
-                method: 'GET',
-                headers: { Range: 'bytes=0-1' },
-            });
-            if (res.status === 200 || res.status === 206) return;
-            if (res.status === 503) {
-                await sleep(750);
-                continue;
-            }
-            const body = await res.text().catch(() => '');
-            throw new Error(`Unexpected status ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
-        } catch {
-            await sleep(750);
-        }
-    }
-    throw new Error(`Timed out waiting for local stream (${timeoutMs}ms)`);
-};
 
 type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
 
@@ -138,18 +106,22 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const episodeTitle = useMemo(() => session?.episodeTitle || '', [session?.episodeTitle]);
     const derivedTitle = useMemo(() => session?.title || props.title || 'Now Playing', [props.title, session?.title]);
 
-    // Core Player State
-    const [paused, setPaused] = useState<boolean>(() => session?.paused ?? props.paused ?? false);
-    const [buffering, setBuffering] = useState(false);
-    const [firstFrameRendered, setFirstFrameRendered] = useState(false);
-    const [loadingStreamSwitch, setLoadingStreamSwitch] = useState(false);
+    // --- Core Player Logic (State Machine) ---
+    const { state: playerState, dispatch } = usePlayerLogic(sessionId);
+    
+    // Derived UI State
+    const paused = playerState.status === 'paused';
+    const buffering = playerState.status === 'buffering' || playerState.status === 'booting_torrent' || playerState.status === 'polling_localhost' || playerState.status === 'loading_media';
+    const firstFrameRendered = playerState.status === 'playing' || playerState.status === 'paused'; // Simplified
+    const lastError = playerState.error;
+
     const [showControls, setShowControls] = useState(true);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     const [isPipMode, setIsPipMode] = useState(false);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
     const [stableDuration, setStableDuration] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
-    const [lastError, setLastError] = useState<string | null>(null);
+
 
     // Track state
     const [audioTracks, setAudioTracks] = useState<any[]>([]);
@@ -188,13 +160,11 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { meta, enriched, seasonEpisodes, colors } = useMetaAggregator(baseId, String(contentType), activeSeason);
 
     const isLoading = useMemo(() => {
-        if (loadingStreamSwitch) return true;
         if (buffering) return true;
-        const pState = session?.playbackState || 'idle';
-        const ready = pState === 'ready' || firstFrameRendered || progress.position > 0 || stableDuration > 0;
-        if (!ready && !lastError) return true;
+        const pState = playerState.status;
+        if (pState === 'booting_torrent' || pState === 'polling_localhost' || pState === 'loading_media') return true;
         return false;
-    }, [loadingStreamSwitch, buffering, session?.playbackState, firstFrameRendered, progress.position, stableDuration, lastError]);
+    }, [buffering, playerState.status]);
 
     // Fetch Intro Data
     useEffect(() => {
@@ -255,12 +225,12 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     const togglePlay = useCallback(() => {
         const nextPaused = !paused;
-        setPaused(nextPaused);
-        useNativePlayerSessionStore.getState().patchSession(sessionId, { paused: nextPaused });
-        animatePlayPause();
+        // Optimistic update handled by dispatch if we wanted, but machine waits for native event.
+        // We just send the command.
         void CrispyNativeCore.nativePlayerSetPaused(nextPaused);
+        animatePlayPause();
         resetControlsTimer();
-    }, [paused, resetControlsTimer, sessionId]);
+    }, [paused, resetControlsTimer]);
 
     const { seekAccumulation, handleTouchEnd, playPauseScale, animatePlayPause } = usePlayerGestures({
         sessionId,
@@ -275,7 +245,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const playPauseAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: playPauseScale.value }] }));
     const feedbackAnimatedStyle = useAnimatedStyle(() => ({ opacity: withTiming(seekAccumulation.direction ? 1 : 0, { duration: 150 }) }));
 
-    // --- Native Events ---
+    // --- Native Events (Data Only) ---
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('nativePlayerEvent', (incoming: any) => {
             const evt = incoming?.nativeEvent ?? incoming;
@@ -285,12 +255,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 case 'load':
                     {
                         const duration = toFiniteNumber(evt.duration);
-                        setLastError(null);
                         setStableDuration(duration);
                         setProgress(p => ({ ...p, duration }));
-                        setLoadingStreamSwitch(false);
-                        setFirstFrameRendered(true);
-                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
                         if (pendingSeekAfterLoadRef.current !== null) {
                             void CrispyNativeCore.nativePlayerSeek(pendingSeekAfterLoadRef.current);
                             pendingSeekAfterLoadRef.current = null;
@@ -302,11 +268,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                         const position = toFiniteNumber(evt.position ?? evt.currentTime);
                         const duration = toFiniteNumber(evt.duration);
                         if (!isSeeking) setProgress({ position, duration });
-                        if (position > 0) {
-                            setFirstFrameRendered(true);
-                            setBuffering(false);
-                            useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
-                        }
+                        
                         if (contentType === 'series' && duration > 0) {
                             const timeLeft = duration - position;
                             setShowUpNext(timeLeft <= UP_NEXT_TRIGGER_SECONDS && timeLeft > 0);
@@ -319,32 +281,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     setSelectedAudioId(evt.audioTracks?.find((t: any) => t.selected)?.id);
                     setSelectedSubtitleId(evt.subtitleTracks?.find((t: any) => t.selected)?.id ?? -1);
                     break;
-                case 'isPlaying':
-                    setPaused(!evt.isPlaying);
-                    useNativePlayerSessionStore.getState().patchSession(sessionId, { paused: !evt.isPlaying });
-                    if (evt.isPlaying) {
-                        setFirstFrameRendered(true);
-                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
-                    }
-                    break;
-                case 'buffering':
-                    {
-                        const isBuffering = !!evt.buffering;
-                        setBuffering(isBuffering);
-                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: isBuffering ? 'buffering' : 'ready' });
-                        break;
-                    }
-                case 'first-frame':
-                    setFirstFrameRendered(true);
-                    setBuffering(false);
-                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
-                    break;
-                case 'error':
-                    setLastError(evt.message);
-                    setLoadingStreamSwitch(false);
-                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'error' });
-                    break;
-                case 'end': void CrispyNativeCore.closePlayerActivity(); break;
+                // 'buffering', 'isPlaying', 'first-frame', 'error', 'end' handled by usePlayerLogic
             }
         });
         return () => sub.remove();
@@ -389,59 +326,33 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         if (cue?.text !== currentSubtitleText) setCurrentSubtitleText(cue?.text || '');
     }, [progress.position, subtitleCues, subtitleDelay, selectedExternalSubtitleUrl]);
 
-    // --- Stream switching ---
-    const switchToStream = useCallback(async (stream: any, options?: any) => {
-        setLoadingStreamSwitch(true);
-        setFirstFrameRendered(false);
-        setBuffering(true);
+    // --- Stream switching (Delegated to Machine) ---
+    const switchToStream = useCallback((stream: any, options?: any) => {
+        const nextMd = { 
+            title: options?.nextEpisodeTitle || mediaMetadata.title, 
+            subtitle: options?.nextShowTitle || mediaMetadata.subtitle, 
+            artworkUrl: options?.nextPoster || mediaMetadata.artworkUrl,
+            contentId: options?.nextContentId ?? contentId
+        };
         
-        const directUrl = stream?.url;
-        let resolved = directUrl ? { url: directUrl } : null;
-        if (!resolved && stream?.infoHash) {
-            const localUrl = await CrispyNativeCore.startStream(stream.infoHash, stream.fileIdx ?? -1, sessionId);
-            if (localUrl) resolved = { url: localUrl };
-        }
-
-        if (!resolved) {
-            setLastError('Failed to resolve');
-            setLoadingStreamSwitch(false);
-            setBuffering(false);
-            return;
-        }
-
-        const normalizedUrl = normalizeLocalStreamUrl(resolved.url || '');
-        if (!normalizedUrl) {
-            setLastError('Missing stream URL');
-            setLoadingStreamSwitch(false);
-            setBuffering(false);
-            return;
-        }
-
-        if (isLocalStreamUrl(normalizedUrl)) {
-            try {
-                await waitForLocalStreamReady(normalizedUrl);
-            } catch (e) {
-                setLastError('Torrent stream not ready. No peers yet.');
-                setLoadingStreamSwitch(false);
-                setBuffering(false);
-                return;
-            }
-        }
-
-        const nextMd = { title: options?.nextEpisodeTitle || mediaMetadata.title, subtitle: options?.nextShowTitle || mediaMetadata.subtitle, artworkUrl: options?.nextPoster || mediaMetadata.artworkUrl };
         pendingSeekAfterLoadRef.current = pendingEpisode ? 0 : progress.position;
 
+        // Sync session store immediately for UI
         useNativePlayerSessionStore.getState().patchSession(sessionId, {
-            id: options?.nextContentId ?? contentId,
-            url: normalizedUrl,
-            paused,
+            id: nextMd.contentId,
+            paused: false, // Auto-play
             artworkUrl: nextMd.artworkUrl,
         });
 
-        await CrispyNativeCore.nativePlayerLoad({ url: normalizedUrl, headers: stream?.behaviorHints?.headers, paused, metadata: nextMd });
+        dispatch({ 
+            type: 'LOAD_STREAM', 
+            stream, 
+            meta: nextMd 
+        });
+
         setActiveTab('none');
         setPendingEpisode(null);
-    }, [sessionId, contentId, paused, progress.position, mediaMetadata, pendingEpisode]);
+    }, [sessionId, contentId, progress.position, mediaMetadata, pendingEpisode, dispatch]);
 
     // --- Lifecycle ---
     useEffect(() => {
@@ -488,7 +399,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         <View style={styles.container} pointerEvents="box-none">
             <PlayerLoadingCurtain
                 sessionId={sessionId}
-                loadingStreamSwitch={loadingStreamSwitch}
+                loadingStreamSwitch={playerState.status === 'loading_media' || playerState.status === 'booting_torrent' || playerState.status === 'polling_localhost'}
                 buffering={buffering}
                 firstFrameRendered={firstFrameRendered}
                 position={progress.position}
