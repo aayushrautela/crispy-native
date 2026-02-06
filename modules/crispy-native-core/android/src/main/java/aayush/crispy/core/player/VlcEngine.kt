@@ -21,7 +21,7 @@ class VlcEngine(
   private val appContext: Context,
   private val notificationCallbacks: NotificationCallbacks? = null,
   private val serviceCallbacks: ServiceCallbacks? = null
-) {
+) : IVLCVout.Callback {
 
   companion object {
     private const val TAG = "VlcEngine"
@@ -167,6 +167,7 @@ class VlcEngine(
       if (!vout.areViewsAttached()) {
           vout.setVideoSurface(surface, null)
           vout.setWindowSize(width, height)
+          vout.addCallback(this)
           vout.attachViews()
           Log.d(TAG, "Surface attached: ${width}x${height}")
       } else {
@@ -187,6 +188,7 @@ class VlcEngine(
       val mp = mediaPlayer ?: return
       val vout = mp.vlcVout
       if (vout.areViewsAttached()) {
+          vout.removeCallback(this)
           vout.detachViews()
           Log.d(TAG, "Surface detached")
       }
@@ -347,46 +349,51 @@ class VlcEngine(
       val tracks = mp.media?.trackCount ?: 0
       if (tracks == 0 && mp.time <= 0) return
 
-      // Get video dimension
-      val currentTrack = mp.currentVideoTrack
-      if (currentTrack == null) {
-          // Might be audio only or not ready
+      // Video dimensions are set via IVLCVout.Callback.onNewVideoLayout
+      // Check if we have valid cached dimensions
+      if (cachedWidth <= 0 || cachedHeight <= 0) {
+          // Not ready yet, dimensions will be set by onNewVideoLayout callback
           return
       }
       
-      // Use currentVideoTrack if available
-      val track = mp.currentVideoTrack
-      if (track != null) {
-          // Cast to VideoTrack and get dimensions
-          try {
-              val vidTrack = track as? Media.VideoTrack
-              if (vidTrack != null && vidTrack.width > 0 && vidTrack.height > 0) {
-                  cachedWidth = vidTrack.width
-                  cachedHeight = vidTrack.height
-              }
-          } catch (_: Exception) {
-              // Fallback: try to get from MediaPlayer's vout
-              val vout = mp.vlcVout
-              if (vout != null) {
-                  cachedWidth = vout.width
-                  cachedHeight = vout.height
-              }
-          }
+      if (mp.length > 0) cachedDuration = mp.length
+      val durSec = cachedDuration.toDouble() / 1000.0
+      
+      hasLoadEventFired = true
+      listeners.forEach { it.onLoad(durSec, cachedWidth, cachedHeight) }
+      
+      if (!firstFrameEmitted) {
+          firstFrameEmitted = true
+          listeners.forEach { it.onFirstFrameRendered() }
       }
       
-      if (cachedWidth > 0 && cachedHeight > 0) {
-          if (mp.length > 0) cachedDuration = mp.length
-          val durSec = cachedDuration.toDouble() / 1000.0
-          
-          hasLoadEventFired = true
-          listeners.forEach { it.onLoad(durSec, cachedWidth, cachedHeight) }
-          
-          if (!firstFrameEmitted) {
-              firstFrameEmitted = true
-              listeners.forEach { it.onFirstFrameRendered() }
-          }
-          
-          PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
+      PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
+  }
+  
+  // IVLCVout.Callback implementation
+  override fun onSurfacesCreated(vlcVout: IVLCVout?) {
+      Log.d(TAG, "Surfaces created")
+  }
+  
+  override fun onSurfacesDestroyed(vlcVout: IVLCVout?) {
+      Log.d(TAG, "Surfaces destroyed")
+  }
+  
+  override fun onNewVideoLayout(
+      vlcVout: IVLCVout?,
+      width: Int,
+      height: Int,
+      visibleWidth: Int,
+      visibleHeight: Int,
+      sarNum: Int,
+      sarDen: Int
+  ) {
+      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight})")
+      if (width > 0 && height > 0) {
+          cachedWidth = width
+          cachedHeight = height
+          // Try to fire load event now that we have dimensions
+          checkForLoadEvent()
       }
   }
 
@@ -483,6 +490,7 @@ class VlcEngine(
     listeners.clear()
     try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Throwable) {}
     try {
+        mediaPlayer?.vlcVout?.removeCallback(this)
         mediaPlayer?.release()
         libVLC?.release()
     } catch (_: Throwable) {}
