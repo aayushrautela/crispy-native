@@ -1,4 +1,5 @@
 import { useTheme } from '@/src/core/ThemeContext';
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { BackHandler, Dimensions, StyleSheet, View } from 'react-native';
@@ -14,6 +15,7 @@ interface BottomSheetProps {
     enableDynamicSizing?: boolean;
     maxHeight?: number;
     onDismiss?: () => void;
+    onChange?: (index: number) => void;
 }
 
 export type BottomSheetRef = BottomSheetModal;
@@ -26,16 +28,21 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
     scrollable = true,
     enableDynamicSizing = true,
     maxHeight,
-    onDismiss
+    onDismiss,
+    onChange
 }, ref) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
-    const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+    const { isTablet, width: windowWidth, height: windowHeight } = useResponsive();
+    const SCREEN_HEIGHT = windowHeight;
+
     const modalRef = useRef<BottomSheetModal>(null);
     const [isOpen, setIsOpen] = useState(false);
 
     // Expose the modal ref to the parent
     useImperativeHandle(ref, () => modalRef.current!);
+
+    const sheetWidth = isTablet ? Math.min(windowWidth * 0.85, 640) : '100%';
 
     // Handle Hardware Back Button on Android
     useEffect(() => {
@@ -99,11 +106,13 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
             style={styles.modal}
+            containerStyle={isTablet ? { width: sheetWidth, marginHorizontal: 'auto' } : undefined}
             onDismiss={() => {
                 setIsOpen(false);
                 onDismiss?.();
             }}
             onAnimate={handleAnimate}
+            onChange={onChange}
         >
             <View style={styles.container}>
                 {title && (
@@ -135,6 +144,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
         </BottomSheetModal>
     );
 });
+
+CustomBottomSheet.displayName = 'CustomBottomSheet';
 
 const styles = StyleSheet.create({
     modal: {

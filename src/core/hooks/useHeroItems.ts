@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { AddonService, MetaPreview } from '../services/AddonService';
+import { useUserStore } from '../stores/userStore';
 
 export interface Meta extends MetaPreview {
     background?: string;
@@ -19,14 +20,14 @@ export const useHeroItems = (enabled: boolean = true) => {
     // 1. Identify "hero" catalogs across all installed addons
     const heroCatalogs = useMemo(() => {
         return Object.entries(manifests).flatMap(([url, manifest]) =>
-            (manifest.catalogs || [])
-                .filter(cat =>
+            ((manifest as any).catalogs || [])
+                .filter((cat: any) =>
                     cat.id === 'top' ||
                     cat.id.includes('hero') ||
                     cat.id === 'trending' ||
                     (cat.type === 'movie' && cat.id === 'popular')
                 )
-                .map(catalog => ({
+                .map((catalog: any) => ({
                     ...catalog,
                     addonUrl: url
                 }))

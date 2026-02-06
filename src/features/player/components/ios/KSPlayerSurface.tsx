@@ -34,7 +34,7 @@ interface KSPlayerSurfaceProps {
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
 }
 
-export const KSPlayerSurface = React.forwardRef<KSPlayerSurfaceRef, KSPlayerSurfaceProps>((props, ref) => {
+export const KSPlayerSurface = React.forwardRef<KSPlayerSurfaceRef, KSPlayerSurfaceProps>(function KSPlayerSurface(props, ref) {
     // TODO: Implement native iOS module bridge to KSPlayer
 
     React.useImperativeHandle(ref, () => ({
@@ -56,6 +56,8 @@ export const KSPlayerSurface = React.forwardRef<KSPlayerSurfaceRef, KSPlayerSurf
         </View>
     );
 });
+
+KSPlayerSurface.displayName = 'KSPlayerSurface';
 
 const styles = StyleSheet.create({
     container: {

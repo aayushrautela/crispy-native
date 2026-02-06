@@ -4,7 +4,7 @@ import { Image as ExpoImage } from 'expo-image';
 import React, { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-const CastItem = memo(({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) => {
+const CastItem = memo(function CastItem({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) {
     return (
         <Pressable onPress={onPress}>
             <View style={styles.castItem}>
@@ -41,7 +41,7 @@ interface CastSectionProps {
     onPersonPress: (id: string) => void;
 }
 
-export const CastSection = memo(({ cast, theme, colors, palette, onPersonPress }: CastSectionProps) => {
+export const CastSection = memo(function CastSection({ cast, theme, colors, palette, onPersonPress }: CastSectionProps) {
     if (!cast || cast.length === 0) return null;
 
     return (

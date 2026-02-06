@@ -32,9 +32,11 @@ dependencies {
   // React Native bridge (for LifecycleEventListener, ReactContext)
   implementation "com.facebook.react:react-android"
 
-  // MPV Player library (compileOnly - actual AARs provided by main app via withLocalAarDependencies plugin)
-  compileOnly files("libs/libmpv-release.aar")
-  compileOnly files("libs/lib-decoder-ffmpeg-release.aar")
+  // Core KTX for WindowCompat/WindowInsetsControllerCompat
+  implementation "androidx.core:core-ktx:1.12.0"
+
+  // VLC Player library
+  implementation "org.videolan.android:libvlc-all:3.6.0"
   
   // jlibtorrent JARs
   implementation fileTree(dir: 'libs', include: ['*.jar'])

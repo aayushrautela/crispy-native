@@ -37,14 +37,15 @@ interface HeroSectionProps {
     onCollectionToggle?: () => void;
     onWatchedToggle?: () => void;
     onRatePress?: () => void;
+    watchState: any;
 }
 
 /**
  * SUB-COMPONENT: HeroBackdrop
  */
-const HeroBackdrop = memo(({
+const HeroBackdrop = memo(function HeroBackdrop({
     backdropUrl, trailerKey, showTrailer, isMuted, isPlaying, revealTrailer, width, height = BACKDROP_HEIGHT, showBottomFade = true, backgroundColor
-}: any) => {
+}: any) {
     const transparentBg = backgroundColor.startsWith('#') ? backgroundColor.substring(0, 7) + '00' : 'transparent';
 
     return (
@@ -69,27 +70,29 @@ const HeroBackdrop = memo(({
 /**
  * SUB-COMPONENT: HeroMetadata
  */
-const HeroMetadata = memo(({ enriched, alignment = 'center' }: { enriched: Partial<TMDBMeta>, meta?: any, alignment?: 'center' | 'flex-start' }) => (
-    <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}>
-        {enriched.rating && (
-            <View style={styles.metaItem}>
-                <Star size={14} color="#FFD700" fill="#FFD700" />
-                <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                    {Number(enriched.rating).toFixed(1)}
-                </Typography>
-            </View>
-        )}
-        {enriched.maturityRating && (
-            <View style={styles.metaBadge}>
-                <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 10 }}>
-                    {enriched.maturityRating}
-                </Typography>
-            </View>
-        )}
-        {enriched.year && <Typography variant="label" style={styles.metaText}>{enriched.year}</Typography>}
-        {enriched.runtime && <Typography variant="label" style={styles.metaText}>{enriched.runtime}</Typography>}
-    </View>
-));
+const HeroMetadata = memo(function HeroMetadata({ enriched, alignment = 'center' }: { enriched: Partial<TMDBMeta>, meta?: any, alignment?: 'center' | 'flex-start' }) {
+    return (
+        <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}> 
+            {enriched.rating && (
+                <View style={styles.metaItem}>
+                    <Star size={14} color="#FFD700" fill="#FFD700" />
+                    <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
+                        {Number(enriched.rating).toFixed(1)}
+                    </Typography>
+                </View>
+            )}
+            {enriched.maturityRating && (
+                <View style={styles.metaBadge}>
+                    <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 10 }}>
+                        {enriched.maturityRating}
+                    </Typography>
+                </View>
+            )}
+            {enriched.year && <Typography variant="label" style={styles.metaText}>{enriched.year}</Typography>}
+            {enriched.runtime && <Typography variant="label" style={styles.metaText}>{enriched.runtime}</Typography>}
+        </View>
+    );
+});
 
 interface HeroWatchButtonProps {
     onPress: () => void;
@@ -105,60 +108,64 @@ interface HeroWatchButtonProps {
 /**
  * SUB-COMPONENT: HeroWatchButton
  */
-const HeroWatchButton = memo(({ onPress, isLoading, color, textColor, label, subtext, icon, pillColor }: HeroWatchButtonProps) => (
-    <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [
-            styles.watchBtn,
-            { backgroundColor: color, opacity: pressed || isLoading ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
-        ]}
-        disabled={isLoading}
-    >
-        {isLoading ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                <LoadingIndicator color={textColor} size={36} />
-            </View>
-        ) : (
-            <>
-                <View style={[styles.watchIconPill, { backgroundColor: pillColor }]}>
-                    {icon}
+const HeroWatchButton = memo(function HeroWatchButton({ onPress, isLoading, color, textColor, label, subtext, icon, pillColor }: HeroWatchButtonProps) {
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [
+                styles.watchBtn,
+                { backgroundColor: color, opacity: pressed || isLoading ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
+            ]}
+            disabled={isLoading}
+        >
+            {isLoading ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <LoadingIndicator color={textColor} size={36} />
                 </View>
-                <View style={styles.watchLabelContainer}>
-                    <View>
-                        <Typography variant="title-medium" weight="black" style={{ color: textColor, fontSize: 16, textAlign: 'center' }}>
-                            {label}
-                        </Typography>
-                        {subtext && (
-                            <Typography variant="label" weight="bold" style={{ color: textColor, opacity: 0.8, fontSize: 11, textAlign: 'center', marginTop: -2 }}>
-                                {subtext}
-                            </Typography>
-                        )}
+            ) : (
+                <>
+                    <View style={[styles.watchIconPill, { backgroundColor: pillColor }]}>
+                        {icon}
                     </View>
-                </View>
-            </>
-        )}
-    </Pressable>
-));
+                    <View style={styles.watchLabelContainer}>
+                        <View>
+                            <Typography variant="title-medium" weight="black" style={{ color: textColor, fontSize: 16, textAlign: 'center' }}>
+                                {label}
+                            </Typography>
+                            {subtext && (
+                                <Typography variant="label" weight="bold" style={{ color: textColor, opacity: 0.8, fontSize: 11, textAlign: 'center', marginTop: -2 }}>
+                                    {subtext}
+                                </Typography>
+                            )}
+                        </View>
+                    </View>
+                </>
+            )}
+        </Pressable>
+    );
+});
 
 /**
  * SUB-COMPONENT: HeroIdentity
  */
-const HeroIdentity = memo(({ enriched, meta, alignment = 'center' }: any) => (
-    <>
-        {enriched.logo ? (
-            <ExpoImage source={{ uri: enriched.logo }} style={[styles.heroLogo, alignment === 'flex-start' && { alignSelf: 'flex-start' }]} contentFit="contain" />
-        ) : (
-            <Typography variant="h1" weight="black" style={[styles.heroTitle, alignment === 'flex-start' && { textAlign: 'left', fontSize: 36, lineHeight: 44 }]}>
-                {(enriched.title || meta?.name)?.toUpperCase()}
-            </Typography>
-        )}
-    </>
-));
+const HeroIdentity = memo(function HeroIdentity({ enriched, meta, alignment = 'center' }: any) {
+    return (
+        <>
+            {enriched.logo ? (
+                <ExpoImage source={{ uri: enriched.logo }} style={[styles.heroLogo, alignment === 'flex-start' && { alignSelf: 'flex-start' }]} contentFit="contain" />
+            ) : (
+                <Typography variant="h1" weight="black" style={[styles.heroTitle, alignment === 'flex-start' && { textAlign: 'left', fontSize: 36, lineHeight: 44 }]}>
+                    {(enriched.title || meta?.name)?.toUpperCase()}
+                </Typography>
+            )}
+        </>
+    );
+});
 
 /**
  * SUB-COMPONENT: HeroDescription
  */
-const HeroDescription = memo(({ enriched, meta, isExpanded, onToggle, alignment = 'center' }: any) => {
+const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpanded, onToggle, alignment = 'center' }: any) {
     const description = enriched.description || meta?.description || '';
     const [layoutWidth, setLayoutWidth] = React.useState(0);
     const [collapsedText, setCollapsedText] = React.useState<string | null>(null);
@@ -230,18 +237,19 @@ const HeroDescription = memo(({ enriched, meta, isExpanded, onToggle, alignment 
 /**
  * MAIN COMPONENT: HeroSection
  */
-export const HeroSection = memo(({
+export const HeroSection = memo(function HeroSection({
     meta, enriched, colors, scrollY, onWatchPress, isMuted = true,
     isAuthenticated, isListed, isCollected, isWatched, isSeries, userRating,
-    onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress
-}: HeroSectionProps) => {
+    onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress,
+    watchState
+}: HeroSectionProps) {
     const { width, isTablet, isLandscape } = useResponsive();
     const { theme } = useTheme();
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,
         watchButtonSubtext, pillColor, toggleTrailer, palette
-    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background });
+    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background, watchState });
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
     const isSplitLayout = isTablet && isLandscape;

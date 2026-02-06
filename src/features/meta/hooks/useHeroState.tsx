@@ -2,32 +2,35 @@
 import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { TrailerService } from '@/src/core/services/TrailerService';
 import { generateMediaPalette } from '@/src/core/utils/colors';
-import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { Play, RotateCcw } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import Animated, { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
 
 interface UseHeroStateProps {
     meta: any;
     enriched: Partial<TMDBMeta>;
     colors: any;
-    scrollY: Animated.SharedValue<number>;
+    scrollY: SharedValue<number>;
     heroHeight: number;
     background: string;
+    watchState: {
+        state: 'watch' | 'continue' | 'rewatch';
+        progress?: number;
+        episode?: any;
+        lastWatchedAt?: string;
+        isLoading: boolean;
+    };
 }
 
-export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background }: UseHeroStateProps) => {
+export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background, watchState }: UseHeroStateProps) => {
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [showTrailer, setShowTrailer] = useState(false);
     const [revealTrailer, setRevealTrailer] = useState(false);
     const [isPlaying, setIsPlaying] = useState(true);
 
-    // Watch state integration
-    const { state, progress, isLoading, episode, lastWatchedAt } = useTraktWatchState(
-        enriched.imdbId || meta?.id,
-        meta?.type
-    );
+    // Watch state is now passed in via props (Lifted State)
+    const { state, progress, isLoading, episode, lastWatchedAt } = watchState;
 
     // Visibility-based playback
     useAnimatedReaction(
@@ -45,8 +48,8 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         const key = TrailerService.getFirstTrailerKey(enriched.videos || []);
         setTrailerKey(key);
 
-        let mountTimer: NodeJS.Timeout;
-        let revealTimer: NodeJS.Timeout;
+        let mountTimer: ReturnType<typeof setTimeout> | undefined;
+        let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
         if (key) {
             mountTimer = setTimeout(() => setShowTrailer(true), 2000);
@@ -54,8 +57,8 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         }
 
         return () => {
-            clearTimeout(mountTimer);
-            clearTimeout(revealTimer);
+            if (mountTimer) clearTimeout(mountTimer);
+            if (revealTimer) clearTimeout(revealTimer);
         };
     }, [enriched.videos]);
 

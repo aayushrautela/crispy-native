@@ -29,12 +29,19 @@ export interface AppSettings {
     accentColor: string;
     amoledMode: boolean;
     useMaterialYou: boolean;
-    videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
-
-    // Player engine tuning (used by MPV surface)
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
-    gpuMode?: 'gpu' | 'gpu-next';
+    // Playback engine preference. "auto" starts with ExoPlayer and falls back to VLC when needed.
+    videoPlayerEngine: 'auto' | 'vlc';
     updatedAt?: number;
+}
+
+function normalizeVideoPlayerEngine(value: unknown): AppSettings['videoPlayerEngine'] {
+    const engine = typeof value === 'string' ? value.toLowerCase() : '';
+    // Legacy values: treat explicit Exo selection as Auto.
+    return engine === 'vlc' ? 'vlc' : 'auto';
+}
+
+function sanitizeSettingsPatch(updates: Partial<AppSettings>): Partial<AppSettings> {
+    return { ...updates };
 }
 
 export interface Addon {
@@ -93,10 +100,7 @@ function getDefaultSettings(): AppSettings {
         accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
         amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
         useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
-        videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
-
-        decoderMode: (StorageService.getUser<string>('crispy-decoder-mode') as any) || 'auto',
-        gpuMode: (StorageService.getUser<string>('crispy-gpu-mode') as any) || 'gpu',
+        videoPlayerEngine: normalizeVideoPlayerEngine(StorageService.getUser<string>('crispy-video-engine')),
     };
 }
 
@@ -153,6 +157,7 @@ export interface UserStoreState extends UserState {
     // Lifecycle
     reloadFromStorage: () => void;
     resetToDefaults: () => void;
+    reset: () => void;
 }
 
 // Helper to persist standard settings to StorageService (Side effects)
@@ -234,11 +239,12 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         setLoading: (loading) => set({ loading }),
 
         updateSettings: (updates) => {
+            const normalizedUpdates = sanitizeSettingsPatch(updates);
             const current = get().settings;
-            const next = { ...current, ...updates, updatedAt: Date.now() };
+            const next = { ...current, ...normalizedUpdates, updatedAt: Date.now() };
 
             set({ settings: next });
-            persistLocalSettings(updates);
+            persistLocalSettings(normalizedUpdates);
         },
 
         updateAddons: (addons) => {
@@ -340,7 +346,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             const nextState: Partial<UserState> = {};
 
             if (fetched.settings) {
-                nextState.settings = { ...current.settings, ...fetched.settings };
+                nextState.settings = { ...current.settings, ...sanitizeSettingsPatch(fetched.settings) };
                 persistLocalSettings(nextState.settings);
             }
             if (fetched.addons) {
@@ -390,6 +396,11 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             });
             // Ensure defaults are persisted (Wipe custom data)
             StorageService.setUser('crispy-addons', defaults);
+        },
+        
+        // Alias for resetToDefaults or similar reset logic expected by SyncService
+        reset: () => {
+             get().reloadFromStorage();
         }
     };
 });

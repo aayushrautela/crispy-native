@@ -8,7 +8,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import 'react-native-reanimated';
 import { AuthProvider, useAuth } from '../core/AuthContext';
 import { DiscoveryProvider } from '../core/DiscoveryContext';
 import { StorageService } from '../core/storage';

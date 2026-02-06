@@ -1,17 +1,13 @@
 import { MetaPreview } from '@/src/core/services/AddonService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Typography } from '@/src/core/ui/Typography';
 import { useCatalogActions } from '@/src/features/catalog/context/CatalogActionsContext';
 import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Star } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
-
-const AnimatedExpoImage = Animated.createAnimatedComponent(ExpoImage);
+import React, { useCallback } from 'react';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 function formatBadgeRating(value: unknown): string | null {
     const n = typeof value === 'number' ? value : Number(value);
@@ -26,11 +22,10 @@ interface CatalogCardProps {
     width?: number;
 }
 
-const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
+const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const settings = useUserStore(s => s.settings);
-    const [focused, setFocused] = useState(false);
     const { openActions } = useCatalogActions();
 
     // Pure Component: No enrichment hook. 
@@ -39,7 +34,10 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     const displayAny = displayItem as any;
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
-    const height = width / aspectRatio;
+
+    const imageSrc = displayItem.posterShape === 'landscape'
+        ? (displayItem.backdrop || displayItem.poster)
+        : (displayItem.poster);
 
     const handlePress = useCallback(() => {
         router.push({
@@ -52,67 +50,47 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
         openActions(item);
     }, [item, openActions]);
 
-    const animatedImageStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
-        };
-    });
-
     return (
-        <View style={[styles.container, { width }]}>
-            <ExpressiveSurface
-                variant="filled"
-                rounding="lg"
-                style={[styles.surface, { height }]}
+        <View style={[styles.container, width !== undefined && { width }]}>
+            <Pressable
                 onPress={handlePress}
                 onLongPress={handleLongPress}
-                onFocusChange={setFocused}
-                disableLayoutAnimation={true}
+                accessibilityRole="button"
+                android_ripple={{ color: 'rgba(255,255,255,0.08)', borderless: false }}
+                style={({ pressed }) => [
+                    styles.surface,
+                    {
+                        aspectRatio,
+                        backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant,
+                    },
+                    pressed && styles.surfacePressed,
+                ]}
             >
-                <View style={[styles.imageContainer, { backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant }]}>
-                    {/* Placeholder / Fallback: Always rendered behind image */}
-                    <View style={styles.absolutePlaceholder}>
-                        <Typography
-                            variant="label-small"
-                            weight="bold"
-                            style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}
-                            numberOfLines={3}
-                        >
-                            {displayItem.name}
-                        </Typography>
-                    </View>
-
-                    {(() => {
-                        const imageSrc = displayItem.posterShape === 'landscape'
-                            ? (displayItem.backdrop || displayItem.poster)
-                            : (displayItem.poster);
-
-                        if (imageSrc) {
-                            return (
-                                <AnimatedExpoImage
-                                    key={displayItem.id} // React Key for clean remounts
-                                    recyclingKey={imageSrc} // Native recycling key
-                                    source={{ uri: imageSrc }}
-                                    style={[styles.image, animatedImageStyle]}
-                                    contentFit="cover"
-                                    transition={Platform.OS === 'android' ? 0 : 200}
-                                    cachePolicy="memory-disk"
-                                />
-                            );
-                        }
-                        return null;
-                    })()}
+                <View style={styles.imageContainer}>
+                    {imageSrc ? (
+                        <ExpoImage
+                            recyclingKey={displayItem.id}
+                            source={{ uri: imageSrc }}
+                            style={styles.image}
+                            contentFit="cover"
+                            transition={Platform.OS === 'android' ? 0 : 150}
+                            cachePolicy="memory-disk"
+                        />
+                    ) : null}
 
                     {/* Logo Overlay */}
-                    {(displayItem.posterShape === 'landscape' && displayItem.logo) && (
-                        <View style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 10 }}>
+                    {(displayItem.posterShape === 'landscape' && displayItem.logo) ? (
+                        <View style={styles.logoOverlay}>
                             <ExpoImage
+                                recyclingKey={`${displayItem.id}-logo`}
                                 source={{ uri: displayItem.logo }}
-                                style={{ width: '70%', height: '50%' }}
+                                style={styles.logo}
                                 contentFit="contain"
+                                transition={Platform.OS === 'android' ? 0 : 150}
+                                cachePolicy="memory-disk"
                             />
                         </View>
-                    )}
+                    ) : null}
 
                     {/* Rating Overlay */}
                     {(() => {
@@ -121,28 +99,27 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         if (!ratingText) return null;
 
                         return (
-                        <View style={styles.ratingOverlay}>
-                            <Star size={10} color="#FFD700" fill="#FFD700" />
-                            <Typography
-                                variant="label-small"
-                                weight="black"
-                                style={{
-                                    color: 'white',
-                                    marginLeft: 4,
-                                    letterSpacing: 0,
-                                    paddingRight: 2,
-                                }}
-                            >
-                                {ratingText}
-                            </Typography>
-                        </View>
+                            <View style={styles.ratingOverlay}>
+                                <Star size={10} color="#FFD700" fill="#FFD700" />
+                                <Typography
+                                    variant="label-small"
+                                    weight="black"
+                                    style={{
+                                        color: 'white',
+                                        marginLeft: 4,
+                                        letterSpacing: 0,
+                                        paddingRight: 2,
+                                    }}
+                                >
+                                    {ratingText}
+                                </Typography>
+                            </View>
                         );
                     })()}
                 </View>
-                {/* No Progress Bar in CatalogCard anymore */}
-            </ExpressiveSurface >
+            </Pressable>
 
-            < View style={styles.metadata} >
+            <View style={styles.metadata}>
                 <Typography
                     variant="body-small"
                     weight="bold"
@@ -176,9 +153,9 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                         </View>
                     )}
                 </View>
-            </View >
+            </View>
 
-        </View >
+        </View>
     );
 };
 
@@ -190,12 +167,44 @@ export const CatalogCard = React.memo(CatalogCardComponent, (prev, next) => {
     );
 });
 
+interface CatalogCardSkeletonProps {
+    width?: number;
+    posterShape?: 'poster' | 'landscape' | 'square';
+}
+
+const CatalogCardSkeletonComponent = ({ width, posterShape = 'poster' }: CatalogCardSkeletonProps) => {
+    const { theme } = useTheme();
+    const aspectRatio = posterShape === 'landscape' ? 16 / 9 : posterShape === 'square' ? 1 : 2 / 3;
+
+    const surfaceColor = (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant;
+    const lineColor = (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant;
+
+    return (
+        <View style={[styles.container, width !== undefined && { width }]}>
+            <View style={[styles.surface, { aspectRatio, backgroundColor: surfaceColor }]} />
+            <View style={styles.metadata}>
+                <View style={[styles.skeletonLine, { width: '78%', backgroundColor: lineColor }]} />
+                <View style={[styles.skeletonLine, { width: '52%', backgroundColor: lineColor, opacity: 0.75 }]} />
+            </View>
+        </View>
+    );
+};
+
+CatalogCardSkeletonComponent.displayName = 'CatalogCardSkeleton';
+
+export const CatalogCardSkeleton = React.memo(CatalogCardSkeletonComponent);
+
 const styles = StyleSheet.create({
     container: {
         gap: 8,
     },
     surface: {
         overflow: 'hidden',
+        borderRadius: 12,
+    },
+    surfacePressed: {
+        transform: [{ scale: 0.985 }],
+        opacity: 0.92,
     },
     imageContainer: {
         flex: 1,
@@ -204,14 +213,19 @@ const styles = StyleSheet.create({
     image: {
         width: '100%',
         height: '100%',
-        zIndex: 1, // Image sits on top
+        zIndex: 1,
     },
-    absolutePlaceholder: {
-        ...StyleSheet.absoluteFillObject,
+    logoOverlay: {
+        position: 'absolute',
+        inset: 0,
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 8,
-        zIndex: 0, // Placeholder sits behind
+        padding: 20,
+        zIndex: 10,
+    },
+    logo: {
+        width: '70%',
+        height: '50%',
     },
     ratingOverlay: {
         position: 'absolute',
@@ -238,5 +252,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 1,
         borderRadius: 4,
-    }
+    },
+    skeletonLine: {
+        height: 10,
+        borderRadius: 6,
+    },
 });

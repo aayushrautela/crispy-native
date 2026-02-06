@@ -15,6 +15,7 @@ interface ExpressiveSwitchProps {
     onValueChange: (value: boolean) => void;
     trackColor?: { false: string; true: string };
     thumbColor?: { false: string; true: string };
+    disabled?: boolean;
 }
 
 const TRACK_WIDTH = 52;
@@ -26,7 +27,8 @@ export function ExpressiveSwitch({
     value,
     onValueChange,
     trackColor,
-    thumbColor
+    thumbColor,
+    disabled = false,
 }: ExpressiveSwitchProps) {
     const { theme } = useTheme();
     const progress = useSharedValue(value ? 1 : 0);
@@ -103,10 +105,11 @@ export function ExpressiveSwitch({
 
     return (
         <Pressable
-            onPress={() => onValueChange(!value)}
+            onPress={disabled ? undefined : () => onValueChange(!value)}
             onPressIn={() => (pressProgress.value = withSpring(1))}
             onPressOut={() => (pressProgress.value = withSpring(0))}
             style={{ width: TRACK_WIDTH, height: TRACK_HEIGHT, justifyContent: 'center' }}
+            disabled={disabled}
         >
             <Animated.View style={[styles.track, rTrackStyle, trackBgStyle]}>
                 <Animated.View style={[styles.thumbContainer]}>

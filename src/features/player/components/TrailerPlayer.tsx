@@ -12,7 +12,7 @@ interface TrailerPlayerProps {
     style?: any;
 }
 
-export const TrailerPlayer = memo(({ url, onReady, onError, onEnd, muted = true, style }: TrailerPlayerProps) => {
+export const TrailerPlayer = memo(function TrailerPlayer({ url, onReady, onError, onEnd, muted = true, style }: TrailerPlayerProps) {
     const opacity = useSharedValue(0);
 
     const animatedStyle = useAnimatedStyle(() => ({

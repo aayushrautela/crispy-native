@@ -51,9 +51,7 @@ export const YouTubeTrailer = ({ videoId, isMuted = true, isPlaying = true, isVi
                     javaScriptEnabled={true}
                     domStorageEnabled={true}
                     scrollEnabled={false}
-                    // Transparent background to blend better if it loads slowly
-                    backgroundColor="black"
-                    opacity={0.99} // Android hack to prevent some rendering glitches
+                    // keep background + opacity inside style for typing
                 />
             </View>
         </View>

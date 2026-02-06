@@ -7,7 +7,7 @@ import { StyleSheet, ScrollView, View } from 'react-native';
 const BACKDROP_HEIGHT = 420;
 const HERO_HEIGHT = 600;
 
-export const MetaDetailsSkeleton = memo(() => {
+export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
     const { isTablet, isLandscape, width } = useResponsive();
     const isSplitLayout = isTablet && isLandscape;
 

@@ -2,7 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 import { Platform, StyleSheet, View } from 'react-native';
 import { usePlayerControls } from '../hooks/usePlayerControls';
 import ExoPlayerNative, { ExoPlayerNativeRef } from './ExoPlayerNative';
-import MpvPlayer, { MpvPlayerRef } from './MpvPlayer';
+import VlcPlayer, { VlcPlayerRef } from './VlcPlayer';
 import { KSPlayerSurface, type KSPlayerSurfaceRef } from './ios/KSPlayerSurface';
 
 // Codec error patterns that should trigger MPV fallback
@@ -19,6 +19,13 @@ const CODEC_ERROR_PATTERNS = [
     'format.no_decoder',
     'decoding_failed',
     'exoplaybackexception',
+    // New patterns from logs
+    'failed.*query.*component',
+    'bad_index',
+    'media_quality.*unavailable',
+    'max.*input.*size',
+    'crypto.*error',
+    'drm.*error',
 ];
 
 const isCodecError = (errorString: string): boolean => {
@@ -50,7 +57,7 @@ interface VideoSurfaceProps {
     paused: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
+    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
 
     // Track selection - react-native-video format
     selectedAudioTrack?: { type: 'index' | 'disabled', value?: number };
@@ -59,8 +66,6 @@ interface VideoSurfaceProps {
 
     // Engine selection
     useExoPlayer: boolean;
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
-    gpuMode?: 'gpu' | 'gpu-next';
     onCodecError?: () => void;
 
     // Callbacks
@@ -69,6 +74,8 @@ interface VideoSurfaceProps {
     onEnd?: () => void;
     onError?: (error: { message: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    onBuffering?: (isBuffering: boolean) => void;
+    onReadyForDisplay?: () => void;
     metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
 }
 
@@ -90,6 +97,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         onEnd,
         onError,
         onTracksChanged,
+        onBuffering,
+        onReadyForDisplay,
     } = props;
 
     // Log metadata for debugging notifications
@@ -98,13 +107,14 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     }, [props.metadata]);
 
     const exoPlayerRef = useRef<ExoPlayerNativeRef>(null);
-    const mpvPlayerRef = useRef<MpvPlayerRef>(null);
+    const vlcPlayerRef = useRef<VlcPlayerRef>(null);
+    const iosPlayerRef = useRef<KSPlayerSurfaceRef>(null);
 
     const isSeeking = useRef(false);
     const isMounted = useRef(true);
 
     const { seekToTime } = usePlayerControls(
-        mpvPlayerRef,
+        vlcPlayerRef,
         paused,
         () => { }, // setPaused placeholder as props handles it
         0, // currentTime placeholder
@@ -122,40 +132,40 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         },
         setAudioTrack: (id: number) => {
             if (useExoPlayer) exoPlayerRef.current?.setAudioTrack(id);
-            else mpvPlayerRef.current?.setAudioTrack(id);
+            else vlcPlayerRef.current?.setAudioTrack(id);
         },
         setSubtitleTrack: (id: number) => {
             if (useExoPlayer) exoPlayerRef.current?.setSubtitleTrack(id);
-            else mpvPlayerRef.current?.setSubtitleTrack(id);
+            else vlcPlayerRef.current?.setSubtitleTrack(id);
         },
         setSubtitleSize: (size: number) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleSize(size);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleSize(size);
         },
         setSubtitleColor: (color: string) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleColor(color);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleColor(color);
         },
         setSubtitleBackgroundColor: (color: string, opacity: number) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBackgroundColor(color, opacity);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleBackgroundColor(color, opacity);
         },
         setSubtitleBorderSize: (size: number) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBorderSize(size);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleBorderSize(size);
         },
         setSubtitleBorderColor: (color: string) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBorderColor(color);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleBorderColor(color);
         },
         setSubtitlePosition: (pos: number) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitlePosition(pos);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitlePosition(pos);
         },
         setSubtitleDelay: (delay: number) => {
             if (!useExoPlayer) {
-                mpvPlayerRef.current?.setSubtitleDelay(delay);
+                vlcPlayerRef.current?.setSubtitleDelay(delay);
             }
         },
         setSubtitleBold: (bold: boolean) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleBold(bold);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleBold(bold);
         },
         setSubtitleItalic: (italic: boolean) => {
-            if (!useExoPlayer) mpvPlayerRef.current?.setSubtitleItalic(italic);
+            if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleItalic(italic);
         },
     }));
 
@@ -176,9 +186,9 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         }
     }, [useExoPlayer, selectedAudioTrack?.type, selectedAudioTrack?.value, selectedTextTrack?.type, selectedTextTrack?.value]);
 
-    // ========== MPV Handlers ==========
-    const handleMpvLoad = (data: any) => {
-        console.log('[VideoSurface] MPV onLoad:', data);
+    // ========== VLC Handlers ==========
+    const handleVlcLoad = (data: any) => {
+        console.log('[VideoSurface] VLC onLoad:', data);
         onLoad?.({
             duration: data?.duration || 0,
             width: data?.width || 1920,
@@ -186,20 +196,20 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         });
     };
 
-    const handleMpvProgress = (data: any) => {
+    const handleVlcProgress = (data: any) => {
         onProgress?.({
             currentTime: data?.position || data?.currentTime || 0,
             duration: data?.duration || 0,
         });
     };
 
-    const handleMpvError = (error: any) => {
-        console.log('[VideoSurface] MPV onError:', error);
-        onError?.({ message: error?.error || 'MPV error' });
+    const handleVlcError = (error: any) => {
+        console.log('[VideoSurface] VLC onError:', error);
+        onError?.({ message: error?.error || 'VLC error' });
     };
 
-    const handleMpvTracksChanged = (data: any) => {
-        console.log('[VideoSurface] MPV onTracksChanged:', data);
+    const handleVlcTracksChanged = (data: any) => {
+        console.log('[VideoSurface] VLC onTracksChanged:', data);
         onTracksChanged?.({
             audioTracks: data?.audioTracks || [],
             subtitleTracks: data?.subtitleTracks || [],
@@ -209,7 +219,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     if (Platform.OS !== 'android') {
         return (
             <KSPlayerSurface
-                ref={useRef<KSPlayerSurfaceRef>(null) as any}
+                ref={iosPlayerRef as any}
                 source={source}
                 headers={headers}
                 paused={paused}
@@ -243,10 +253,12 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     onLoad={(data) => onLoad?.(data)}
                     onProgress={(data) => onProgress?.(data)}
                     onTracksChanged={(data) => onTracksChanged?.(data)}
+                    onBuffering={(e: { buffering: boolean }) => onBuffering?.(e.buffering)}
+                    onReadyForDisplay={() => onReadyForDisplay?.()}
                     onError={(e) => {
                         const msg = e?.error || 'ExoPlayer error';
                         if (isCodecError(msg)) {
-                            console.warn('[VideoSurface] Codec error, triggering MPV fallback');
+                            console.warn('[VideoSurface] Codec error, triggering VLC fallback');
                             onCodecError?.();
                             return;
                         }
@@ -254,22 +266,22 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     }}
                 />
             ) : (
-                <MpvPlayer
-                    ref={mpvPlayerRef}
+                <VlcPlayer
+                    ref={vlcPlayerRef}
                     source={source}
                     headers={headers}
                     paused={paused}
                     resizeMode={resizeMode}
-                    decoderMode={props.decoderMode}
-                    gpuMode={props.gpuMode}
                     metadata={props.metadata}
                     playInBackground={true}
                     style={styles.player}
-                    onLoad={handleMpvLoad}
-                    onProgress={handleMpvProgress}
+                    onLoad={handleVlcLoad}
+                    onProgress={handleVlcProgress}
                     onEnd={onEnd}
-                    onError={handleMpvError}
-                    onTracksChanged={handleMpvTracksChanged}
+                    onError={handleVlcError}
+                    onTracksChanged={handleVlcTracksChanged}
+                    onBuffering={(e: { buffering: boolean }) => onBuffering?.(e.buffering)}
+                    onReadyForDisplay={() => onReadyForDisplay?.()}
                 />
             )}
         </View>

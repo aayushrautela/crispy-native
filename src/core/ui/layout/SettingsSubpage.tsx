@@ -7,7 +7,8 @@ import Animated, {
     interpolateColor,
     useAnimatedScrollHandler,
     useAnimatedStyle,
-    useSharedValue
+    useSharedValue,
+    type SharedValue
 } from 'react-native-reanimated';
 import { EdgeInsets, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../ThemeContext';
@@ -16,7 +17,7 @@ import { Screen } from './Screen';
 
 interface SettingsSubpageContextType {
     onScroll: any;
-    scrollY: Animated.SharedValue<number>;
+    scrollY: SharedValue<number>;
     insets: EdgeInsets;
 }
 

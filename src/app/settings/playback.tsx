@@ -11,9 +11,8 @@ import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const ENGINES = [
     { label: 'Auto', value: 'auto' },
-    { label: 'ExoPlayer', value: 'exoplayer' },
-    { label: 'MPV', value: 'mpv' },
-];
+    { label: 'VLC', value: 'vlc' },
+] as const;
 
 const SKIP_MODES = [
     { label: 'Off', value: 'off' },
@@ -26,6 +25,8 @@ export default function PlaybackScreen() {
     const { settings, updateSettings } = useUserStore();
     const { videoPlayerEngine, autoplayEnabled, introSkipMode } = settings;
 
+    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
+
     return (
         <SettingsSubpage title="Playback">
             <View>
@@ -33,7 +34,7 @@ export default function PlaybackScreen() {
                     <SettingsItem
                         icon={Settings2}
                         label="Video Engine"
-                        description="Select the library used for playback"
+                        description="Auto starts with ExoPlayer and falls back to VLC"
                         showChevron={false}
                     />
                     <View style={styles.pickerContainer}>
@@ -47,11 +48,11 @@ export default function PlaybackScreen() {
                                 return (
                                     <TouchableOpacity
                                         key={engine.value}
-                                        onPress={() => updateSettings({ videoPlayerEngine: engine.value as any })}
+                                        onPress={() => updateSettings({ videoPlayerEngine: engine.value })}
                                         style={[
                                             styles.chip,
                                             {
-                                                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
                                             }
                                         ]}
                                     >
@@ -102,7 +103,7 @@ export default function PlaybackScreen() {
                                         style={[
                                             styles.chip,
                                             {
-                                                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceContainerHigh,
+                                                backgroundColor: isSelected ? theme.colors.primary : surfaceContainerHigh,
                                             }
                                         ]}
                                     >

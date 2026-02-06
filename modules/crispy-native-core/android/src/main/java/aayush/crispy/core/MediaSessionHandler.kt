@@ -1,5 +1,6 @@
 package aayush.crispy.core
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -20,7 +21,9 @@ import coil.request.ImageRequest
  */
 class MediaSessionHandler(
     private val context: Context,
-    private val callbacks: MediaSessionCallbacks
+    private val callbacks: MediaSessionCallbacks,
+    private val onNotificationUpdated: ((Notification) -> Unit)? = null,
+    private val onNotificationCancelled: (() -> Unit)? = null
 ) {
 
     interface MediaSessionCallbacks {
@@ -37,13 +40,14 @@ class MediaSessionHandler(
     private var currentTitle = "Crispy Player"
     private var currentArtist = ""
     private var currentArtwork: Bitmap? = null
+    private var currentArtworkUrl: String? = null
     private var currentDuration = 0L
     private var currentPosition = 0L
     private var isPlaying = false
 
     companion object {
         const val CHANNEL_ID = "media_channel"
-        private const val NOTIFICATION_ID = 1002
+        const val NOTIFICATION_ID = 1002
         private const val TAG = "MediaSessionHandler"
     }
 
@@ -96,44 +100,75 @@ class MediaSessionHandler(
     }
 
     fun updateMetadata(title: String, artist: String, artworkUrl: String?) {
-        android.util.Log.d(TAG, "updateMetadata called with: title='$title', artist='$artist', artworkUrl='$artworkUrl'")
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d(TAG, "updateMetadata title='$title' artist='$artist' artworkUrl='$artworkUrl'")
+        }
+        
         currentTitle = title
         currentArtist = artist
+        
+        // Track the latest requested URL
+        val previousArtworkUrl = currentArtworkUrl
+        currentArtworkUrl = artworkUrl
+
+        // If artwork URL changed, clear old artwork to avoid mismatch during loading
+        if (previousArtworkUrl != artworkUrl) {
+            currentArtwork = null
+        }
+        
+        // Update notification immediately with new text
+        updateNotification()
+        updateMediaSessionMetadata()
 
         if (!artworkUrl.isNullOrEmpty()) {
-            android.util.Log.d(TAG, "Starting image load for: $artworkUrl")
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(TAG, "Starting image load for: $artworkUrl")
+            }
             val loader = ImageLoader(context)
             val request = ImageRequest.Builder(context)
                 .data(artworkUrl)
                 .allowHardware(false) 
                 .target(
                     onSuccess = { result ->
-                        android.util.Log.d(TAG, "Image load successful")
-                        if (result is BitmapDrawable) {
-                            currentArtwork = result.bitmap
+                        // Race condition check: Only apply if this is still the requested URL
+                        if (currentArtworkUrl == artworkUrl) {
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d(TAG, "Image load successful for $artworkUrl")
+                            }
+                            if (result is BitmapDrawable) {
+                                currentArtwork = result.bitmap
+                            } else {
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.w(TAG, "Image is not a BitmapDrawable")
+                                }
+                                currentArtwork = null
+                            }
+                            updateNotification()
+                            updateMediaSessionMetadata()
                         } else {
-                            android.util.Log.w(TAG, "Image is not a BitmapDrawable, cannot use as largeIcon")
-                             // detailed handling or conversion could be added here
-                             // For now, simple fallback
-                             currentArtwork = null
+                             if (BuildConfig.DEBUG) {
+                                 android.util.Log.d(TAG, "Image load ignored (obsolete). Current: $currentArtworkUrl")
+                             }
                         }
-                        updateNotification()
-                        updateMediaSessionMetadata()
                     },
                     onError = {
-                        android.util.Log.e(TAG, "Image load failed")
-                        currentArtwork = null
-                        updateNotification()
-                        updateMediaSessionMetadata()
+                        // Only update if this is still the current URL
+                        if (currentArtworkUrl == artworkUrl) {
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.e(TAG, "Image load failed for $artworkUrl")
+                            }
+                            currentArtwork = null
+                            updateNotification()
+                            updateMediaSessionMetadata()
+                        }
                     }
                 )
                 .build()
             loader.enqueue(request)
         } else {
-            android.util.Log.d(TAG, "No artwork URL, clearing artwork")
-            currentArtwork = null
-            updateNotification()
-            updateMediaSessionMetadata()
+            if (BuildConfig.DEBUG) {
+                android.util.Log.d(TAG, "No artwork URL provided")
+            }
         }
     }
 
@@ -192,7 +227,9 @@ class MediaSessionHandler(
     }
 
     private fun updateNotification() {
-        android.util.Log.d(TAG, "updateNotification called. Title: $currentTitle, Artist: $currentArtist, Playing: $isPlaying, HasArtwork: ${currentArtwork != null}")
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d(TAG, "updateNotification title='$currentTitle' playing=$isPlaying")
+        }
         // We don't need the controller to check for updates, we have our local state values
         
         // Use a generic intent if MainActivity class name is unknown at compile time,
@@ -224,6 +261,9 @@ class MediaSessionHandler(
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setSmallIcon(android.R.drawable.ic_media_play) // Fallback icon
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setOngoing(isPlaying)
             .setStyle(
                  androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)
@@ -248,13 +288,24 @@ class MediaSessionHandler(
                  androidx.media.session.MediaButtonReceiver.buildMediaButtonPendingIntent(context, PlaybackStateCompat.ACTION_PLAY)
              )
         }
-        
-        notificationManager.notify(NOTIFICATION_ID, builder.build())
+
+        val notification = builder.build()
+        val externalPoster = onNotificationUpdated
+        if (externalPoster != null) {
+            externalPoster(notification)
+        } else {
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        }
     }
     
     fun release() {
         mediaSession.isActive = false
         mediaSession.release()
-        notificationManager.cancel(NOTIFICATION_ID)
+        val externalCancel = onNotificationCancelled
+        if (externalCancel != null) {
+            externalCancel()
+        } else {
+            notificationManager.cancel(NOTIFICATION_ID)
+        }
     }
 }

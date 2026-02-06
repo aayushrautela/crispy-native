@@ -14,13 +14,15 @@ export interface ExoPlayerNativeProps {
     paused?: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
+    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
     onEnd?: () => void;
     onError?: (error: { error: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    onBuffering?: (data: { buffering: boolean }) => void;
+    onReadyForDisplay?: () => void;
     metadata?: import('@/modules/crispy-native-core').CrispyMediaMetadata;
     playInBackground?: boolean;
 }
@@ -92,6 +94,8 @@ const ExoPlayerNative = forwardRef<ExoPlayerNativeRef, ExoPlayerNativeProps>((pr
             onEnd={props.onEnd}
             onError={handleError}
             onTracksChanged={handleTracksChanged}
+            onBuffering={(e: any) => props.onBuffering?.(e.nativeEvent)}
+            onReadyForDisplay={() => props.onReadyForDisplay?.()}
         />
     );
 });

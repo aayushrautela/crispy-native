@@ -5,10 +5,11 @@ import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { Screen } from '@/src/core/ui/layout/Screen';
-import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
-import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
 import { FlashList } from '@shopify/flash-list';
+import { LAYOUT } from '@/src/constants/layout';
+import { useMeasuredWidth } from '@/src/core/hooks/useMeasuredWidth';
 import {
     Bookmark,
     ChevronDown,
@@ -30,7 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const HEADER_HEIGHT = 200;
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as unknown as typeof FlashList<any>;
 
 const FILTER_OPTIONS = [
     { label: 'Watchlist', value: 'watchlist', icon: Bookmark },
@@ -50,7 +51,8 @@ const SORT_OPTIONS = [
 export default function LibraryScreen() {
     const { theme } = useTheme();
     const { traktAuth } = useUserStore();
-    const { width } = useWindowDimensions();
+    const { width: windowWidth, height } = useWindowDimensions();
+    const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();
 
     const [selectedFilter, setSelectedFilter] = useState('watchlist');
     const [selectedSort, setSelectedSort] = useState('date_desc');
@@ -61,11 +63,20 @@ export default function LibraryScreen() {
     const genreSheetRef = useRef<BottomSheetRef>(null);
     const sortSheetRef = useRef<BottomSheetRef>(null);
 
-    const numColumns = width > 768 ? 5 : 3;
+    // Prefer the measured content area width (handles rail + split-screen). Fall back to window width.
+    const hasRailFallback = windowWidth >= 768;
+    const fallbackWidth = hasRailFallback ? windowWidth - LAYOUT.RAIL_WIDTH : windowWidth;
+    const contentWidth = measuredWidth > 0 ? measuredWidth : fallbackWidth;
+
+    // Responsive grid: avoid tiny items (and too many images) on large phones in landscape.
     const gap = 12;
     const padding = 16;
-    const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
-    const itemWidth = availableWidth / numColumns;
+
+    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
+
+    // Estimate item height for FlashList virtualization.
+    // Based on aspect ratio (2/3) + metadata area (~72px).
+    const estimatedItemHeight = Math.round((contentWidth / numColumns) * 1.5 + 72);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -168,14 +179,33 @@ export default function LibraryScreen() {
         });
     }, [items, selectedGenre, selectedSort]);
 
-    const renderItem = useCallback(({ item }: { item: any }) => (
-        <View style={{ width: itemWidth, marginBottom: gap }}>
-            <CatalogCard
-                item={item}
-                width={itemWidth}
-            />
-        </View>
-    ), [itemWidth]);
+    const showSkeleton = loading && items.length === 0;
+
+    const skeletonItems = useMemo((): any[] => {
+        const approxRowHeight = ((contentWidth / numColumns) * 1.5) + 64 + gap;
+        const approxVisibleRows = Math.max(8, Math.ceil((height - (HEADER_HEIGHT + 16)) / approxRowHeight) + 2);
+        const count = numColumns * approxVisibleRows;
+        return Array.from({ length: count }, (_, i) => ({
+            id: `library-skeleton-${i}`,
+            type: 'movie',
+            name: 'Loading',
+            posterShape: 'poster',
+        }));
+    }, [contentWidth, gap, height, numColumns]);
+
+    const renderItem = useCallback(({ item }: { item: any }) => {
+        return (
+            <View style={{
+                flex: 1,
+                paddingHorizontal: gap / 2,
+                marginBottom: gap,
+            }}>
+                {showSkeleton
+                    ? <CatalogCardSkeleton posterShape="poster" />
+                    : <CatalogCard item={item} />}
+            </View>
+        );
+    }, [gap, showSkeleton]);
 
     if (!traktAuth.accessToken) {
         return (
@@ -192,34 +222,31 @@ export default function LibraryScreen() {
     const activeFilterIndex = FILTER_OPTIONS.findIndex(opt => opt.value === selectedFilter);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View onLayout={onContainerLayout} style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <LoadingIndicator size="large" color={theme.colors.primary} />
-                </View>
-            ) : filteredAndSortedItems.length > 0 ? (
+            {(!showSkeleton && !loading && filteredAndSortedItems.length === 0) ? (
+                <EmptyState
+                    icon={LibraryIcon}
+                    title="Library is empty"
+                    description="Try adjusting your filters or sync with Trakt."
+                />
+            ) : (
                 <AnimatedFlashList
-                    data={filteredAndSortedItems}
-                    keyExtractor={(item) => String((item as any).id)}
+                    data={showSkeleton ? skeletonItems : filteredAndSortedItems}
+                    keyExtractor={(item: any, index: number) => showSkeleton ? `library-skel-${index}` : String(item?.id ?? index)}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={itemWidth * 1.85}
+                    estimatedItemSize={estimatedItemHeight}
+                    removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingHorizontal: padding - (gap / 2),
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
-                />
-            ) : (
-                <EmptyState
-                    icon={LibraryIcon}
-                    title="Library is empty"
-                    description="Try adjusting your filters or sync with Trakt."
                 />
             )}
 

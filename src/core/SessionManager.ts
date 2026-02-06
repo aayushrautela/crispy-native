@@ -12,6 +12,10 @@ export interface KnownAccount {
     last_active: number;
 }
 
+type SwitchUserOptions = {
+    navigate?: boolean;
+};
+
 class SessionManagerService {
     private accounts: Map<string, KnownAccount> = new Map();
     private activeUserId: string | null = null;
@@ -75,7 +79,7 @@ class SessionManagerService {
         this.saveToStorage();
     }
 
-    public async switchUser(userId: string) {
+    public async switchUser(userId: string, options: SwitchUserOptions = {}) {
         const account = this.accounts.get(userId);
         if (!account) throw new Error('User not found');
 
@@ -83,7 +87,7 @@ class SessionManagerService {
         account.last_active = Date.now();
         this.saveToStorage();
 
-        const { error } = await supabase.auth.setSession({
+        const { data, error } = await supabase.auth.setSession({
             access_token: account.session.access_token,
             refresh_token: account.session.refresh_token,
         });
@@ -95,8 +99,24 @@ class SessionManagerService {
             throw new Error('Your session has expired. Please log in again.');
         }
 
-        // Replace modern deep navigation logic
-        router.replace('/');
+        // Persist refreshed session tokens (if any)
+        if (data.session) {
+            await this.addSession(data.session);
+        }
+
+        if (options.navigate !== false) {
+            // Replace modern deep navigation logic
+            router.replace('/');
+        }
+    }
+
+    public async restoreActiveSession() {
+        // Best-effort: attempt to restore the last active account into supabase auth
+        const active = this.activeUserId;
+        if (!active) return;
+
+        // Avoid navigation on cold-start; the auth gate will route appropriately
+        await this.switchUser(active, { navigate: false });
     }
 
     public async removeAccount(userId: string) {

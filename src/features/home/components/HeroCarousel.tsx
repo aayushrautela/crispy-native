@@ -3,10 +3,10 @@ import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Shimmer } from '@/src/core/ui/Shimmer';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { HeroSlide } from './HeroSlide';
+import { HeroSlide, HeroThemeColors } from './HeroSlide';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -23,23 +23,54 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
     const scrollX = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
+    // Pre-calculate theme colors to pass as stable prop
+    const themeColors: HeroThemeColors = useMemo(() => ({
+        primary: theme.colors.primary,
+        surfaceVariant: theme.colors.surfaceVariant,
+        background: theme.colors.background,
+    }), [theme.colors.primary, theme.colors.surfaceVariant, theme.colors.background]);
+
     const onScroll = useAnimatedScrollHandler((event) => {
         scrollX.value = event.contentOffset.x;
     });
 
-    const handleWatch = (item: Meta) => {
+    const handleWatch = useCallback((item: Meta) => {
         router.push({
             pathname: '/meta/[id]' as any,
             params: { id: item.id, type: item.type, autoplay: 'true' }
         });
-    };
+    }, [router]);
 
-    const handleInfo = (item: Meta) => {
+    const handleInfo = useCallback((item: Meta) => {
         router.push({
             pathname: '/meta/[id]' as any,
             params: { id: item.id, type: item.type, autoplay: 'false' }
         });
-    };
+    }, [router]);
+
+    // Key optimization: Fixed layout means we don't need to measure items
+    const getItemLayout = useCallback((_: any, index: number) => ({
+        length: SCREEN_WIDTH,
+        offset: SCREEN_WIDTH * index,
+        index,
+    }), []);
+
+    const renderItem = useCallback(({ item, index }: { item: Meta; index: number }) => (
+        <HeroSlide
+            item={item}
+            index={index}
+            scrollX={scrollX}
+            width={SCREEN_WIDTH}
+            height={heroHeight}
+            themeColors={themeColors}
+            isFocused={index === activeIndex} // Only the active slide gets high priority
+            onWatch={handleWatch}
+            onInfo={handleInfo}
+        />
+    ), [scrollX, heroHeight, themeColors, activeIndex, handleWatch, handleInfo]);
+
+    // Stable key extractor
+    const keyExtractor = useCallback((item: Meta) => item.id, []);
 
     if (isLoading || !items || items.length === 0) {
         return (
@@ -61,24 +92,23 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
         <View style={styles.container}>
             <Animated.FlatList
                 data={items}
-                renderItem={({ item, index }) => (
-                    <HeroSlide
-                        item={item}
-                        index={index}
-                        scrollX={scrollX}
-                        onWatch={handleWatch}
-                        onInfo={handleInfo}
-                    />
-                )}
+                renderItem={renderItem}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}
-                keyExtractor={(item, index) => `${item.id}-${index}`}
+                keyExtractor={keyExtractor}
                 snapToInterval={SCREEN_WIDTH}
                 decelerationRate="fast"
                 onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
+                
+                // Performance Optimizations
+                getItemLayout={getItemLayout}
+                removeClippedSubviews={true} // Critical for memory
+                initialNumToRender={2}       // Only render 2 items initially
+                maxToRenderPerBatch={2}      // Incremental rendering
+                windowSize={3}               // 1 screen left + 1 screen visible + 1 screen right
             />
 
             {/* Static Dot Indicators */}
@@ -118,8 +148,8 @@ const styles = StyleSheet.create({
     },
     dotsContainer: {
         position: 'absolute',
-        bottom: 63, // Aligned with center of 52px buttons (40px padding + 26px center - 3px dot)
-        right: 24,  // Matches gradient padding
+        bottom: 63,
+        right: 24,
         flexDirection: 'row',
         justifyContent: 'flex-end',
         gap: 6,
@@ -129,4 +159,3 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     }
 });
-

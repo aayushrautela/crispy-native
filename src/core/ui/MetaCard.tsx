@@ -1,10 +1,9 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import React from 'react';
+import { Image as ExpoImage } from 'expo-image';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../core/ThemeContext';
 import { MetaPreview } from '../services/AddonService';
-import { ExpressiveSurface } from './ExpressiveSurface';
 import { Typography } from './Typography';
 
 interface MetaCardProps {
@@ -16,7 +15,6 @@ interface MetaCardProps {
 export const MetaCard = ({ item, width = 144, onPress }: MetaCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
-    const [focused, setFocused] = useState(false);
 
     const aspectRatio = item.posterShape === 'landscape' ? 16 / 9 : item.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
@@ -32,35 +30,48 @@ export const MetaCard = ({ item, width = 144, onPress }: MetaCardProps) => {
         }
     };
 
-    const animatedImageStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ scale: withSpring(focused ? 1.05 : 1) }],
-        };
-    });
-
     return (
-        <View style={[styles.container, { width }]}>
-            <ExpressiveSurface
-                variant="filled"
-                rounding="lg" // Standard MD3 rounded-xl equivalent
-                style={[styles.surface, { height }]}
+        <View style={[styles.container, { width }]}> 
+            <Pressable
                 onPress={handlePress}
-                onFocusChange={setFocused}
+                accessibilityRole="button"
+                android_ripple={{ color: 'rgba(255,255,255,0.08)', borderless: false }}
+                style={({ pressed }) => [
+                    styles.surface,
+                    {
+                        height,
+                        backgroundColor: theme.colors.surfaceVariant,
+                    },
+                    pressed && styles.surfacePressed,
+                ]}
             >
                 <View style={styles.imageContainer}>
                     {item.poster ? (
-                        <Animated.Image
+                        <ExpoImage
+                            recyclingKey={item.id}
                             source={{ uri: item.poster }}
-                            style={[styles.image, animatedImageStyle]}
-                            resizeMode="cover"
+                            style={styles.image}
+                            contentFit="cover"
+                            transition={Platform.OS === 'android' ? 0 : 150}
+                            cachePolicy="memory-disk"
                         />
                     ) : (
-                        <View style={[styles.placeholder, { backgroundColor: theme.colors.surfaceVariant }]}>
-                            <Text style={[styles.title, { color: theme.colors.onSurfaceVariant }]}>{item.name}</Text>
+                        <View style={styles.placeholder}>
+                            <Typography
+                                variant="label-small"
+                                weight="bold"
+                                numberOfLines={3}
+                                style={{
+                                    color: theme.colors.onSurfaceVariant,
+                                    textAlign: 'center',
+                                }}
+                            >
+                                {item.name}
+                            </Typography>
                         </View>
                     )}
                 </View>
-            </ExpressiveSurface>
+            </Pressable>
             <Typography
                 variant="body-small"
                 weight="bold"
@@ -82,6 +93,11 @@ const styles = StyleSheet.create({
     },
     surface: {
         overflow: 'hidden',
+        borderRadius: 12,
+    },
+    surfacePressed: {
+        transform: [{ scale: 0.985 }],
+        opacity: 0.92,
     },
     imageContainer: {
         flex: 1,
@@ -96,11 +112,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         padding: 8,
-    },
-    title: {
-        fontSize: 12,
-        fontWeight: '600',
-        textAlign: 'center',
+        backgroundColor: 'rgba(255,255,255,0.06)',
     },
     label: {
         paddingHorizontal: 0,

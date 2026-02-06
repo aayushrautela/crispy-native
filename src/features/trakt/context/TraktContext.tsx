@@ -51,6 +51,9 @@ interface TraktContextProps {
     removeFromCollection: (imdbId: string, type: 'movie' | 'series') => Promise<boolean>;
     rateContent: (imdbId: string, type: 'movie' | 'series' | 'episode', rating: number) => Promise<boolean>;
     removeContentRating: (imdbId: string, type: 'movie' | 'series' | 'episode') => Promise<boolean>;
+    
+    // Scrobble
+    scrobble: (action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) => Promise<any>;
 }
 
 const TraktContext = createContext<TraktContextProps | undefined>(undefined);
@@ -108,13 +111,14 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         if (!isAuthenticated) return;
         setIsLoading(true);
         try {
-            const [w, c, p, r, watchedShowsRaw, rec] = await Promise.all([
+            const [w, c, p, r, watchedShowsRaw, rec, profile] = await Promise.all([
                 TraktService.getWatchlist(),
                 TraktService.getCollection(),
                 TraktService.getContinueWatching(),
                 TraktService.getRated(),
                 TraktService.getWatchedShows(),
-                TraktService.getMixedRecommendations(20)
+                TraktService.getMixedRecommendations(20),
+                TraktService.getInstance().getUserProfile()
             ]);
 
             const h = await TraktService.getWatched();
@@ -127,6 +131,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             setWatchedShowsRaw(watchedShowsRaw || []);
             setWatchedHistory(h || []);
             setRecommendations(rec || []);
+            if (profile) setUserProfile(profile as TraktUser);
 
         } catch (e) {
             console.error('Failed to load Trakt collections', e);
@@ -268,14 +273,15 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
     // --- Actions ---
 
-    const addToWatchlist = useCallback(async (id: string, type: 'movie' | 'show') => {
+    const addToWatchlist = useCallback(async (id: string, type: 'movie' | 'series') => {
+        const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
         // Optimistic Add
         const idStr = String(id);
         const numericId = parseInt(idStr.replace(/^(tmdb:|trakt:|imdb:)/, ''), 10);
         const optimisticItem: any = {
-            type: type === 'show' ? 'show' : 'movie',
+            type: serviceType,
             movie: type === 'movie' ? {
                 ids: {
                     imdb: idStr.startsWith('tt') ? idStr : undefined,
@@ -283,7 +289,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
                 },
                 title: ''
             } : undefined,
-            show: type === 'show' ? {
+            show: type === 'series' ? {
                 ids: {
                     imdb: idStr.startsWith('tt') ? idStr : undefined,
                     tmdb: !isNaN(numericId) ? numericId : undefined
@@ -295,7 +301,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         setWatchlist([...watchlist, optimisticItem]);
 
-        const success = await TraktService.addToWatchlist(id, type);
+        const success = await TraktService.addToWatchlist(id, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -306,7 +312,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
     }, [isAuthenticated, debouncedSync, watchlist, setWatchlist]);
 
-    const removeFromWatchlist = useCallback(async (id: string, type: 'movie' | 'show') => {
+    const removeFromWatchlist = useCallback(async (id: string, type: 'movie' | 'series') => {
+        const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
         // Optimistic Remove
@@ -326,7 +333,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             return true;
         }));
 
-        const success = await TraktService.removeFromWatchlist(id, type);
+        const success = await TraktService.removeFromWatchlist(id, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -337,14 +344,15 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
     }, [isAuthenticated, debouncedSync, watchlist, setWatchlist]);
 
-    const addToCollection = useCallback(async (id: string, type: 'movie' | 'show') => {
+    const addToCollection = useCallback(async (id: string, type: 'movie' | 'series') => {
+        const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
         // Optimistic Add
         const idStr = String(id);
         const numericId = parseInt(idStr.replace(/^(tmdb:|trakt:|imdb:)/, ''), 10);
         const optimisticItem: any = {
-            type: type === 'show' ? 'show' : 'movie',
+            type: serviceType,
             movie: type === 'movie' ? {
                 ids: {
                     imdb: idStr.startsWith('tt') ? idStr : undefined,
@@ -352,7 +360,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
                 },
                 title: ''
             } : undefined,
-            show: type === 'show' ? {
+            show: type === 'series' ? {
                 ids: {
                     imdb: idStr.startsWith('tt') ? idStr : undefined,
                     tmdb: !isNaN(numericId) ? numericId : undefined
@@ -364,7 +372,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         setCollection([...collection, optimisticItem]);
 
-        const success = await TraktService.addToCollection(id, type);
+        const success = await TraktService.addToCollection(id, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -374,7 +382,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
     }, [isAuthenticated, debouncedSync, collection, setCollection]);
 
-    const removeFromCollection = useCallback(async (id: string, type: 'movie' | 'show') => {
+    const removeFromCollection = useCallback(async (id: string, type: 'movie' | 'series') => {
+        const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
         // Optimistic Remove
@@ -392,7 +401,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             return true;
         }));
 
-        const success = await TraktService.removeFromCollection(id, type);
+        const success = await TraktService.removeFromCollection(id, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -402,60 +411,66 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         }
     }, [isAuthenticated, debouncedSync, collection, setCollection]);
 
-    const rateContent = useCallback(async (id: string, type: 'movie' | 'show' | 'episode', rating: number) => {
+    const rateContent = useCallback(async (id: string, type: 'movie' | 'series' | 'episode', rating: number) => {
         if (!isAuthenticated) return false;
 
+        const serviceType = type === 'series' ? 'show' : type;
         const traktRating = rating * 2; // 5 -> 10 scale
 
         // Optimistic Update
         const optimisticItem: TraktRatingItem = {
             rating: traktRating,
             rated_at: new Date().toISOString(),
-            type: type,
+            type: serviceType,
             // Minimal optimistic object
             movie: type === 'movie' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
-            show: type === 'show' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
+            show: type === 'series' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
         };
 
-        setRatedContent(prev => {
-            const filtered = prev.filter(r => {
-                const media = type === 'movie' ? r.movie : r.show;
-                if (!media) return true;
-                if (id.startsWith('tt')) return media.ids.imdb !== id;
-                return media.ids.tmdb !== parseInt(id, 10);
-            });
-            return [...filtered, optimisticItem];
+        const newContent = ratedContent.filter(r => {
+            const media = type === 'movie' ? r.movie : r.show;
+            if (!media) return true;
+            if (id.startsWith('tt')) return media.ids.imdb !== id;
+            return media.ids.tmdb !== parseInt(id, 10);
         });
+        
+        setRatedContent([...newContent, optimisticItem]);
 
-        const success = await TraktService.addRating(id, type, rating);
+        const success = await TraktService.addRating(id, serviceType, rating);
         if (success) {
             debouncedSync();
             return true;
         } else {
             return false;
         }
-    }, [isAuthenticated, debouncedSync]);
+    }, [isAuthenticated, debouncedSync, ratedContent, setRatedContent]);
 
-    const removeContentRating = useCallback(async (id: string, type: 'movie' | 'show' | 'episode') => {
+    const removeContentRating = useCallback(async (id: string, type: 'movie' | 'series' | 'episode') => {
         if (!isAuthenticated) return false;
 
-        setRatedContent(prev => {
-            return prev.filter(r => {
-                const media = type === 'movie' ? r.movie : r.show;
-                if (!media) return true;
-                if (id.startsWith('tt')) return media.ids.imdb !== id;
-                return media.ids.tmdb !== parseInt(id, 10);
-            });
-        });
+        const serviceType = type === 'series' ? 'show' : type;
 
-        const success = await TraktService.removeRating(id, type);
+        const newContent = ratedContent.filter(r => {
+            const media = type === 'movie' ? r.movie : r.show;
+            if (!media) return true;
+            if (id.startsWith('tt')) return media.ids.imdb !== id;
+            return media.ids.tmdb !== parseInt(id, 10);
+        });
+        setRatedContent(newContent);
+
+        const success = await TraktService.removeRating(id, serviceType);
         if (success) {
             debouncedSync();
             return true;
         } else {
             return false;
         }
-    }, [isAuthenticated, debouncedSync]);
+    }, [isAuthenticated, debouncedSync, ratedContent, setRatedContent]);
+
+    const scrobble = useCallback(async (action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) => {
+        if (!isAuthenticated) return null;
+        return TraktService.getInstance().scrobble(action, id, type, progress, season, episode);
+    }, [isAuthenticated]);
 
     const markMovieAsWatched = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;
@@ -559,6 +574,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         removeFromCollection,
         rateContent,
         removeContentRating,
+        scrobble,
         recommendations
     }), [
         isAuthenticated,
@@ -589,6 +605,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         removeFromCollection,
         rateContent,
         removeContentRating,
+        scrobble,
         recommendations
     ]);
 

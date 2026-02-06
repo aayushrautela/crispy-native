@@ -10,7 +10,7 @@ interface SplitHeroLayoutProps {
     style?: ViewStyle;
 }
 
-export const SplitHeroLayout = memo(({ leftNode, rightNode, backgroundColor, style }: SplitHeroLayoutProps) => {
+export const SplitHeroLayout = memo(function SplitHeroLayout({ leftNode, rightNode, backgroundColor, style }: SplitHeroLayoutProps) {
     const { width } = useResponsive();
 
     // Ensure we have a hex with 00 alpha for the transparent start

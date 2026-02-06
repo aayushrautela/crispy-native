@@ -8,8 +8,13 @@ import android.content.ServiceConnection
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.os.Looper
+import android.os.Handler
 import com.facebook.react.bridge.ReactContext
+import aayush.crispy.core.pip.PipController
+import aayush.crispy.core.player.PlayerActivity
 import java.io.File
+import java.util.HashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -46,8 +51,9 @@ class CrispyNativeCoreModule : Module() {
 
       val reactContext = context as? ReactContext
       if (reactContext != null) {
-        // PiP lifecycle bridge (events + pause-on-dismiss).
-        PipBridge.start(reactContext)
+        // Centralized PiP controller (events + params updates).
+        val app = reactContext.applicationContext as? android.app.Application
+        if (app != null) PipController.start(app, reactContext)
       }
       
       // 1. Start Local Server
@@ -65,7 +71,7 @@ class CrispyNativeCoreModule : Module() {
       }
       crispyServer?.stop()
 
-      PipBridge.stop()
+      PipController.stop()
     }
 
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->
@@ -113,12 +119,7 @@ class CrispyNativeCoreModule : Module() {
 
     AsyncFunction("enterPiP") { width: Double?, height: Double? ->
       val activity = appContext.currentActivity ?: return@AsyncFunction false
-      // Keep shared state in sync even when PiP is entered explicitly.
-      PipState.enabled = true
-      // Don't force isPlaying here; player views update this from actual playback.
-      PipState.setAspectRatio(width, height)
-      PipState.applyToActivity(activity)
-      return@AsyncFunction PipState.enterPiP(activity, width, height)
+      return@AsyncFunction PipController.enterPiP(activity, width, height)
     }
 
     /**
@@ -130,110 +131,194 @@ class CrispyNativeCoreModule : Module() {
      * - player screen mounts/unmounts (enabled flag)
      */
     AsyncFunction("setPiPConfig") { enabled: Boolean, isPlaying: Boolean, width: Double?, height: Double? ->
-      PipState.enabled = enabled
-      // JS-provided isPlaying is best-effort; native player views are the source of truth.
-      PipState.setAspectRatio(width, height)
-      PipState.applyToActivity(appContext.currentActivity)
+      PipController.setConfigFromJs(enabled, isPlaying, width, height)
       return@AsyncFunction true
     }
 
     AsyncFunction("isInPiPMode") {
       val activity = appContext.currentActivity
       if (activity == null) return@AsyncFunction false
-      return@AsyncFunction (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && activity.isInPictureInPictureMode)
+      return@AsyncFunction PipController.isInPiPMode(activity)
+    }
+
+    // --- NATIVE PLAYER ACTIVITY (Android) ---
+    AsyncFunction("openPlayerActivity") { sessionId: String, url: String, headers: Map<String, String>?, engine: String?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+      val ctx = appContext.reactContext ?: return@AsyncFunction false
+      val activity = appContext.currentActivity
+
+      val intent = Intent(activity ?: ctx, PlayerActivity::class.java)
+      if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+      intent.putExtra(PlayerActivity.EXTRA_SESSION_ID, sessionId)
+      intent.putExtra(PlayerActivity.EXTRA_URL, url)
+      intent.putExtra(PlayerActivity.EXTRA_ENGINE, engine ?: PlayerActivity.ENGINE_EXO)
+      intent.putExtra(PlayerActivity.EXTRA_PAUSED, paused)
+      intent.putExtra(PlayerActivity.EXTRA_TITLE, title ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTIST, artist ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTWORK_URL, artworkUrl)
+      if (headers != null) {
+        intent.putExtra(PlayerActivity.EXTRA_HEADERS, HashMap(headers))
+      }
+
+      return@AsyncFunction try {
+        val starter = (activity ?: ctx)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+          starter.startActivity(intent)
+        } else {
+          Handler(Looper.getMainLooper()).post {
+            try {
+              starter.startActivity(intent)
+            } catch (t: Throwable) {
+              Log.e("CrispyModule", "openPlayerActivity failed", t)
+            }
+          }
+        }
+        true
+      } catch (t: Throwable) {
+        Log.e("CrispyModule", "openPlayerActivity failed", t)
+        false
+      }
+    }
+
+    AsyncFunction("closePlayerActivity") {
+      return@AsyncFunction withPlayerActivityUi("closePlayerActivity") { it.finish() }
+    }
+
+    AsyncFunction("nativePlayerSetPaused") { paused: Boolean ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetPaused") { it.setPausedFromJs(paused) }
+    }
+
+    AsyncFunction("nativePlayerSeek") { positionSec: Double ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSeek") { it.seekFromJs(positionSec) }
+    }
+
+    AsyncFunction("nativePlayerLoad") { url: String?, headers: Map<String, String>?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerLoad") { it.loadFromJs(url, headers, paused, title, artist, artworkUrl) }
+    }
+
+    AsyncFunction("nativePlayerSetRate") { rate: Double ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetRate") { it.setRateFromJs(rate) }
+    }
+
+    AsyncFunction("nativePlayerSetVolume") { volume: Double ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetVolume") { it.setVolumeFromJs(volume) }
+    }
+
+    AsyncFunction("nativePlayerSetResizeMode") { mode: String? ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetResizeMode") { it.setResizeModeFromJs(mode) }
+    }
+
+    AsyncFunction("nativePlayerSetAudioTrack") { trackId: Int ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetAudioTrack") { it.setAudioTrackFromJs(trackId) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleTrack") { trackId: Int ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleTrack") { it.setSubtitleTrackFromJs(trackId) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleDelay") { delaySec: Double ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleDelay") { it.setSubtitleDelayFromJs(delaySec) }
+    }
+
+    // VLC/MPV compatibility stubs
+    AsyncFunction("nativePlayerSetSubtitleSize") { size: Int ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleSize") { it.setSubtitleSizeFromJs(size) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleColor") { color: String ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleColor") { it.setSubtitleColorFromJs(color) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBackgroundColor") { color: String, opacity: Float ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBackgroundColor") { it.setSubtitleBackgroundColorFromJs(color, opacity) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBorderSize") { size: Int ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBorderSize") { it.setSubtitleBorderSizeFromJs(size) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBorderColor") { color: String ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBorderColor") { it.setSubtitleBorderColorFromJs(color) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitlePosition") { pos: Int ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitlePosition") { it.setSubtitlePositionFromJs(pos) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleBold") { bold: Boolean ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleBold") { it.setSubtitleBoldFromJs(bold) }
+    }
+
+    AsyncFunction("nativePlayerSetSubtitleItalic") { italic: Boolean ->
+      return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleItalic") { it.setSubtitleItalicFromJs(italic) }
     }
 
     // --- VIDEO PLAYER VIEW ---
-    View(CrispyVideoView::class) {
-      Prop("source") { view: CrispyVideoView, url: String? ->
+    View(CrispyVlcVideoView::class) {
+      Prop("source") { view: CrispyVlcVideoView, url: String? ->
         view.setSource(url)
       }
 
-      Prop("headers") { view: CrispyVideoView, headers: Map<String, String>? ->
+      Prop("headers") { view: CrispyVlcVideoView, headers: Map<String, String>? ->
         view.setHeaders(headers)
       }
 
-      Prop("paused") { view: CrispyVideoView, paused: Boolean ->
+      Prop("paused") { view: CrispyVlcVideoView, paused: Boolean ->
         view.setPaused(paused)
       }
 
-      Prop("resizeMode") { view: CrispyVideoView, mode: String? ->
+      Prop("resizeMode") { view: CrispyVlcVideoView, mode: String? ->
         view.setResizeMode(mode)
       }
-
-      Prop("decoderMode") { view: CrispyVideoView, mode: String ->
-        view.decoderMode = mode
-      }
-
-      Prop("gpuMode") { view: CrispyVideoView, mode: String ->
-        view.gpuMode = mode
+      
+      Prop("playInBackground") { view: CrispyVlcVideoView, playInBackground: Boolean ->
+        view.setPlayInBackground(playInBackground)
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
 
-      AsyncFunction("seek") { view: CrispyVideoView, positionSec: Double ->
+      AsyncFunction("seek") { view: CrispyVlcVideoView, positionSec: Double ->
         view.seek(positionSec)
       }
 
-      AsyncFunction("setAudioTrack") { view: CrispyVideoView, trackId: Int ->
+      AsyncFunction("enterPiP") { _: CrispyVlcVideoView ->
+        val activity = appContext.currentActivity ?: return@AsyncFunction false
+        return@AsyncFunction PipController.enterPiP(activity, null, null)
+      }
+
+      AsyncFunction("setAudioTrack") { view: CrispyVlcVideoView, trackId: Int ->
         view.setAudioTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleTrack") { view: CrispyVideoView, trackId: Int ->
+      AsyncFunction("setSubtitleTrack") { view: CrispyVlcVideoView, trackId: Int ->
         view.setSubtitleTrack(trackId)
       }
 
-      AsyncFunction("setSubtitleSize") { view: CrispyVideoView, size: Int ->
-        view.setSubtitleSize(size)
-      }
-
-      AsyncFunction("setSubtitleColor") { view: CrispyVideoView, color: String ->
-        view.setSubtitleColor(color)
-      }
-
-      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyVideoView, color: String, opacity: Float ->
-        view.setSubtitleBackgroundColor(color, opacity)
-      }
-
-      AsyncFunction("setSubtitleBorderSize") { view: CrispyVideoView, size: Int ->
-        view.setSubtitleBorderSize(size)
-      }
-
-      AsyncFunction("setSubtitleBorderColor") { view: CrispyVideoView, color: String ->
-        view.setSubtitleBorderColor(color)
-      }
-
-      AsyncFunction("setSubtitlePosition") { view: CrispyVideoView, pos: Int ->
-        view.setSubtitlePosition(pos)
-      }
-
-      AsyncFunction("setSubtitleDelay") { view: CrispyVideoView, delay: Double ->
+      AsyncFunction("setSubtitleDelay") { view: CrispyVlcVideoView, delay: Double ->
         view.setSubtitleDelay(delay)
       }
-
-      AsyncFunction("setSubtitleBold") { view: CrispyVideoView, bold: Boolean ->
-        view.setSubtitleBold(bold)
+      
+      AsyncFunction("setMetadata") { view: CrispyVlcVideoView, title: String, artist: String, artworkUrl: String? ->
+        view.setMetadata(title, artist, artworkUrl)
       }
 
-      AsyncFunction("setSubtitleItalic") { view: CrispyVideoView, italic: Boolean ->
-        view.setSubtitleItalic(italic)
-      }
+      // Compat Stubs
+      AsyncFunction("setSubtitleSize") { view: CrispyVlcVideoView, size: Int -> view.setSubtitleSize(size) }
+      AsyncFunction("setSubtitleColor") { view: CrispyVlcVideoView, color: String -> view.setSubtitleColor(color) }
+      AsyncFunction("setSubtitleBackgroundColor") { view: CrispyVlcVideoView, color: String, opacity: Float -> view.setSubtitleBackgroundColor(color, opacity) }
+      AsyncFunction("setSubtitleBorderSize") { view: CrispyVlcVideoView, size: Int -> view.setSubtitleBorderSize(size) }
+      AsyncFunction("setSubtitleBorderColor") { view: CrispyVlcVideoView, color: String -> view.setSubtitleBorderColor(color) }
+      AsyncFunction("setSubtitlePosition") { view: CrispyVlcVideoView, pos: Int -> view.setSubtitlePosition(pos) }
+      AsyncFunction("setSubtitleBold") { view: CrispyVlcVideoView, bold: Boolean -> view.setSubtitleBold(bold) }
+      AsyncFunction("setSubtitleItalic") { view: CrispyVlcVideoView, italic: Boolean -> view.setSubtitleItalic(italic) }
 
-      Prop("metadata") { view: CrispyVideoView, metadata: Map<String, Any>? ->
+      Prop("metadata") { view: CrispyVlcVideoView, metadata: Map<String, Any>? ->
         metadata?.let {
           val title = it["title"] as? String ?: ""
           val artist = (it["artist"] as? String) ?: (it["subtitle"] as? String) ?: ""
           val artworkUrl = it["artworkUrl"] as? String
           view.setMetadata(title, artist, artworkUrl)
         }
-      }
-
-      Prop("playInBackground") { view: CrispyVideoView, playInBackground: Boolean ->
-        view.setPlayInBackground(playInBackground)
-      }
-
-      AsyncFunction("setMetadata") { view: CrispyVideoView, title: String, artist: String, artworkUrl: String? ->
-        view.setMetadata(title, artist, artworkUrl)
       }
     }
   }
@@ -277,5 +362,17 @@ class CrispyNativeCoreModule : Module() {
           Log.e("CrispyModule", "Interrupted while waiting for service", e)
           return false
       }
+  }
+
+  private fun withPlayerActivityUi(action: String, fn: (PlayerActivity) -> Unit): Boolean {
+    val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return false
+    activity.runOnUiThread {
+      try {
+        fn(activity)
+      } catch (t: Throwable) {
+        Log.e("CrispyModule", "$action failed", t)
+      }
+    }
+    return true
   }
 }

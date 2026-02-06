@@ -6,9 +6,10 @@ import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
-import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
+import { CatalogCard, CatalogCardSkeleton } from '@/src/features/catalog/components/CatalogCard';
+import { LAYOUT } from '@/src/constants/layout';
+import { useMeasuredWidth } from '@/src/core/hooks/useMeasuredWidth';
 import { FlashList } from '@shopify/flash-list';
-import { useRouter } from 'expo-router';
 import { ChevronDown, Filter, Star } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -42,8 +43,8 @@ const RATING_OPTIONS = [
 export default function DiscoverScreen() {
     const { manifests } = useUserStore();
     const { theme } = useTheme();
-    const router = useRouter();
-    const { width } = useWindowDimensions();
+    const { width: windowWidth } = useWindowDimensions();
+    const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();
 
     const [selectedType, setSelectedType] = useState('all');
     const [selectedGenre, setSelectedGenre] = useState('All');
@@ -55,11 +56,20 @@ export default function DiscoverScreen() {
     const [allItems, setAllItems] = useState<MetaPreview[]>([]);
     const [loading, setLoading] = useState(false);
 
-    const numColumns = width > 768 ? 5 : 3;
+    // Measure the actual content area width so grids don't drift/overlap on tablets (rail)
+    // or in split-screen/multi-window.
+    const hasRailFallback = windowWidth >= 768;
+    const fallbackWidth = hasRailFallback ? windowWidth - LAYOUT.RAIL_WIDTH : windowWidth;
+    const contentWidth = measuredWidth > 0 ? measuredWidth : fallbackWidth;
+
     const gap = 12;
     const padding = 16;
-    const availableWidth = width - (padding * 2) - (gap * (numColumns - 1));
-    const itemWidth = availableWidth / numColumns;
+
+    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
+
+    // Estimate item height for FlashList virtualization.
+    // Based on aspect ratio (2/3) + metadata area (~72px).
+    const estimatedItemHeight = Math.round((contentWidth / numColumns) * 1.5 + 72);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -162,45 +172,64 @@ export default function DiscoverScreen() {
         });
     }, [allItems, selectedGenre, selectedRating]);
 
-    const renderItem = useCallback(({ item }: { item: MetaPreview }) => (
-        <View style={{ width: itemWidth, marginBottom: gap }}>
-            <CatalogCard item={item} width={itemWidth} />
-        </View>
-    ), [itemWidth]);
+    const showSkeleton = loading && allItems.length === 0;
+
+    const skeletonItems = useMemo((): MetaPreview[] => {
+        const count = numColumns * 15;
+        return Array.from({ length: count }, (_, i) => ({
+            id: `discover-skeleton-${i}`,
+            type: 'movie',
+            name: 'Loading',
+            posterShape: 'poster',
+        }));
+    }, [numColumns]);
+
+    const renderItem = useCallback(({ item }: { item: MetaPreview }) => {
+        return (
+            <View
+                style={{
+                    flex: 1,
+                    paddingHorizontal: gap / 2,
+                    marginBottom: gap,
+                }}
+            >
+                {showSkeleton
+                    ? <CatalogCardSkeleton posterShape="poster" />
+                    : <CatalogCard item={item} />}
+            </View>
+        );
+    }, [gap, showSkeleton]);
 
     const activeIndex = useMemo(() => {
         return TYPE_OPTIONS.findIndex(opt => opt.value === selectedType);
     }, [selectedType]);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View onLayout={onContainerLayout} style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Grid */}
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <LoadingIndicator size="large" color={theme.colors.primary} />
-                </View>
-            ) : filteredItems.length > 0 ? (
+            {(!showSkeleton && !loading && filteredItems.length === 0) ? (
+                <EmptyState
+                    icon={Filter}
+                    title="No results found"
+                    description="Try adjusting your filters."
+                />
+            ) : (
                 <AnimatedFlashList
-                    data={filteredItems}
-                    keyExtractor={(item) => (item as MetaPreview).id}
+                    data={showSkeleton ? skeletonItems : filteredItems}
+                    keyExtractor={(item, index) => showSkeleton ? `discover-skel-${index}` : (item as MetaPreview).id}
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={itemWidth * 1.5}
+                    estimatedItemSize={estimatedItemHeight}
+                    removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingHorizontal: padding - (gap / 2),
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     showsVerticalScrollIndicator={false}
-                />
-            ) : (
-                <EmptyState
-                    icon={Filter}
-                    title="No results found"
-                    description="Try adjusting your filters."
                 />
             )}
 
@@ -210,14 +239,21 @@ export default function DiscoverScreen() {
                 pointerEvents="box-none"
             >
                 <View style={styles.headerTop} pointerEvents="box-none">
-                    <Typography
-                        variant="display-large"
-                        weight="black"
-                        rounded
-                        style={{ fontSize: 40, lineHeight: 48, color: theme.colors.onSurface }}
-                    >
-                        Discover
-                    </Typography>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography
+                            variant="display-large"
+                            weight="black"
+                            rounded
+                            style={{ fontSize: 40, lineHeight: 48, color: theme.colors.onSurface }}
+                        >
+                            Discover
+                        </Typography>
+                        {loading && (
+                            <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                                <LoadingIndicator size="small" color={theme.colors.onSurfaceVariant} />
+                            </View>
+                        )}
+                    </View>
                 </View>
 
                 {/* Filters */}

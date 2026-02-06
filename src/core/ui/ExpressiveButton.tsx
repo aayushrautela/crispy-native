@@ -15,6 +15,7 @@ interface ExpressiveButtonProps {
     textStyle?: TextStyle;
     icon?: React.ReactNode | IconComponent;
     isLoading?: boolean;
+    disabled?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -28,6 +29,7 @@ export const ExpressiveButton = ({
     textStyle,
     icon,
     isLoading = false,
+    disabled = false,
 }: ExpressiveButtonProps) => {
     const { theme } = useTheme();
     const [focused, setFocused] = useState(false);
@@ -81,6 +83,8 @@ export const ExpressiveButton = ({
     const pressed = useSharedValue(0);
     const focusAnim = useSharedValue(0);
 
+    const isDisabled = isLoading || disabled;
+
     const animatedStyle = useAnimatedStyle(() => {
         return {
             transform: [
@@ -94,8 +98,8 @@ export const ExpressiveButton = ({
 
     return (
         <AnimatedPressable
-            onPress={isLoading ? undefined : onPress}
-            onPressIn={() => !isLoading && (pressed.value = 1)}
+            onPress={isDisabled ? undefined : onPress}
+            onPressIn={() => !isDisabled && (pressed.value = 1)}
             onPressOut={() => (pressed.value = 0)}
             onFocus={() => {
                 setFocused(true);
@@ -105,7 +109,7 @@ export const ExpressiveButton = ({
                 setFocused(false);
                 focusAnim.value = withSpring(0);
             }}
-            disabled={isLoading}
+            disabled={isDisabled}
             style={[
                 styles.base,
                 {
@@ -116,7 +120,7 @@ export const ExpressiveButton = ({
                     borderWidth: variant === 'outline' ? 1 : (focused ? 2 : 0),
                     borderColor: focused ? theme.colors.primary : colors.border || 'transparent',
                     elevation: focused ? 4 : 0,
-                    opacity: isLoading ? 0.7 : 1,
+                    opacity: isDisabled ? 0.7 : 1,
                 },
                 animatedStyle,
                 style,

@@ -7,7 +7,7 @@ import { Eye } from 'lucide-react-native';
 import React, { memo, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-const EpisodeItem = memo(({ episode, palette, onPress, watched }: { episode: any; palette: any; onPress: () => void; watched?: boolean }) => {
+const EpisodeItem = memo(function EpisodeItem({ episode, palette, onPress, watched }: { episode: any; palette: any; onPress: () => void; watched?: boolean }) {
     const accentColor = useMemo(() => {
         if (isDarkColor(palette.lightVibrant)) {
             return palette.lightMuted;
@@ -70,7 +70,7 @@ interface EpisodesSectionProps {
     isWatched?: (epNumber: number) => boolean;
 }
 
-const SeasonChip = memo(({
+const SeasonChip = memo(function SeasonChip({
     seasonNumber,
     seasonName,
     isActive,
@@ -90,32 +90,34 @@ const SeasonChip = memo(({
     activeSeasonIndex: number;
     colors: any;
     onSurfaceColor: string;
-}) => (
-    <ExpressiveSurface
-        onPress={() => onPress(seasonNumber)}
-        selected={isActive}
-        index={index}
-        activeIndex={activeSeasonIndex}
-        rounding="3xl"
-        variant="filled"
-        style={[
-            styles.seasonChip,
-            isActive
-                ? { backgroundColor: colors.lightVibrant }
-                : { backgroundColor: hexToRgba(colors.vibrant, 0.16) }
-        ]}
-    >
-        <Typography
-            variant="label"
-            weight="bold"
-            style={{ color: isActive ? 'black' : onSurfaceColor }}
+}) {
+    return (
+        <ExpressiveSurface
+            onPress={() => onPress(seasonNumber)}
+            selected={isActive}
+            index={index}
+            activeIndex={activeSeasonIndex}
+            rounding="3xl"
+            variant="filled"
+            style={[
+                styles.seasonChip,
+                isActive
+                    ? { backgroundColor: colors.lightVibrant }
+                    : { backgroundColor: hexToRgba(colors.vibrant, 0.16) }
+            ]}
         >
-            {seasonName}
-        </Typography>
-    </ExpressiveSurface>
-));
+            <Typography
+                variant="label"
+                weight="bold"
+                style={{ color: isActive ? 'black' : onSurfaceColor }}
+            >
+                {seasonName}
+            </Typography>
+        </ExpressiveSurface>
+    );
+});
 
-export const EpisodesSection = memo(({
+export const EpisodesSection = memo(function EpisodesSection({
     seasons,
     activeSeason,
     setActiveSeason,
@@ -125,7 +127,7 @@ export const EpisodesSection = memo(({
     theme,
     enrichedSeasons,
     isWatched
-}: EpisodesSectionProps) => {
+}: EpisodesSectionProps) {
     const activeSeasonIndex = useMemo(() => seasons.indexOf(activeSeason), [seasons, activeSeason]);
 
     return (
