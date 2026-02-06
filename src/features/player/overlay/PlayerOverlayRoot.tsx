@@ -187,6 +187,15 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     useEffect(() => { setActiveSeason(currentSeason); }, [currentSeason]);
     const { meta, enriched, seasonEpisodes, colors } = useMetaAggregator(baseId, String(contentType), activeSeason);
 
+    const isLoading = useMemo(() => {
+        if (loadingStreamSwitch) return true;
+        if (buffering) return true;
+        const pState = session?.playbackState || 'idle';
+        const ready = pState === 'ready' || firstFrameRendered || progress.position > 0 || stableDuration > 0;
+        if (!ready && !lastError) return true;
+        return false;
+    }, [loadingStreamSwitch, buffering, session?.playbackState, firstFrameRendered, progress.position, stableDuration, lastError]);
+
     // Fetch Intro Data
     useEffect(() => {
         const fetchIntro = async () => {
@@ -530,6 +539,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     playPauseAnimatedStyle={playPauseAnimatedStyle}
                     feedbackAnimatedStyle={feedbackAnimatedStyle}
                     formatTime={formatTime}
+                    isLoading={isLoading}
                 />
             </Pressable>
 

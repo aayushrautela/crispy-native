@@ -25,6 +25,7 @@ interface PlayerControlsProps {
     playPauseAnimatedStyle: any;
     feedbackAnimatedStyle: any;
     formatTime: (seconds: number) => string;
+    isLoading?: boolean;
 }
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
@@ -46,6 +47,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     playPauseAnimatedStyle,
     feedbackAnimatedStyle,
     formatTime,
+    isLoading = false,
 }) => {
     const { theme } = useTheme();
     const { width } = useWindowDimensions();
@@ -99,11 +101,13 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     </Animated.View>
                 )}
 
-                <Animated.View style={[styles.centerPlayBtn, playPauseAnimatedStyle]}>
-                    <Pressable onPress={togglePlay} style={styles.centerPlayPressable}>
-                        {paused ? <Play color="#fff" size={32} fill="#fff" style={{ marginLeft: 3 }} /> : <Pause color="#fff" size={32} fill="#fff" />}
-                    </Pressable>
-                </Animated.View>
+                {!isLoading && (
+                    <Animated.View style={[styles.centerPlayBtn, playPauseAnimatedStyle]}>
+                        <Pressable onPress={togglePlay} style={styles.centerPlayPressable}>
+                            {paused ? <Play color="#fff" size={32} fill="#fff" style={{ marginLeft: 3 }} /> : <Pause color="#fff" size={32} fill="#fff" />}
+                        </Pressable>
+                    </Animated.View>
+                )}
             </View>
 
             {/* Bottom Controls */}

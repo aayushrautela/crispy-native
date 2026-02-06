@@ -33,7 +33,7 @@ import {
     StepForward
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -154,6 +154,17 @@ export default function PlayerScreen() {
     const [isPipMode, setIsPipMode] = useState(false);
     const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
     const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('onPipModeChanged', (payload: any) => {
+             const isPip = typeof payload === 'boolean' ? payload : 
+                           typeof payload?.isPip === 'boolean' ? payload.isPip :
+                           typeof payload?.inPip === 'boolean' ? payload.inPip : 
+                           false;
+             setIsPipMode(isPip);
+        });
+        return () => sub.remove();
+    }, []);
 
     const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
 
@@ -662,7 +673,7 @@ export default function PlayerScreen() {
                 headers={headers}
                 paused={paused}
                 rate={playbackRate}
-                resizeMode={resizeMode}
+                resizeMode={isPipMode ? 'contain' : resizeMode}
                 useExoPlayer={useExoPlayer}
                 decoderMode={settings.decoderMode}
                 gpuMode={settings.gpuMode}
@@ -673,7 +684,7 @@ export default function PlayerScreen() {
                 onCodecError={handleCodecError}
                 onTracksChanged={(data) => {
                     console.log("Tracks changed", data);
-                    setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id}` })) || []);
+                    setAudioTracks(data.audioTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || `Track ${t.id ?? '?'}` })) || []);
                     setSubtitleTracks(data.subtitleTracks?.map((t: any) => ({ ...t, title: t.name || t.title || t.language || 'Unknown' })) || []);
                 }}
                 onBuffering={(isBuffering) => {
@@ -695,6 +706,16 @@ export default function PlayerScreen() {
                     // Don't overwrite progress while user is seeking
                     if (!isSeeking) {
                         setProgress({ position: positionSec, duration: durationSec });
+                    }
+
+                    // Fallback: If video is playing but stuck in loading (e.g. VLC stream switch missed onLoad)
+                    if (loading && durationSec > 0 && positionSec > 0.5) {
+                         setLoading(false);
+                         if (resumePosition !== null && resumePosition > 0) {
+                             console.log("Resuming (fallback) at:", resumePosition);
+                             videoRef.current?.seek(resumePosition);
+                             setResumePosition(null);
+                         }
                     }
 
                     // JS Overlay Sync Logic
