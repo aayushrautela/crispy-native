@@ -57,10 +57,6 @@ class CrispyVlcVideoView(
   
   private var requestedResizeMode: String? = null
   private var resumeOnForeground: Boolean = false
-  
-  // Stubs for props that were in MPV but Vlc doesn't support easily (or yet)
-  var decoderMode: String = "auto"
-  var gpuMode: String = "auto"
 
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {

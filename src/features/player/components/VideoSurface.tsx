@@ -66,8 +66,6 @@ interface VideoSurfaceProps {
 
     // Engine selection
     useExoPlayer: boolean;
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
-    gpuMode?: 'gpu' | 'gpu-next';
     onCodecError?: () => void;
 
     // Callbacks
@@ -274,8 +272,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                     headers={headers}
                     paused={paused}
                     resizeMode={resizeMode}
-                    decoderMode={props.decoderMode}
-                    gpuMode={props.gpuMode}
                     metadata={props.metadata}
                     playInBackground={true}
                     style={styles.player}

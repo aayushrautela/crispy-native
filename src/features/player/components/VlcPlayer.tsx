@@ -25,8 +25,6 @@ export interface VlcPlayerProps {
     volume?: number;
     rate?: number;
     resizeMode?: 'contain' | 'cover' | 'stretch';
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
-    gpuMode?: 'gpu' | 'gpu-next';
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
@@ -149,8 +147,6 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
             headers={props.headers}
             paused={props.paused ?? true}
             resizeMode={props.resizeMode ?? 'contain'}
-            decoderMode={props.decoderMode ?? 'auto'}
-            gpuMode={props.gpuMode ?? 'gpu'}
             metadata={props.metadata}
             playInBackground={props.playInBackground ?? false}
             onLoad={handleLoad}

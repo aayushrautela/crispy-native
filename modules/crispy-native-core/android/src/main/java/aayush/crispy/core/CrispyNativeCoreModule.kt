@@ -253,14 +253,6 @@ class CrispyNativeCoreModule : Module() {
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetSubtitleItalic") { it.setSubtitleItalicFromJs(italic) }
     }
 
-    AsyncFunction("nativePlayerSetDecoderMode") { mode: String? ->
-      return@AsyncFunction withPlayerActivityUi("nativePlayerSetDecoderMode") { it.setDecoderModeFromJs(mode) }
-    }
-
-    AsyncFunction("nativePlayerSetGpuMode") { mode: String? ->
-      return@AsyncFunction withPlayerActivityUi("nativePlayerSetGpuMode") { it.setGpuModeFromJs(mode) }
-    }
-
     // --- VIDEO PLAYER VIEW ---
     View(CrispyVlcVideoView::class) {
       Prop("source") { view: CrispyVlcVideoView, url: String? ->
@@ -281,15 +273,6 @@ class CrispyNativeCoreModule : Module() {
       
       Prop("playInBackground") { view: CrispyVlcVideoView, playInBackground: Boolean ->
         view.setPlayInBackground(playInBackground)
-      }
-
-      // Legacy/Compat Props
-      Prop("decoderMode") { view: CrispyVlcVideoView, mode: String ->
-        view.decoderMode = mode
-      }
-
-      Prop("gpuMode") { view: CrispyVlcVideoView, mode: String ->
-        view.gpuMode = mode
       }
 
       Events("onLoad", "onProgress", "onEnd", "onError", "onTracksChanged")
