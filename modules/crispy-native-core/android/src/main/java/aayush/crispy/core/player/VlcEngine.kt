@@ -354,19 +354,22 @@ class VlcEngine(
           return
       }
       
-      // Need to find track info. 
-      // NOTE: LibVLC MediaPlayer doesn't expose width/height directly easily without CurrentVideoTrack
-      // We can get it from media tracks
-      val media = mp.media
-      if (media != null) {
-          val trackList = media.tracks
-          for (t in trackList) {
-              if (t is Media.VideoTrack) {
-                  if (t.width > 0 && t.height > 0) {
-                      cachedWidth = t.width
-                      cachedHeight = t.height
-                      break
-                  }
+      // Use currentVideoTrack if available
+      val track = mp.currentVideoTrack
+      if (track != null) {
+          // Cast to VideoTrack and get dimensions
+          try {
+              val vidTrack = track as? Media.VideoTrack
+              if (vidTrack != null && vidTrack.width > 0 && vidTrack.height > 0) {
+                  cachedWidth = vidTrack.width
+                  cachedHeight = vidTrack.height
+              }
+          } catch (_: Exception) {
+              // Fallback: try to get from MediaPlayer's vout
+              val vout = mp.vlcVout
+              if (vout != null) {
+                  cachedWidth = vout.width
+                  cachedHeight = vout.height
               }
           }
       }
