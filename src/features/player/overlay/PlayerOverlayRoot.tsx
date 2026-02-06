@@ -169,9 +169,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [subtitleOffset, setSubtitleOffset] = useState(0);
     const lastCueIndexRef = useRef(0);
 
-    // Stream & Content management
-    const [availableStreams, setAvailableStreams] = useState<any[]>([]);
-    const [streamsLoading, setStreamsLoading] = useState(false);
+    // Stream & Content management - read from session store (single source of truth)
+    const availableStreams = useMemo(() => (session?.streams as any[]) ?? [], [session?.streams]);
     const [pendingEpisode, setPendingEpisode] = useState<any>(null);
     const [showUpNext, setShowUpNext] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
@@ -555,7 +554,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 subtitleOffset={subtitleOffset}
                 setSubtitleOffset={setSubtitleOffset}
                 availableStreams={availableStreams}
-                streamsLoading={streamsLoading}
+                streamsLoading={false}
                 onSwitchToStream={switchToStream}
                 playbackRate={playbackRate}
                 onSelectSpeed={(r) => { setPlaybackRate(r); CrispyNativeCore.nativePlayerSetRate(r); }}

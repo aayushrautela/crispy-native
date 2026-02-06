@@ -20,7 +20,7 @@ export interface CrispyPiPConfig {
 
 export type CrispyPlayerEngine = 'exoplayer' | 'vlc';
 
-export type CrispyResizeMode = 'contain' | 'cover' | 'stretch';
+export type CrispyResizeMode = 'contain' | 'cover' | 'stretch' | 'original';
 export type CrispyDecoderMode = 'auto' | 'sw' | 'hw' | 'hw+';
 export type CrispyGpuMode = 'gpu' | 'gpu-next';
 

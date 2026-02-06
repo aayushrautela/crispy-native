@@ -24,7 +24,7 @@ export interface VlcPlayerProps {
     paused?: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
+    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;

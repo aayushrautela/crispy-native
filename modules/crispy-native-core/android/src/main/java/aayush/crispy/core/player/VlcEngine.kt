@@ -71,11 +71,18 @@ class VlcEngine(
   private var cachedDuration: Long = 0L
   private var cachedWidth: Int = 0
   private var cachedHeight: Int = 0
+  
+  // Surface/container dimensions for resize calculations
+  private var surfaceWidth: Int = 0
+  private var surfaceHeight: Int = 0
+  
+  // Resize mode: contain (fit), cover (fill), stretch, original
+  private var resizeMode: String = "contain"
 
-  // Track mapping
+  // Track mapping - kept for backward compatibility but now using VLC track IDs directly
   private data class TrackInfo(val id: Int, val name: String, val language: String)
-  private var audioTrackMap: Map<Int, Int> = emptyMap() // Index -> VLC Track ID
-  private var spuTrackMap: Map<Int, Int> = emptyMap()   // Index -> VLC Track ID
+  private var audioTrackMap: Map<Int, Int> = emptyMap() // Index -> VLC Track ID (deprecated)
+  private var spuTrackMap: Map<Int, Int> = emptyMap()   // Index -> VLC Track ID (deprecated)
 
   private val progressRunnable = object : Runnable {
     override fun run() {
@@ -185,6 +192,74 @@ class VlcEngine(
       if (vout.areViewsAttached()) {
           vout.setWindowSize(width, height)
       }
+      // Store dimensions for resize mode calculations
+      surfaceWidth = width
+      surfaceHeight = height
+      applyResizeMode()
+  }
+
+  fun setResizeMode(mode: String) {
+      resizeMode = mode.lowercase()
+      applyResizeMode()
+  }
+
+  /**
+   * Apply resize mode to VLC video output.
+   * Maps resize modes to VLC's aspect ratio, crop, and scale settings.
+   */
+  private fun applyResizeMode() {
+      val mp = mediaPlayer ?: return
+      
+      // Need both video and surface dimensions to calculate
+      if (cachedWidth <= 0 || cachedHeight <= 0 || surfaceWidth <= 0 || surfaceHeight <= 0) {
+          return
+      }
+      
+      when (resizeMode) {
+          "stretch" -> {
+              // Stretch: Fill the surface regardless of aspect ratio
+              // Use crop geometry to fill the entire surface
+              mp.aspectRatio = null
+              mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}")
+          }
+          "cover" -> {
+              // Cover: Fill surface while maintaining aspect ratio (may crop)
+              mp.aspectRatio = null
+              // Calculate crop to fill surface
+              val videoRatio = cachedWidth.toFloat() / cachedHeight.toFloat()
+              val surfaceRatio = surfaceWidth.toFloat() / surfaceHeight.toFloat()
+              
+              if (surfaceRatio > videoRatio) {
+                  // Surface is wider than video - crop top/bottom
+                  val targetHeight = (surfaceWidth / videoRatio).toInt()
+                  val cropY = ((targetHeight - surfaceHeight) / 2).coerceAtLeast(0)
+                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+0+${cropY}")
+              } else {
+                  // Surface is taller than video - crop left/right
+                  val targetWidth = (surfaceHeight * videoRatio).toInt()
+                  val cropX = ((targetWidth - surfaceWidth) / 2).coerceAtLeast(0)
+                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+${cropX}+0")
+              }
+          }
+          "original" -> {
+              // Original: Use video's native dimensions (1:1 pixel mapping)
+              mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
+              mp.setCropGeometry(null)
+          }
+          else -> {
+              // Contain: Fit within surface while maintaining aspect ratio (default)
+              // This is VLC's default behavior with proper aspect ratio
+              val gcd = greatestCommonDivisor(cachedWidth, cachedHeight)
+              val aspectW = cachedWidth / gcd
+              val aspectH = cachedHeight / gcd
+              mp.aspectRatio = "${aspectW}:${aspectH}"
+              mp.setCropGeometry(null)
+          }
+      }
+  }
+
+  private fun greatestCommonDivisor(a: Int, b: Int): Int {
+      return if (b == 0) a else greatestCommonDivisor(b, a % b)
   }
 
   fun detachSurface() {
@@ -324,25 +399,24 @@ class VlcEngine(
   }
   
   // Track Selection
-  fun setAudioTrack(trackIndex: Int) {
+  // trackId is the VLC native track ID (not index), matching what we emit in parseAndSendTracks
+  fun setAudioTrack(trackId: Int) {
       val mp = mediaPlayer ?: return
-      if (trackIndex < 0) {
-          // VLC doesn't really have "disable audio" via track ID easily, usually -1 is disable?
-          // For now, if negative, we might ignore or try setAudioTrack(-1)
+      if (trackId < 0) {
+          // Disable audio by setting track to -1
+          mp.setAudioTrack(-1)
           return
       }
-      val vlcId = audioTrackMap[trackIndex] ?: return
-      mp.setAudioTrack(vlcId)
+      mp.setAudioTrack(trackId)
   }
   
-  fun setSubtitleTrack(trackIndex: Int) {
+  fun setSubtitleTrack(trackId: Int) {
       val mp = mediaPlayer ?: return
-      if (trackIndex < 0) {
+      if (trackId < 0) {
           mp.setSpuTrack(-1) // Disable subtitles
           return
       }
-      val vlcId = spuTrackMap[trackIndex] ?: return
-      mp.setSpuTrack(vlcId)
+      mp.setSpuTrack(trackId)
   }
 
   // --- Internal Checks ---
@@ -398,6 +472,8 @@ class VlcEngine(
       if (width > 0 && height > 0) {
           cachedWidth = width
           cachedHeight = height
+          // Apply resize mode with new video dimensions
+          applyResizeMode()
           // Try to fire load event now that we have dimensions
           checkForLoadEvent()
       }
@@ -405,56 +481,112 @@ class VlcEngine(
 
   private fun parseAndSendTracks() {
       val mp = mediaPlayer ?: return
+      val media = mp.media ?: return
+      
+      // Get full track info from Media object (has language codes and descriptions)
+      val allTracks = media.tracks
+      if (allTracks == null || allTracks.isEmpty()) return
       
       // Audio Tracks
       val audioTracks = mutableListOf<Map<String, Any>>()
       val newAudioMap = mutableMapOf<Int, Int>()
       
-      val vlcAudioTracks = mp.audioTracks // Returns MediaPlayer.TrackDescription[]
-      if (vlcAudioTracks != null) {
-          var index = 0
-          for (t in vlcAudioTracks) {
-              if (t.id == -1) continue // Usually disabled track or default container
-              
-              val id = index
-              newAudioMap[id] = t.id
-              
-              audioTracks.add(mapOf(
-                  "id" to id,
-                  "name" to (t.name ?: "Audio Track $id"),
-                  "language" to "", // VLC TrackDescription doesn't expose lang code easily in this API
-                  "selected" to (mp.audioTrack == t.id)
-              ))
-              index++
-          }
+      var audioIndex = 0
+      for (track in allTracks) {
+          if (track.type != Media.Track.Type.Audio) continue
+          
+          val vlcTrackId = track.id
+          if (vlcTrackId < 0) continue
+          
+          val index = audioIndex
+          newAudioMap[index] = vlcTrackId
+          
+          // Build track name from description and codec info
+          val trackName = buildTrackName(track)
+          val language = track.language ?: ""
+          
+          audioTracks.add(mapOf(
+              "id" to vlcTrackId,  // Use VLC's native track ID for selection
+              "name" to trackName,
+              "language" to language,
+              "selected" to (mp.audioTrack == vlcTrackId)
+          ))
+          audioIndex++
       }
       audioTrackMap = newAudioMap
       
-      // Subtitle Tracks (SPU)
+      // Subtitle Tracks (Text)
       val subtitleTracks = mutableListOf<Map<String, Any>>()
       val newSpuMap = mutableMapOf<Int, Int>()
       
-      val vlcSpuTracks = mp.spuTracks
-      if (vlcSpuTracks != null) {
-          var index = 0
-          for (t in vlcSpuTracks) {
-              if (t.id == -1) continue // Disabled track
-              
-              val id = index
-              newSpuMap[id] = t.id
-              
-              subtitleTracks.add(mapOf(
-                  "id" to id,
-                  "name" to (t.name ?: "Subtitle $id"),
-                  "language" to "",
-                  "selected" to (mp.spuTrack == t.id)
-              ))
-              index++
-          }
+      var spuIndex = 0
+      for (track in allTracks) {
+          if (track.type != Media.Track.Type.Text) continue
+          
+          val vlcTrackId = track.id
+          if (vlcTrackId < 0) continue
+          
+          val index = spuIndex
+          newSpuMap[index] = vlcTrackId
+          
+          // Build track name from description and codec info
+          val trackName = buildTrackName(track)
+          val language = track.language ?: ""
+          
+          subtitleTracks.add(mapOf(
+              "id" to vlcTrackId,  // Use VLC's native track ID for selection
+              "name" to trackName,
+              "language" to language,
+              "selected" to (mp.spuTrack == vlcTrackId)
+          ))
+          spuIndex++
       }
       spuTrackMap = newSpuMap
       
       listeners.forEach { it.onTracksChanged(audioTracks, subtitleTracks) }
+  }
+
+  /**
+   * Build a human-readable track name from Media.Track metadata.
+   * Combines description, language, and codec information.
+   */
+  private fun buildTrackName(track: Media.Track): String {
+      val description = track.description
+      val language = track.language
+      val codec = track.codec
+      
+      val parts = mutableListOf<String>()
+      
+      // Use description if available (usually contains quality/format info)
+      if (!description.isNullOrBlank()) {
+          parts.add(description)
+      }
+      
+      // Add language if available and different from description
+      if (!language.isNullOrBlank() && !description.equals(language, ignoreCase = true)) {
+          val langDisplay = language.uppercase()
+          if (!parts.any { it.contains(langDisplay, ignoreCase = true) }) {
+              parts.add(langDisplay)
+          }
+      }
+      
+      // Add codec info if available and not already mentioned
+      if (!codec.isNullOrBlank()) {
+          val codecUpper = codec.uppercase()
+          if (!parts.any { it.contains(codecUpper, ignoreCase = true) }) {
+              parts.add(codecUpper)
+          }
+      }
+      
+      return if (parts.isNotEmpty()) {
+          parts.joinToString(" - ")
+      } else {
+          when (track.type) {
+              Media.Track.Type.Audio -> "Audio Track"
+              Media.Track.Type.Text -> "Subtitle"
+              else -> "Track"
+          }
+      }
   }
 
   private fun emitIsPlayingChangedIfNeeded(isPlaying: Boolean) {

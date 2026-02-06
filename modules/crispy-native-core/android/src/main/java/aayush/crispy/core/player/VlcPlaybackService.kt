@@ -153,6 +153,12 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
      // Use reflection or check API if available.
   }
 
+  fun setResizeMode(mode: String?) {
+    if (!mode.isNullOrBlank()) {
+      engine.setResizeMode(mode)
+    }
+  }
+
   override fun onNotificationUpdated(notification: Notification) {
     val playing = engine.isPlaying()
     if (playing) {

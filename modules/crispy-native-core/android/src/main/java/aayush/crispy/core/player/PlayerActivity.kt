@@ -23,6 +23,9 @@ import android.view.SurfaceView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.ReactApplication
@@ -159,9 +162,29 @@ class PlayerActivity : ReactActivity() {
 
     super.onCreate(savedInstanceState)
 
+    setupImmersiveMode()
     installTextureBehindReact()
     bindPlaybackService()
     updatePipParams()
+  }
+
+  private fun setupImmersiveMode() {
+    // Use WindowInsetsControllerCompat for consistent behavior across API levels
+    val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+    
+    // Configure system bars behavior
+    windowInsetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    
+    // Hide both status bar and navigation bar
+    windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
+    
+    // Enable edge-to-edge display (Android 15+ requirement, backward compatible)
+    WindowCompat.setDecorFitsSystemWindows(window, false)
+    
+    // Ensure the window uses the full screen (no letterboxing on modern devices)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+    }
   }
 
   override fun onNewIntent(intent: Intent) {
