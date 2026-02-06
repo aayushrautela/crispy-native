@@ -22,7 +22,7 @@ interface CatalogCardProps {
     width?: number;
 }
 
-const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
+const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
     const router = useRouter();
     const { theme } = useTheme();
     const settings = useUserStore(s => s.settings);
@@ -34,7 +34,6 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     const displayAny = displayItem as any;
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
-    const height = width / aspectRatio;
 
     const imageSrc = displayItem.posterShape === 'landscape'
         ? (displayItem.backdrop || displayItem.poster)
@@ -52,7 +51,7 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
     }, [item, openActions]);
 
     return (
-        <View style={[styles.container, { width }]}>
+        <View style={[styles.container, width !== undefined && { width }]}>
             <Pressable
                 onPress={handlePress}
                 onLongPress={handleLongPress}
@@ -61,7 +60,7 @@ const CatalogCardComponent = ({ item, width = 144 }: CatalogCardProps) => {
                 style={({ pressed }) => [
                     styles.surface,
                     {
-                        height,
+                        aspectRatio,
                         backgroundColor: (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant,
                     },
                     pressed && styles.surfacePressed,
@@ -173,17 +172,16 @@ interface CatalogCardSkeletonProps {
     posterShape?: 'poster' | 'landscape' | 'square';
 }
 
-const CatalogCardSkeletonComponent = ({ width = 144, posterShape = 'poster' }: CatalogCardSkeletonProps) => {
+const CatalogCardSkeletonComponent = ({ width, posterShape = 'poster' }: CatalogCardSkeletonProps) => {
     const { theme } = useTheme();
     const aspectRatio = posterShape === 'landscape' ? 16 / 9 : posterShape === 'square' ? 1 : 2 / 3;
-    const height = width / aspectRatio;
 
     const surfaceColor = (theme.colors as any).surfaceContainerHighest || theme.colors.surfaceVariant;
     const lineColor = (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant;
 
     return (
-        <View style={[styles.container, { width }]}>
-            <View style={[styles.surface, { height, backgroundColor: surfaceColor }]} />
+        <View style={[styles.container, width !== undefined && { width }]}>
+            <View style={[styles.surface, { aspectRatio, backgroundColor: surfaceColor }]} />
             <View style={styles.metadata}>
                 <View style={[styles.skeletonLine, { width: '78%', backgroundColor: lineColor }]} />
                 <View style={[styles.skeletonLine, { width: '52%', backgroundColor: lineColor, opacity: 0.75 }]} />

@@ -67,9 +67,9 @@ export default function DiscoverScreen() {
 
     const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
 
-    // Exact item width ensuring perfect fit with gaps.
-    // We use floating point precision for perfect alignment
-    const itemWidth = (contentWidth - (padding * 2) - (gap * (numColumns - 1))) / numColumns;
+    // Estimate item height for FlashList virtualization.
+    // Based on aspect ratio (2/3) + metadata area (~72px).
+    const estimatedItemHeight = Math.round((contentWidth / numColumns) * 1.5 + 72);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -184,22 +184,21 @@ export default function DiscoverScreen() {
         }));
     }, [numColumns]);
 
-    const renderItem = useCallback(({ item, index }: { item: MetaPreview; index: number }) => {
-        const isLastInRow = (index + 1) % numColumns === 0;
+    const renderItem = useCallback(({ item }: { item: MetaPreview }) => {
         return (
             <View
                 style={{
-                    width: itemWidth,
+                    flex: 1,
+                    paddingHorizontal: gap / 2,
                     marginBottom: gap,
-                    marginRight: isLastInRow ? 0 : gap,
                 }}
             >
                 {showSkeleton
-                    ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
-                    : <CatalogCard item={item} width={itemWidth} />}
+                    ? <CatalogCardSkeleton posterShape="poster" />
+                    : <CatalogCard item={item} />}
             </View>
         );
-    }, [gap, itemWidth, numColumns, showSkeleton]);
+    }, [gap, showSkeleton]);
 
     const activeIndex = useMemo(() => {
         return TYPE_OPTIONS.findIndex(opt => opt.value === selectedType);
@@ -221,11 +220,11 @@ export default function DiscoverScreen() {
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72)}
+                    estimatedItemSize={estimatedItemHeight}
                     removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingHorizontal: padding - (gap / 2),
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}

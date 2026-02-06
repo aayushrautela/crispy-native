@@ -31,7 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const HEADER_HEIGHT = 200;
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as unknown as typeof FlashList<any>;
 
 const FILTER_OPTIONS = [
     { label: 'Watchlist', value: 'watchlist', icon: Bookmark },
@@ -69,13 +69,14 @@ export default function LibraryScreen() {
     const contentWidth = measuredWidth > 0 ? measuredWidth : fallbackWidth;
 
     // Responsive grid: avoid tiny items (and too many images) on large phones in landscape.
-    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
     const gap = 12;
     const padding = 16;
-    
-    // Exact item width ensuring perfect fit with gaps.
-    // We use floating point precision for perfect alignment
-    const itemWidth = (contentWidth - (padding * 2) - (gap * (numColumns - 1))) / numColumns;
+
+    const numColumns = contentWidth >= 1024 ? 5 : contentWidth >= 720 ? 4 : 3;
+
+    // Estimate item height for FlashList virtualization.
+    // Based on aspect ratio (2/3) + metadata area (~72px).
+    const estimatedItemHeight = Math.round((contentWidth / numColumns) * 1.5 + 72);
 
     const scrollY = useSharedValue(0);
     const headerTranslateY = useSharedValue(0);
@@ -181,7 +182,7 @@ export default function LibraryScreen() {
     const showSkeleton = loading && items.length === 0;
 
     const skeletonItems = useMemo((): any[] => {
-        const approxRowHeight = (itemWidth * 1.5) + 64 + gap;
+        const approxRowHeight = ((contentWidth / numColumns) * 1.5) + 64 + gap;
         const approxVisibleRows = Math.max(8, Math.ceil((height - (HEADER_HEIGHT + 16)) / approxRowHeight) + 2);
         const count = numColumns * approxVisibleRows;
         return Array.from({ length: count }, (_, i) => ({
@@ -190,22 +191,21 @@ export default function LibraryScreen() {
             name: 'Loading',
             posterShape: 'poster',
         }));
-    }, [gap, height, itemWidth, numColumns]);
+    }, [contentWidth, gap, height, numColumns]);
 
-    const renderItem = useCallback(({ item, index }: { item: any, index: number }) => {
-        const isLastInRow = (index + 1) % numColumns === 0;
+    const renderItem = useCallback(({ item }: { item: any }) => {
         return (
             <View style={{
-                width: itemWidth,
+                flex: 1,
+                paddingHorizontal: gap / 2,
                 marginBottom: gap,
-                marginRight: isLastInRow ? 0 : gap
             }}>
                 {showSkeleton
-                    ? <CatalogCardSkeleton width={itemWidth} posterShape="poster" />
-                    : <CatalogCard item={item} width={itemWidth} />}
+                    ? <CatalogCardSkeleton posterShape="poster" />
+                    : <CatalogCard item={item} />}
             </View>
         );
-    }, [gap, itemWidth, numColumns, showSkeleton]);
+    }, [gap, showSkeleton]);
 
     if (!traktAuth.accessToken) {
         return (
@@ -237,11 +237,11 @@ export default function LibraryScreen() {
                     renderItem={renderItem}
                     numColumns={numColumns}
                     key={numColumns}
-                    estimatedItemSize={Math.round(itemWidth * 1.5 + 72 + gap)}
+                    estimatedItemSize={estimatedItemHeight}
                     removeClippedSubviews={true}
                     contentContainerStyle={{
                         paddingTop: HEADER_HEIGHT + 16,
-                        paddingHorizontal: padding,
+                        paddingHorizontal: padding - (gap / 2),
                         paddingBottom: 100,
                     }}
                     onScroll={onScroll}
