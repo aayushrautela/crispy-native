@@ -2,7 +2,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, Dimensions, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from './Typography';
 
@@ -105,13 +105,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
-            style={[
-                styles.modal,
-                isTablet && {
-                    width: sheetWidth,
-                    alignSelf: 'center',
-                }
-            ]}
+            style={styles.modal}
+            containerStyle={isTablet ? { width: sheetWidth, marginHorizontal: 'auto' } : undefined}
             onDismiss={() => {
                 setIsOpen(false);
                 onDismiss?.();
