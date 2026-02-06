@@ -647,11 +647,8 @@ class MpvEngine(
     currentDecoderStage = when (decoderMode) {
       "hw" -> DecoderStage.MEDIACODEC
       "hw+" -> DecoderStage.MEDIACODEC_COPY
-      else -> when (probeResult.recommendedHwdec) {
-        "mediacodec-copy" -> DecoderStage.MEDIACODEC_COPY
-        "no" -> DecoderStage.SOFTWARE
-        else -> DecoderStage.MEDIACODEC
-      }
+      // Auto: Prefer standard mediacodec first, falling back to copy/sw later
+      else -> DecoderStage.MEDIACODEC
     }
 
     val selectionReason = when (decoderMode) {

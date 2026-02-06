@@ -1,0 +1,349 @@
+1770382662.334 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+1770382662.334 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostResume()
+1770382662.453 10851 28760 28760 D InsetsController: hide(ime())
+1770382662.453 10851 28760 28760 I ImeTracker: com.anonymous.crispynative:10508f83: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+1770382662.526 10851 28760 28883 I cr_MediaCodecBridge: create MediaCodec video decoder, mime video/av01, decoder name c2.google.av1.decoder, block_model=false
+1770382662.528 10851 28760 29045 D CCodec  : allocate(c2.google.av1.decoder)
+1770382662.529 10851 28760 29045 I CCodec  : setting up 'default' as default (vendor) store
+1770382662.532 10851 28760 29045 W us.crispynative: AIBinder_linkToDeath is being called with a non-null cookie and no onUnlink callback set. Use AIBinder_DeathRecipient_setOnUnlinked to manage the lifetime of the cookie. This will become an abort.
+1770382662.532 10851 28760 29045 I CCodec  : Created component [c2.google.av1.decoder] for [c2.google.av1.decoder]
+1770382662.532 10851 28760 29045 D CCodecConfig: read media type: video/av01
+1770382662.534 10851 28760 29045 D ReflectedParamUpdater: extent() != 1 for single value type: input.buffers.allocator-ids.values
+1770382662.534 10851 28760 29045 D ReflectedParamUpdater: extent() != 1 for single value type: output.buffers.allocator-ids.values
+1770382662.534 10851 28760 29045 D ReflectedParamUpdater: extent() != 1 for single value type: output.buffers.pool-ids.values
+1770382662.537 10851 28760 29045 D CCodecConfig: ignoring local param raw.size (0xd2001800) as it is already supported
+1770382662.537 10851 28760 29045 D CCodecConfig: ignoring local param default.color (0x5200180b) as it is already supported
+1770382662.537 10851 28760 29045 D CCodecConfig: ignoring local param raw.hdr-static-info (0xd200180a) as it is already supported
+1770382662.538 10851 28760 29045 I CCodecConfig: query failed after returning 18 values (BAD_INDEX)
+1770382662.538 10851 28760 29045 D CCodecConfig: c2 config diff is Dict {
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 algo.delay.value = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::i32 algo.priority.value = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::float algo.rate.value = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.pl.level = 36865
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.pl.profile = 36864
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.vui.color.matrix = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.vui.color.primaries = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.vui.color.range = 2
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 coded.vui.color.transfer = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 default.color.matrix = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 default.color.primaries = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 default.color.range = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 default.color.transfer = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 input.buffers.max-size.value = 13271040
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 input.delay.value = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   Buffer input.hdr10-plus-info.value = {
+1770382662.538 10851 28760 29045 D CCodecConfig:   }
+1770382662.538 10851 28760 29045 D CCodecConfig:   string input.media-type.value = "video/av01"
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 output.delay.value = 12
+1770382662.538 10851 28760 29045 D CCodecConfig:   Buffer output.hdr10-plus-info.value = {
+1770382662.538 10851 28760 29045 D CCodecConfig:   }
+1770382662.538 10851 28760 29045 D CCodecConfig:   string output.media-type.value = "video/raw"
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.matrix = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.primaries = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.range = 2
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.transfer = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.blue.x = 0
+1770382662.538 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.blue.y = 0
+1770382662.539 10851 28760 29045 W ColorUtils: expected specified color aspects (2:0:0:0)
+1770382662.542 10851 28760 29044 I MediaCodec: MediaCodec will operate in async mode
+1770382662.542 10851 28760 28883 I MediaCodec: media_quality service unavailable, skipping updatePictureProfile
+1770382662.543 10851 28760 29044 D SurfaceUtils: connecting to surface 0xb40000752f7e0360, reason connectToSurface
+1770382662.543 10851 28760 29044 I MediaCodec: [c2.google.av1.decoder] setting surface generation to 29450243
+1770382662.543 10851 28760 29044 D SurfaceUtils: disconnecting from surface 0xb40000752f7e0360, reason connectToSurface(reconnect)
+1770382662.543 10851 28760 29044 D SurfaceUtils: connecting to surface 0xb40000752f7e0350, reason connectToSurface(reconnect-with-listener)
+1770382662.543 10851 28760 29045 D CCodec  : [c2.google.av1.decoder] buffers are bound to CCodec for this session
+1770382662.543 10851 28760 29045 D CCodecConfig: no c2 equivalents for native-window
+1770382662.544 10851 28760 29045 D CCodecConfig: no c2 equivalents for native-window-generation
+1770382662.544 10851 28760 29045 D CCodecConfig: no c2 equivalents for flags
+1770382662.544 10851 28760 29045 D CCodecConfig: c2 config diff is   c2::u32 raw.size.height = 1080
+1770382662.544 10851 28760 29045 D CCodecConfig:   c2::u32 raw.size.width = 1920
+1770382662.545 10851 28760 29045 D CCodec  : client requested max input size 777600, which is smaller than what component recommended (13271040); overriding with component recommendation.
+1770382662.545 10851 28760 29045 W CCodec  : This behavior is subject to change. It is recommended that app developers double check whether the requested max input size is in reasonable range.
+1770382662.545 10851 28760 29045 D CCodec  : encoding statistics level = 0
+1770382662.545 10851 28760 29045 D CCodec  : setup formats input: AMessage(what = 0x00000000) = {
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t height = 1080
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t level = 2
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t max-input-size = 13271040
+1770382662.545 10851 28760 29045 D CCodec  :   string mime = "video/av01"
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t priority = 0
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t profile = 1
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t width = 1920
+1770382662.545 10851 28760 29045 D CCodec  :   Rect crop(0, 0, 1919, 1079)
+1770382662.545 10851 28760 29045 D CCodec  : }
+1770382662.545 10851 28760 29045 D CCodec  : setup formats output: AMessage(what = 0x00000000) = {
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t android._color-format = 2130708361
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t android._video-scaling = 1
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t android._dataspace = 260
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t color-standard = 1
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t color-range = 2
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t color-transfer = 3
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t sar-height = 1
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t rotation-degrees = 0
+1770382662.545 10851 28760 29045 D CCodec  :   Buffer hdr-static-info = {
+1770382662.545 10851 28760 29045 D CCodec  :     00000000:  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+1770382662.545 10851 28760 29045 D CCodec  :     00000010:  00 00 00 00 00 00 00 00  00                       .........
+1770382662.545 10851 28760 29045 D CCodec  :   }
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t sar-width = 1
+1770382662.545 10851 28760 29045 D CCodec  :   Rect crop(0, 0, 1919, 1079)
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t width = 1920
+1770382662.545 10851 28760 29045 D CCodec  :   Buffer hdr10-plus-info = {
+1770382662.545 10851 28760 29045 D CCodec  :   }
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t height = 1080
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t max-height = 2160
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t max-width = 4096
+1770382662.545 10851 28760 29045 D CCodec  :   string mime = "video/raw"
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t priority = 0
+1770382662.545 10851 28760 29045 D CCodec  :   int32_t color-format = 2130708361
+1770382662.545 10851 28760 29045 D CCodec  : }
+1770382662.545 10851 28760 29045 I CCodecConfig: query failed after returning 18 values (BAD_INDEX)
+1770382662.545 10851 28760 29045 E us.crispynative: Failed to query component interface for required system resources: 6
+1770382662.546 10851 28760 28883 D MediaCodec: keep callback message for reclaim
+1770382662.547 10851 28760 29045 D CCodecBufferChannel: [c2.google.av1.decoder#252] Created input block pool with allocatorID 16 => poolID 18 - OK (0)
+1770382662.548 10851 28760 29045 D Codec2Client: GraphicBufferAllocator created
+1770382662.548 10851 28760 29045 I CCodecBufferChannel: [c2.google.av1.decoder#252] Created output block pool with allocatorID 18 => poolID 1399 - OK
+1770382662.549 10851 28760 29045 D CCodecBufferChannel: [c2.google.av1.decoder#252] Configured output block pool ids 1399 => OK
+1770382662.549 10851 28760 29045 D GraphicsTracker: new surface in configuration: maxDequeueRequested(0), maxDequeueCommitted(3)
+1770382662.549 10851 28760 29045 D GraphicsTracker: new surface configured with id:123523259432964 gen:29450243 maxDequeue:3
+1770382662.549 10851 28760 29045 D GraphicsTracker: maxDequeueCount committed to IGBP: 19
+1770382662.549 10851 28760 29045 D GraphicsTracker: Cache size 0 -> 0: maybe_cleared(0), dequeued(0)
+1770382662.549 10851 28760 29045 D GraphicsTracker: maxDqueueCount change 3 -> 19: pending: 0
+1770382662.549 10851 28760 29045 D Codec2Client: setOutputSurface -- generation=29450243 consumer usage=0x900
+1770382662.554 10851 28760 29044 W us.crispynative: AIBinder_linkToDeath is being called with a non-null cookie and no onUnlink callback set. Use AIBinder_DeathRecipient_setOnUnlinked to manage the lifetime of the cookie. This will become an abort.
+1770382662.588 10851 28760 29045 D CCodecConfig: c2 config diff is   c2::u32 raw.color.matrix = 1
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.primaries = 1
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.color.transfer = 3
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.crop.height = 1080
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.crop.left = 0
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.crop.top = 0
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::u32 raw.crop.width = 1920
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.blue.x = 0.131
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.blue.y = 0.046
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.green.x = 0.17
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.green.y = 0.797
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.max-luminance = 1000
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.min-luminance = 0.1
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.red.x = 0.708
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.red.y = 0.292
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.white.x = 0.3127
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.mastering.white.y = 0.329
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.max-cll = 1000
+1770382662.588 10851 28760 29045 D CCodecConfig:   c2::float raw.hdr-static-info.max-fall = 120
+1770382662.588 10851 28760 29045 D CCodecBuffers: [c2.google.av1.decoder#252:2D-Output] popFromStashAndRegister: at 7507500us, output format changed to AMessage(what = 0x00000000) = {
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t android._color-format = 2130708361
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t android._video-scaling = 1
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t android._dataspace = 260
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t color-standard = 1
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t color-range = 2
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t color-transfer = 3
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t sar-height = 1
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t rotation-degrees = 0
+1770382662.588 10851 28760 29045 D CCodecBuffers:   Buffer hdr-static-info = {
+1770382662.588 10851 28760 29045 D CCodecBuffers:     00000000:  00 48 8a 08 39 34 21 aa  9b 96 19 fc 08 13 3d 42  .H..94!.......=B
+1770382662.588 10851 28760 29045 D CCodecBuffers:     00000010:  40 e8 03 e8 03 e8 03 78  00                       @......x.
+1770382662.588 10851 28760 29045 D CCodecBuffers:   }
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t sar-width = 1
+1770382662.588 10851 28760 29045 D CCodecBuffers:   Rect crop(0, 0, 1919, 1079)
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t width = 1920
+1770382662.588 10851 28760 29045 D CCodecBuffers:   Buffer hdr10-plus-info = {
+1770382662.588 10851 28760 29045 D CCodecBuffers:   }
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t height = 1080
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t max-height = 2160
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t max-width = 4096
+1770382662.588 10851 28760 29045 D CCodecBuffers:   string mime = "video/raw"
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t priority = 0
+1770382662.588 10851 28760 29045 D CCodecBuffers:   int32_t color-format = 2130708361
+1770382662.588 10851 28760 29045 D CCodecBuffers: }
+1770382662.594 10851 28760 28909 I us.crispynative: Use dataspace 281083904as it is
+1770382663.031 10851 28760 28776 I us.crispynative: Use dataspace 281083904as it is
+1770382664.242 10851 28760 28760 W [RNScreens]: backTitleVisible prop is not available on Android
+1770382664.242 10851 28760 28760 W [RNScreens]: backTitleFontFamily prop is not available on Android
+1770382664.242 10851 28760 28760 W [RNScreens]: disableBackButtonMenu prop is not available on Android
+1770382664.242 10851 28760 28760 W [RNScreens]: largeTitleFontFamily prop is not available on Android
+1770382664.242 10851 28760 28760 W [RNScreens]: largeTitleFontWeight prop is not available on Android
+1770382664.242 10851 28760 28760 W [RNScreens]: largeTitleHideShadow prop is not available on Android
+1770382664.251 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onUserLeaveHint(activity)
+1770382664.252 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostPause(activity)
+1770382664.252 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostPause()
+1770382664.295 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+1770382664.295 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+1770382664.296 10851 28760 28783 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+1770382664.296 10851 28760 28783 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+1770382664.304 10851 28760 28784 I ReactNativeJS: Running "PlayerOverlayRoot"
+1770382664.307 10851 28760 28760 I ContentCaptureHelper: Setting logging level to OFF
+1770382664.308 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+1770382664.308 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostResume()
+1770382664.512 10851 28760 28883 W cr_MediaCodecBridge: Releasing: c2.google.av1.decoder
+1770382664.513 10851 28760 29044 D SurfaceUtils: connecting to surface 0xb40000752f88e060, reason connectToSurface
+1770382664.513 10851 28760 29044 I MediaCodec: [c2.google.av1.decoder] setting surface generation to 29450244
+1770382664.513 10851 28760 29044 D SurfaceUtils: disconnecting from surface 0xb40000752f88e060, reason connectToSurface(reconnect)
+1770382664.513 10851 28760 29044 D SurfaceUtils: connecting to surface 0xb40000752f88e050, reason connectToSurface(reconnect-with-listener)
+1770382664.513 10851 28760 29044 D GraphicsTracker: new surface in configuration: maxDequeueRequested(0), maxDequeueCommitted(19)
+1770382664.513 10851 28760 29044 D GraphicsTracker: new surface configured with id:123523259432967 gen:29450244 maxDequeue:19
+1770382664.513 10851 28760 29044 D GraphicsTracker: maxDequeueCount is already 19
+1770382664.513 10851 28760 29044 D Codec2Client: setOutputSurface -- generation=29450244 consumer usage=0x900
+1770382664.513 10851 28760 29044 D SurfaceUtils: disconnecting from surface 0xb40000752f7e0360, reason disconnectFromSurface
+1770382664.515 10851 28760 29044 D CCodecBufferChannel: [c2.google.av1.decoder#252] MediaCodec discarded an unknown buffer
+1770382664.516 10851 28760 29044 D CCodecBufferChannel: [c2.google.av1.decoder#252] MediaCodec discarded an unknown buffer
+1770382664.516 10851 28760 29044 D CCodecBufferChannel: [c2.google.av1.decoder#252] MediaCodec discarded an unknown buffer
+1770382664.516 10851 28760 29044 D CCodecBufferChannel: [c2.google.av1.decoder#252] MediaCodec discarded an unknown buffer
+1770382664.516 10851 28760 28883 W cr_MediaCodecBridge: Codec released
+1770382664.519 10851 28760 29044 D SurfaceUtils: disconnecting from surface 0xb40000752f88e060, reason disconnectFromSurface
+1770382664.522 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.metahub.space/background/medium/tt12583926/img with size [1008x554] in 45.849284 ms
+1770382664.529 10851 28760 28760 D InsetsController: hide(ime())
+1770382664.529 10851 28760 28760 I ImeTracker: com.anonymous.crispynative:9099fc1e: onCancelled at PHASE_CLIENT_ALREADY_HIDDEN
+1770382664.570 10851 28760 28976 D AidlBufferPool: bufferpool2 0xb4000074df7ae798 : 0(0 size) total buffers - 0(0 size) used buffers - 223/228 (recycle/alloc) - 7/448 (fetch/transfer)
+1770382664.570 10851 28760 28976 D AidlBufferPoolAcc: evictor expired: 1, evicted: 1
+1770382664.586 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.metahub.space/background/medium/tt12908150/img with size [1008x554] in 109.146036 ms
+1770382664.597 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://image.tmdb.org/t/p/w780/6e2yeFZgtD7RKpUYEOjj5v7oAUz.jpg with size [1346x1350] in 118.479655 ms
+1770382664.597 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://image.tmdb.org/t/p/w500/3FUIEtcE2x8fsRBJMeDFE5QmYha.png with size [1080x315] in 118.07727 ms
+1770382664.628 10851 28760 28784 D ExpoMaterial3Theme: Get dynamic color palette
+1770382664.659 10851 28760 28784 I ReactNativeJS: [AddonService] fetchAllSubtitles START: movie/tt12908150 from 2 addons
+1770382664.678 10851 28760 28784 I ReactNativeJS: '[useCatalog] manifests:', { 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGhibSxobHU6OlVTOjE3NzAyMDY4Njk2MjM6MDowOlBM/manifest.json':
+1770382664.678 10851 28760 28784 I ReactNativeJS:    { id: 'pw.ers.netflix-catalog',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      logo: 'https://play-lh.googleusercontent.com/TBRwjS_qfJCSj1m7zZB93FnpJM5fSpMA_wUlFDLxWAb45T9RmwBvQd5cWR5viJJOhkI',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      version: '1.1.1',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      name: 'Streaming Catalogs',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      description: 'Your favourite streaming services!',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      catalogs:
+1770382664.678 10851 28760 28784 I ReactNativeJS:       [ { id: 'nfx', type: 'movie', name: 'Netflix' },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { id: 'nfx', type: 'series', name: 'Netflix' },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { id: 'hbm', type: 'movie', name: 'HBO Max' },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { id: 'hbm', type: 'series', name: 'HBO Max' },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { id: 'hlu', type: 'movie', name: 'Hulu' },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { id: 'hlu', type: 'series', name: 'Hulu' } ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      resources: [ 'catalog' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      types: [ 'movie', 'series' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      idPrefixes: [ 'tt' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      behaviorHints: { configurable: true } },
+1770382664.678 10851 28760 28784 I ReactNativeJS:   'https://aiostreamsfortheweak.nhyira.dev/stremio/8bef529c-a970-4a14-8b1a-1da9ea9a6600/eyJpIjoiVHF3NjM0RWp1MitlVEZnZ0xQMGRYUT09IiwiZSI6ImtyVElEYWI0ZDF5cTNWZmY3Q3JObExsQWtUVVBMZk5Kd2FJWEhxbXFVaEU9IiwidCI6ImEifQ/manifest.json':
+1770382664.678 10851 28760 28784 I ReactNativeJS:    { name: 'AIOStreams',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      id: 'aiostreams.viren070.com.8bef529c-a97',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      version: '2.22.0',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      description: 'AIOStreams consolidates multiple Stremio addons and debrid services into a single, easily configurable addon. It allows highly customisable filtering, sorting, and formatting of results and supports proxying all your streams through MediaFlow Proxy or StremThru for improved compatibility and IP restriction bypassing.',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      catalogs:
+1770382664.678 10851 28760 28784 I ReactNativeJS:       [ { type: 'movie',
+1770382664.678 10851 28760 28784 I ReactNativeJS:           id: 'affe3b0.user-movies',
+1770382664.678 10851 28760 28784 I ReactNativeJS:           name: 'Your Media',
+1770382664.678 10851 28760 28784 I ReactNativeJS:           extra: [ { name: 'search', isRequired: false } ] } ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      resources:
+1770382664.678 10851 28760 28784 I ReactNativeJS:       [ { name: 'stream',
+1770382664.678 10851 28760 28784 I ReactNativeJS:           types: [ 'movie', 'series', 'anime', 'tv', 'events' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:           idPrefixes:
+1770382664.678 10851 28760 28784 I ReactNativeJS:            [ 'tt',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'kitsu:',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'mal:',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'mf',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'dl',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'kitsu',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'imdb',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'imdbid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'imdb_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tmdb',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tmdbid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tmdb_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'themoviedb',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'themoviedbid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'themoviedb_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvdb',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvdbid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvdb_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvmaze',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvmazeid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tvmaze_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'trakt',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'traktid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'trakt_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'animeplanet',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'animeplanetid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'apid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anime-planet',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anime-planet_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anime-planet-id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anime_planet',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anime_planet_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anisearch',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anisearchid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anisearch_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anidb',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anidbid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anidb_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anilist',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anilistid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'anilist_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'livechart',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'livechartid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'livechart_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'kitsuid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'kitsu_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notify.moe',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notify.moeid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notify.moe_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notifymoe',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notifymoeid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'notifymoe_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'mal',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'malid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'mal_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'myanimelist',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'myanimelistid',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'myanimelist_id',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'usermovies',
+1770382664.678 10851 28760 28784 I ReactNativeJS:              'tbm' ] },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { name: 'catalog', types: [ 'movie' ] },
+1770382664.678 10851 28760 28784 I ReactNativeJS:         { name: 'meta',
+1770382664.678 10851 28760 28784 I ReactNativeJS:           types: [ 'movie', 'series', 'anime' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:           idPrefixes: [ 'usermovies', 'tbm', 'aiostreamserror' ] } ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      types: [ 'movie', 'series', 'anime', 'tv', 'events' ],
+1770382664.678 10851 28760 28784 I ReactNativeJS:      logo: 'https://raw.githubusercontent.com/Viren070/AIOStreams/refs/heads/main/packages/frontend/public/logo.png',
+1770382664.678 10851 28760 28784 I ReactNativeJS:      behaviorHints: { configurable: true, configurationRequired: false },
+1770382664.678 10851 28760 28784 I ReactNativeJS:      addonCatalogs: [] } }
+1770382664.696 10851 28760 28784 I ReactNativeJS: [AddonService] Fetching catalog: https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGhibSxobHU6OlVTOjE3NzAyMDY4Njk2MjM6MDowOlBM/catalog/series/hbm/skip=0.json
+1770382664.728 10851 28760 28784 I ReactNativeJS: [AddonService] Success https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/bmZ4LGhibSxobHU6OlVTOjE3NzAyMDY4Njk2MjM6MDowOlBM/catalog/series/hbm/skip=0.json, items: 100
+1770382664.811 10851 28760 28784 I ReactNativeJS: [AddonService] Addon "Streaming Catalogs" skipped: No 'subtitles' resource
+1770382664.811 10851 28760 28784 I ReactNativeJS: [AddonService] Addon "AIOStreams" skipped: No 'subtitles' resource
+1770382664.811 10851 28760 28784 I ReactNativeJS: [AddonService] Found 0 qualifying subtitle addons
+1770382664.811 10851 28760 28784 I ReactNativeJS: [AddonService] fetchAllSubtitles DONE: 0 unique subtitles found
+1770382664.821 10851 28760 28760 D VRI[MainActivity]: visibilityChanged oldVisibility=true newVisibility=false
+1770382664.893 10851 28760 28760 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : requestExpressIntegrityToken(-3154798052718498700)
+1770382664.894 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : Initiate binding to the service.
+1770382664.898 10851 28760 28760 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : ServiceConnectionImpl.onServiceConnected(ComponentInfo{com.android.vending/com.google.android.finsky.expressintegrityservice.ExpressIntegrityService})
+1770382664.899 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : linkToDeath
+1770382664.903 10851 28760 28770 I PlayCore: UID: [10851]  PID: [28760] OnRequestIntegrityTokenCallback : onRequestExpressIntegrityToken
+1770382664.904 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : Unbind from service.
+1770382665.673 10851 28760 28897 W cr_media: Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO. No audio device will be available for recording
+1770382668.441 10851 28760 28760 W MpvEngine: Auto decoder fallback -> software; reason=first-frame-timeout
+1770382668.444 10851 28760 28760 E mpv     : mpv_get_property(time-pos) format 5 returned error property unavailable
+1770382668.468 10851 28760 28760 I MpvEngine: Reloaded source after runtime video option change; reason=auto-fallback:first-frame-timeout
+1770382668.481 10851 28760 29070 E mpv     : mpv_get_property(aid) format 4 returned error unsupported format for accessing property
+1770382668.482 10851 28760 29070 E mpv     : mpv_get_property(sid) format 4 returned error unsupported format for accessing property
+1770382668.483 10851 28760 29070 E mpv     : mpv_get_property(aid) format 4 returned error unsupported format for accessing property
+1770382668.483 10851 28760 29070 E mpv     : mpv_get_property(sid) format 4 returned error unsupported format for accessing property
+1770382669.571 10851 28760 28976 D AidlBufferPool: bufferpool2 0xb4000074df755e08 : 0(0 size) total buffers - 0(0 size) used buffers - 47/51 (recycle/alloc) - 4/94 (fetch/transfer)
+1770382669.572 10851 28760 28976 D AidlBufferPoolAcc: evictor expired: 1, evicted: 1
+1770382673.093 10851 28760 29070 E mpv     : mpv_get_property(aid) format 4 returned error unsupported format for accessing property
+1770382673.346 10851 28760 29070 E mpv     : mpv_get_property(track-list/0/lang) format 1 returned error property unavailable
+1770382673.457 10851 28760 29070 E mpv     : mpv_get_property(track-list/0/lang) format 1 returned error property unavailable
+1770382673.518 10851 28760 29070 E mpv     : mpv_get_property(track-list/0/lang) format 1 returned error property unavailable
+1770382673.532 10851 28760 29144 D AudioTrack: getTimestamp_l(35635): device stall time corrected using current time 690160963230868
+1770382684.668 10851 28760 28760 W unknown:ReactNative: Can't cancel already finished gesture. Is a child View trying to start a gesture from an UP/CANCEL event?
+1770382685.171 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostPause(activity)
+1770382685.171 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostPause()
+1770382685.178 10851 28760 28760 D ViewRootImpl: Skipping stats log for color mode
+1770382685.209 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+1770382685.209 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostResume()
+1770382685.221 10851 28760 28760 D VRI[MainActivity]: WindowInsets changed: statusBars:[0,63,0,0] navigationBars:null mandatorySystemGestures:[0,63,0,0]
+1770382685.292 10851 28760 28760 D VRI[PlayerActivity]: WindowInsets changed: statusBars:[0,113,0,0] navigationBars:null mandatorySystemGestures:[0,140,0,0]
+1770382685.355 10851 28760 28760 D VRI[PlayerActivity]: WindowInsets changed: 769x417 statusBars:null mandatorySystemGestures:null
+1770382685.377 10851 28760 28760 W unknown:BridgelessReact: ReactHost{0}.onHostPause(activity)
+1770382685.377 10851 28760 28760 W unknown:BridgelessReact: ReactContext.onHostPause()
+1770382685.595 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.metahub.space/background/medium/tt12583926/img with size [1008x334] in 78.936767 ms
+1770382685.728 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://images.metahub.space/background/medium/tt12908150/img with size [1008x334] in 210.579794 ms
+1770382685.737 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://image.tmdb.org/t/p/w780/6e2yeFZgtD7RKpUYEOjj5v7oAUz.jpg with size [769x945] in 198.664592 ms
+1770382685.744 10851 28760 28760 D Glide   : Finished loading BitmapDrawable from DATA_DISK_CACHE for https://image.tmdb.org/t/p/w500/3FUIEtcE2x8fsRBJMeDFE5QmYha.png with size [679x225] in 202.98494499999998 ms
+1770382686.016 10851 28760 28760 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : requestExpressIntegrityToken(-3154798052718498700)
+1770382686.017 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : Initiate binding to the service.
+1770382686.021 10851 28760 28760 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : ServiceConnectionImpl.onServiceConnected(ComponentInfo{com.android.vending/com.google.android.finsky.expressintegrityservice.ExpressIntegrityService})
+1770382686.021 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : linkToDeath
+1770382686.024 10851 28760 29167 I PlayCore: UID: [10851]  PID: [28760] OnRequestIntegrityTokenCallback : onRequestExpressIntegrityToken
+1770382686.024 10851 28760 28955 I PlayCore: UID: [10851]  PID: [28760] StandardIntegrity : Unbind from service.
+1770382686.765 10851 28760 28897 W cr_media: Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO. No audio device will be available for recording
