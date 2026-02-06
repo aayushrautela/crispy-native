@@ -446,9 +446,8 @@ class MpvEngine(
 
     when (decoderMode.lowercase()) {
       "sw" -> MPVLib.setOptionString("hwdec", "no")
-      "hw" -> MPVLib.setOptionString("hwdec", "mediacodec-copy")
-      "hw+" -> MPVLib.setOptionString("hwdec", "mediacodec")
-      else -> MPVLib.setOptionString("hwdec", "auto-copy")
+      "copy" -> MPVLib.setOptionString("hwdec", "mediacodec-copy")
+      else -> MPVLib.setOptionString("hwdec", "mediacodec")
     }
 
     // HDR / rendering options
