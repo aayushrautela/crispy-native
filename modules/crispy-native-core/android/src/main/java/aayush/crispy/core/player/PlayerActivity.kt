@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
@@ -35,7 +36,7 @@ import kotlin.math.roundToInt
 
 /**
  * Native-first player host for Android:
- * - TextureView-backed surface owned by an Activity (smooth PiP resize)
+ * - SurfaceView-backed video surface owned by the Activity
  * - React UI overlay mounted as a normal RN root (same JS runtime)
  * - Playback engines remain Service-owned (MpvPlaybackService / ExoPlaybackService)
  */
@@ -228,8 +229,10 @@ class PlayerActivity : ReactActivity() {
     }
 
     val sv = SurfaceView(this)
+    sv.setZOrderOnTop(false)
+    sv.setZOrderMediaOverlay(false)
     try {
-      sv.setBackgroundColor(Color.BLACK)
+      sv.holder.setFormat(PixelFormat.OPAQUE)
     } catch (_: Throwable) {
       // ignore
     }
@@ -267,6 +270,10 @@ class PlayerActivity : ReactActivity() {
       
       if (engine == ENGINE_MPV) {
         mpvService?.setSurfaceSize(width, height)
+      }
+      if (width <= 0 || height <= 0) {
+        scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
+        return
       }
       // Note: We don't call applyResizeTransform() here to avoid loops, 
       // as applyResizeTransform modifies layout params which triggers surfaceChanged.
@@ -567,6 +574,12 @@ class PlayerActivity : ReactActivity() {
 
       mpvSurface = surface
       return try {
+        try {
+          // Force release of any stale producer/consumer binding first.
+          svc.detachSurface()
+        } catch (_: Throwable) {
+          // ignore
+        }
         svc.attachSurface(surface, w, h)
         svc.setSurfaceSize(w, h)
         true
@@ -577,7 +590,12 @@ class PlayerActivity : ReactActivity() {
     }
 
     val player = exoService?.getPlayer() ?: return false
+    val surface = holder.surface
+    if (surface == null || !surface.isValid) return false
+
     return try {
+      player.clearVideoSurface()
+      player.clearVideoSurfaceView(sv)
       player.setVideoSurfaceView(sv)
       true
     } catch (t: Throwable) {
@@ -679,6 +697,9 @@ class PlayerActivity : ReactActivity() {
   override fun onResume() {
     super.onResume()
     ensureSurfaceAttached("onResume")
+    surfaceView?.post {
+      ensureSurfaceAttached("onResume-post")
+    }
   }
 
   override fun onStop() {
@@ -704,6 +725,7 @@ class PlayerActivity : ReactActivity() {
 
     if (!isInPictureInPictureMode && was) {
       ensureSurfaceAttached("exitPiP")
+      surfaceView?.postDelayed({ ensureSurfaceAttached("exitPiP-post") }, 120L)
     }
   }
 

@@ -32,9 +32,40 @@ export interface AppSettings {
     videoPlayerEngine: 'auto' | 'exoplayer' | 'mpv';
 
     // Player engine tuning (used by MPV surface)
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    decoderMode?: 'auto' | 'sw' | 'hw';
     gpuMode?: 'gpu' | 'gpu-next';
     updatedAt?: number;
+}
+
+function normalizeDecoderMode(value: unknown): AppSettings['decoderMode'] {
+    const mode = typeof value === 'string' ? value.toLowerCase() : '';
+    switch (mode) {
+        case 'sw':
+            return 'sw';
+        case 'hw':
+            return 'hw';
+        // Legacy values kept for backward compatibility with persisted settings.
+        case 'hw+':
+        case 'copy':
+            return 'hw';
+        default:
+            return 'auto';
+    }
+}
+
+function normalizeGpuMode(value: unknown): AppSettings['gpuMode'] {
+    return typeof value === 'string' && value === 'gpu-next' ? 'gpu-next' : 'gpu';
+}
+
+function sanitizeSettingsPatch(updates: Partial<AppSettings>): Partial<AppSettings> {
+    const next = { ...updates };
+    if ('decoderMode' in next) {
+        next.decoderMode = normalizeDecoderMode(next.decoderMode);
+    }
+    if ('gpuMode' in next) {
+        next.gpuMode = normalizeGpuMode(next.gpuMode);
+    }
+    return next;
 }
 
 export interface Addon {
@@ -95,8 +126,8 @@ function getDefaultSettings(): AppSettings {
         useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
         videoPlayerEngine: (StorageService.getUser<string>('crispy-video-engine') as any) || 'auto',
 
-        decoderMode: (StorageService.getUser<string>('crispy-decoder-mode') as any) || 'auto',
-        gpuMode: (StorageService.getUser<string>('crispy-gpu-mode') as any) || 'gpu',
+        decoderMode: normalizeDecoderMode(StorageService.getUser<string>('crispy-decoder-mode')),
+        gpuMode: normalizeGpuMode(StorageService.getUser<string>('crispy-gpu-mode')),
     };
 }
 
@@ -236,11 +267,12 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         setLoading: (loading) => set({ loading }),
 
         updateSettings: (updates) => {
+            const normalizedUpdates = sanitizeSettingsPatch(updates);
             const current = get().settings;
-            const next = { ...current, ...updates, updatedAt: Date.now() };
+            const next = { ...current, ...normalizedUpdates, updatedAt: Date.now() };
 
             set({ settings: next });
-            persistLocalSettings(updates);
+            persistLocalSettings(normalizedUpdates);
         },
 
         updateAddons: (addons) => {
@@ -342,7 +374,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             const nextState: Partial<UserState> = {};
 
             if (fetched.settings) {
-                nextState.settings = { ...current.settings, ...fetched.settings };
+                nextState.settings = { ...current.settings, ...sanitizeSettingsPatch(fetched.settings) };
                 persistLocalSettings(nextState.settings);
             }
             if (fetched.addons) {

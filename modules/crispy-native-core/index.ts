@@ -21,7 +21,7 @@ export interface CrispyPiPConfig {
 export type CrispyPlayerEngine = 'exoplayer' | 'mpv';
 
 export type CrispyResizeMode = 'contain' | 'cover' | 'stretch';
-export type CrispyDecoderMode = 'auto' | 'sw' | 'hw' | 'hw+';
+export type CrispyDecoderMode = 'auto' | 'sw' | 'hw';
 export type CrispyGpuMode = 'gpu' | 'gpu-next';
 
 export interface CrispyOpenPlayerActivityParams {
@@ -56,6 +56,8 @@ export interface CrispyVideoViewProps extends ViewProps {
     onEnd?: () => void;
     onError?: (event: { nativeEvent: { error: string } }) => void;
     onTracksChanged?: (event: { nativeEvent: any }) => void;
+    onBuffering?: (event: { nativeEvent: { buffering: boolean } }) => void;
+    onReadyForDisplay?: () => void;
 }
 
 export interface CrispyVideoViewRef {
@@ -91,6 +93,8 @@ export interface CrispyExoVideoViewProps extends ViewProps {
     onEnd?: () => void;
     onError?: (event: { nativeEvent: { error: string } }) => void;
     onTracksChanged?: (event: { nativeEvent: any }) => void;
+    onBuffering?: (event: { nativeEvent: { buffering: boolean } }) => void;
+    onReadyForDisplay?: () => void;
 }
 
 export interface CrispyExoVideoViewRef {

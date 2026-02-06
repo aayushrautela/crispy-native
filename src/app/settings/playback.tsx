@@ -5,7 +5,7 @@ import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
-import { Cpu, FastForward, Layers, PlayCircle, Settings2, Zap } from 'lucide-react-native';
+import { Cpu, FastForward, PlayCircle, Settings2, Zap } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -18,7 +18,6 @@ const ENGINES = [
 const DECODER_MODES = [
     { label: 'Auto', value: 'auto' },
     { label: 'HW', value: 'hw' },
-    { label: 'HW+', value: 'hw+' },
     { label: 'SW', value: 'sw' },
 ];
 
@@ -85,7 +84,7 @@ export default function PlaybackScreen() {
                         <SettingsItem
                             icon={Zap}
                             label="Decoder Mode"
-                            description="Hardware acceleration settings"
+                            description="Auto tries hardware first and falls back to software"
                             showChevron={false}
                         />
                         <View style={styles.pickerContainer}>

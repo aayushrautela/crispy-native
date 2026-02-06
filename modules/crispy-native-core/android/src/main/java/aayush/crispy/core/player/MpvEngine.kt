@@ -20,6 +20,7 @@ class MpvEngine(
 
   companion object {
     private const val TAG = "MpvEngine"
+    private const val AUTO_SW_FALLBACK_TIMEOUT_MS = 4_000L
   }
 
   interface NotificationCallbacks {
@@ -59,6 +60,13 @@ class MpvEngine(
 
   private var decoderMode: String = "auto"
   private var gpuMode: String = "gpu"
+  private var activeDecoderValue: String = "mediacodec"
+  private var activeGpuValue: String = "gpu"
+  private var autoSwFallbackAttempted: Boolean = false
+  private var pendingSeekAfterReloadSec: Double? = null
+  private var activeSourceGeneration: Long = 0L
+  private var loadedSourceGeneration: Long = 0L
+  private var autoFallbackWatchdog: Runnable? = null
 
   private var requestedResizeMode: String? = null
   private var isPaused: Boolean = true
@@ -100,11 +108,23 @@ class MpvEngine(
   }
 
   fun setDecoderMode(mode: String?) {
-    decoderMode = (mode ?: "auto")
+    val next = normalizeDecoderMode(mode)
+    if (decoderMode == next) return
+
+    decoderMode = next
+    autoSwFallbackAttempted = false
+
+    if (!isInitialized) return
+    applyRuntimeVideoOptions(reason = "decoder-mode-change", reloadIfNeeded = true)
   }
 
   fun setGpuMode(mode: String?) {
-    gpuMode = (mode ?: "gpu")
+    val next = normalizeGpuMode(mode)
+    if (gpuMode == next) return
+
+    gpuMode = next
+    if (!isInitialized) return
+    applyRuntimeVideoOptions(reason = "gpu-mode-change", reloadIfNeeded = true)
   }
 
   fun setHeaders(headers: Map<String, String>?) {
@@ -155,7 +175,12 @@ class MpvEngine(
 
   fun setSource(url: String?) {
     if (url.isNullOrBlank()) return
+    val wasInitialized = isInitialized
     pendingSource = url
+    activeSourceGeneration += 1L
+    loadedSourceGeneration = 0L
+    autoSwFallbackAttempted = false
+    pendingSeekAfterReloadSec = null
     hasLoadEventFired = false
     isSourceLoaded = false
     durationSec = 0.0
@@ -166,7 +191,12 @@ class MpvEngine(
     lastEmittedIsPlaying = null
 
     ensureInitialized()
-    checkAndLoad()
+    if (isInitialized) {
+      applyRuntimeVideoOptions(reason = "set-source", reloadIfNeeded = false)
+    }
+    if (wasInitialized) {
+      checkAndLoad()
+    }
   }
 
   fun setPaused(paused: Boolean) {
@@ -265,6 +295,7 @@ class MpvEngine(
   fun setSubtitleItalic(italic: Boolean) = setPropBoolean("sub-italic", italic)
 
   fun release() {
+    cancelAutoFallbackWatchdog()
     listeners.clear()
     try {
       mediaSessionHandler?.release()
@@ -324,6 +355,7 @@ class MpvEngine(
   fun isPlaying(): Boolean = isInitialized && !isPaused
 
   fun stopPlayback() {
+    cancelAutoFallbackWatchdog()
     pendingSource = null
     durationSec = 0.0
     videoW = 0
@@ -358,8 +390,10 @@ class MpvEngine(
     }
 
     try {
+      applyRuntimeVideoOptions(reason = "check-and-load", reloadIfNeeded = false)
       MPVLib.command(arrayOf("loadfile", url))
       isSourceLoaded = true
+      loadedSourceGeneration = activeSourceGeneration
 
       // Apply the latest pause state immediately
       try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
@@ -377,6 +411,7 @@ class MpvEngine(
 
       emitIsPlayingChangedIfNeeded(!isPaused)
       emitBufferingChangedIfNeeded(false)
+      maybeScheduleAutoFallbackWatchdog()
     } catch (t: Throwable) {
       emitError("Failed to load media: ${t.message}")
     }
@@ -440,15 +475,16 @@ class MpvEngine(
     // Keep these in sync with the previous view-owned implementation.
     MPVLib.setOptionString("profile", "fast")
 
-    MPVLib.setOptionString("vo", gpuMode)
+    val normalizedVo = normalizeGpuMode(gpuMode)
+    val requestedHwdec = resolveRequestedHwdec(decoderMode)
+
+    MPVLib.setOptionString("vo", normalizedVo)
     MPVLib.setOptionString("gpu-context", "android")
     MPVLib.setOptionString("opengl-es", "yes")
+    MPVLib.setOptionString("hwdec", requestedHwdec)
 
-    when (decoderMode.lowercase()) {
-      "sw" -> MPVLib.setOptionString("hwdec", "no")
-      "copy" -> MPVLib.setOptionString("hwdec", "mediacodec-copy")
-      else -> MPVLib.setOptionString("hwdec", "mediacodec")
-    }
+    activeGpuValue = normalizedVo
+    activeDecoderValue = requestedHwdec
 
     // HDR / rendering options
     MPVLib.setOptionString("target-peak", "0")
@@ -486,6 +522,151 @@ class MpvEngine(
     MPVLib.setOptionString("sub-border-size", "2")
 
     // Resize mode should be applied after init via properties.
+  }
+
+  private fun normalizeDecoderMode(mode: String?): String {
+    return when ((mode ?: "auto").lowercase()) {
+      "sw" -> "sw"
+      "hw" -> "hw"
+      // Legacy values: preserve acceleration semantics but remove copy mode.
+      "hw+", "copy" -> "hw"
+      else -> "auto"
+    }
+  }
+
+  private fun normalizeGpuMode(mode: String?): String {
+    return when ((mode ?: "gpu").lowercase()) {
+      "gpu-next" -> "gpu-next"
+      else -> "gpu"
+    }
+  }
+
+  private fun resolveRequestedHwdec(mode: String): String {
+    return if (mode == "sw") "no" else "mediacodec"
+  }
+
+  private fun applyRuntimeVideoOptions(reason: String, reloadIfNeeded: Boolean) {
+    if (!isInitialized) return
+
+    var changed = false
+
+    val requestedVo = normalizeGpuMode(gpuMode)
+    if (requestedVo != activeGpuValue) {
+      try {
+        MPVLib.setPropertyString("vo", requestedVo)
+        MPVLib.setPropertyString("gpu-context", "android")
+        MPVLib.setPropertyString("opengl-es", "yes")
+        activeGpuValue = requestedVo
+        changed = true
+      } catch (t: Throwable) {
+        Log.w(TAG, "Failed to apply vo=$requestedVo", t)
+      }
+    }
+
+    val requestedHwdec = resolveRequestedHwdec(decoderMode)
+    if (requestedHwdec != activeDecoderValue) {
+      try {
+        MPVLib.setPropertyString("hwdec", requestedHwdec)
+        activeDecoderValue = requestedHwdec
+        changed = true
+      } catch (t: Throwable) {
+        Log.w(TAG, "Failed to apply hwdec=$requestedHwdec", t)
+      }
+    }
+
+    if (reloadIfNeeded && changed && isSourceLoaded) {
+      reloadCurrentSourcePreservingState(reason)
+    }
+
+    if (decoderMode == "auto") {
+      maybeScheduleAutoFallbackWatchdog()
+    } else {
+      cancelAutoFallbackWatchdog()
+    }
+  }
+
+  private fun reloadCurrentSourcePreservingState(reason: String) {
+    if (!isInitialized) return
+    val source = pendingSource ?: return
+
+    val resumeSec = getTimePosUnsafe().takeIf { it.isFinite() && it > 0.0 }
+    pendingSeekAfterReloadSec = resumeSec
+
+    hasLoadEventFired = false
+    firstFrameEmitted = false
+    durationSec = 0.0
+    videoW = 0
+    videoH = 0
+    isSourceLoaded = false
+    emitBufferingChangedIfNeeded(true)
+
+    cancelAutoFallbackWatchdog()
+
+    try {
+      MPVLib.command(arrayOf("loadfile", source, "replace"))
+      isSourceLoaded = true
+      loadedSourceGeneration = activeSourceGeneration
+
+      try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
+      pendingRate?.let { r -> try { MPVLib.setPropertyDouble("speed", r) } catch (_: Throwable) {} }
+      pendingVolume?.let { v -> try { MPVLib.setPropertyDouble("volume", v * 100.0) } catch (_: Throwable) {} }
+
+      ensureMediaSession()
+      mediaSessionHandler?.updatePlaybackState(!isPaused)
+      PipController.updateIsPlayingFromNative(!isPaused)
+      emitIsPlayingChangedIfNeeded(!isPaused)
+
+      maybeScheduleAutoFallbackWatchdog()
+      Log.i(TAG, "Reloaded source after runtime video option change; reason=$reason")
+    } catch (t: Throwable) {
+      pendingSeekAfterReloadSec = null
+      emitError("Failed to reload media: ${t.message}")
+    }
+  }
+
+  private fun maybeFallbackToSoftwareDecoder(reason: String) {
+    if (!isInitialized) return
+    if (decoderMode != "auto") return
+    if (autoSwFallbackAttempted) return
+    if (activeDecoderValue == "no") return
+
+    autoSwFallbackAttempted = true
+    cancelAutoFallbackWatchdog()
+
+    try {
+      MPVLib.setPropertyString("hwdec", "no")
+      activeDecoderValue = "no"
+      Log.w(TAG, "Auto decoder fallback -> software; reason=$reason")
+      if (isSourceLoaded) {
+        reloadCurrentSourcePreservingState("auto-fallback:$reason")
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "Failed to apply auto decoder fallback", t)
+    }
+  }
+
+  private fun maybeScheduleAutoFallbackWatchdog() {
+    cancelAutoFallbackWatchdog()
+
+    if (decoderMode != "auto") return
+    if (autoSwFallbackAttempted) return
+    if (!isSourceLoaded) return
+
+    val generation = activeSourceGeneration
+    val task = Runnable {
+      if (!isInitialized || !isSourceLoaded) return@Runnable
+      if (generation != activeSourceGeneration || generation != loadedSourceGeneration) return@Runnable
+      if (firstFrameEmitted) return@Runnable
+      maybeFallbackToSoftwareDecoder("first-frame-timeout")
+    }
+
+    autoFallbackWatchdog = task
+    mainHandler.postDelayed(task, AUTO_SW_FALLBACK_TIMEOUT_MS)
+  }
+
+  private fun cancelAutoFallbackWatchdog() {
+    autoFallbackWatchdog?.let { mainHandler.removeCallbacks(it) }
+    autoFallbackWatchdog = null
   }
 
   private fun applyHttpHeadersAsOptions(headers: Map<String, String>?) {
@@ -541,6 +722,7 @@ class MpvEngine(
   private fun emitFirstFrameRenderedIfNeeded() {
     if (firstFrameEmitted) return
     firstFrameEmitted = true
+    cancelAutoFallbackWatchdog()
     safeEmit { listeners.forEach { it.onFirstFrameRendered() } }
   }
 
@@ -614,22 +796,23 @@ class MpvEngine(
 
     try {
       val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+      val activeAudioId = MPVLib.getPropertyInt("aid")
+      val activeSubtitleId = MPVLib.getPropertyInt("sid")
+
       for (i in 0 until count) {
         val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
         val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
         val title = MPVLib.getPropertyString("track-list/$i/title")
-        val lang = MPVLib.getPropertyString("track-list/$i/lang")
+        val lang = if (title.isNullOrBlank()) {
+          try { MPVLib.getPropertyString("track-list/$i/lang") } catch (_: Throwable) { null }
+        } else {
+          null
+        }
 
-        val selected: Boolean = try {
-          val vInt = MPVLib.getPropertyInt("track-list/$i/selected")
-          if (vInt != null) {
-            vInt != 0
-          } else {
-            val vStr = MPVLib.getPropertyString("track-list/$i/selected")
-            vStr == "yes" || vStr == "true" || vStr == "1"
-          }
-        } catch (_: Throwable) {
-          false
+        val selected = when (type) {
+          "audio" -> activeAudioId != null && id == activeAudioId
+          "sub" -> activeSubtitleId != null && id == activeSubtitleId
+          else -> false
         }
 
         val name = when {
@@ -734,11 +917,19 @@ class MpvEngine(
     // Best-effort: apply requested resize mode after file load.
     // MPV_EVENT_FILE_LOADED = 8 (from MPVLib.MpvEvent)
     if (eventId == 8) {
+      pendingSeekAfterReloadSec?.let { resumeSec ->
+        if (resumeSec > 0.0) {
+          try { MPVLib.command(arrayOf("seek", resumeSec.toString(), "absolute")) } catch (_: Throwable) {}
+        }
+        pendingSeekAfterReloadSec = null
+      }
+
       applyResizeMode(requestedResizeMode)
       // Keep pause state authoritative.
       try { MPVLib.setPropertyBoolean("pause", isPaused) } catch (_: Throwable) {}
       ensureMediaSession()
       mediaSessionHandler?.updatePlaybackState(!isPaused)
+      maybeScheduleAutoFallbackWatchdog()
     }
   }
 

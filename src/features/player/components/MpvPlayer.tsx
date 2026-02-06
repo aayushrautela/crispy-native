@@ -25,7 +25,7 @@ export interface MpvPlayerProps {
     volume?: number;
     rate?: number;
     resizeMode?: 'contain' | 'cover' | 'stretch';
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    decoderMode?: 'auto' | 'sw' | 'hw';
     gpuMode?: 'gpu' | 'gpu-next';
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;

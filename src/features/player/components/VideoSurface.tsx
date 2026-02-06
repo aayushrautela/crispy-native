@@ -66,7 +66,7 @@ interface VideoSurfaceProps {
 
     // Engine selection
     useExoPlayer: boolean;
-    decoderMode?: 'auto' | 'sw' | 'hw' | 'hw+';
+    decoderMode?: 'auto' | 'sw' | 'hw';
     gpuMode?: 'gpu' | 'gpu-next';
     onCodecError?: () => void;
 

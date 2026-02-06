@@ -123,6 +123,10 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
     const session = useNativePlayerSessionStore((s) => (sessionId ? s.sessionsById[sessionId] : undefined));
+    const playbackEngine = useMemo(() => {
+        const raw = (session?.engine || props.engine || 'exoplayer').toLowerCase();
+        return raw === 'mpv' ? 'mpv' : 'exoplayer';
+    }, [props.engine, session?.engine]);
 
     const contentId = useMemo(() => session?.id || '', [session?.id]);
     const contentType: PlayerContentType = useMemo(() => {
@@ -337,6 +341,25 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         });
         return () => sub.remove();
     }, [sessionId, isSeeking, contentType]);
+
+    useEffect(() => {
+        if (Platform.OS !== 'android') return;
+        if (playbackEngine !== 'mpv') return;
+
+        const decoderMode = settings.decoderMode || 'auto';
+        const gpuMode = settings.gpuMode || 'gpu';
+
+        const applyPlaybackModes = async () => {
+            try {
+                await CrispyNativeCore.nativePlayerSetDecoderMode(decoderMode);
+                await CrispyNativeCore.nativePlayerSetGpuMode(gpuMode);
+            } catch (error) {
+                console.warn('[PlayerOverlayRoot] Failed to apply playback modes', error);
+            }
+        };
+
+        void applyPlaybackModes();
+    }, [playbackEngine, settings.decoderMode, settings.gpuMode]);
 
     // --- Subtitle logic ---
     useEffect(() => {
