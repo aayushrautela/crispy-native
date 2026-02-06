@@ -1,7 +1,8 @@
 import { useTheme } from '@/src/core/ThemeContext';
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { BackHandler, Dimensions, StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from './Typography';
 
@@ -32,12 +33,16 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
 }, ref) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
-    const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+    const { isTablet, width: windowWidth, height: windowHeight } = useResponsive();
+    const SCREEN_HEIGHT = windowHeight;
+
     const modalRef = useRef<BottomSheetModal>(null);
     const [isOpen, setIsOpen] = useState(false);
 
     // Expose the modal ref to the parent
     useImperativeHandle(ref, () => modalRef.current!);
+
+    const sheetWidth = isTablet ? Math.min(windowWidth * 0.85, 640) : '100%';
 
     // Handle Hardware Back Button on Android
     useEffect(() => {
@@ -100,7 +105,13 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(({
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleStyle}
             enablePanDownToClose={true}
-            style={styles.modal}
+            style={[
+                styles.modal,
+                isTablet && {
+                    width: sheetWidth,
+                    alignSelf: 'center',
+                }
+            ]}
             onDismiss={() => {
                 setIsOpen(false);
                 onDismiss?.();
