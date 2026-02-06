@@ -382,7 +382,7 @@ export default function PlayerScreen() {
 
     // Dual-engine state
     const [useExoPlayer, setUseExoPlayer] = useState(() => {
-        if (settings.videoPlayerEngine === 'mpv') return false;
+        if (settings.videoPlayerEngine === 'vlc') return false;
         return true; // 'auto' defaults to ExoPlayer
     });
 
