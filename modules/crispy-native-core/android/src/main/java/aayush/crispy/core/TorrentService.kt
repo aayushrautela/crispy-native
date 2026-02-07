@@ -45,6 +45,7 @@ class TorrentService : Service() {
     private val binder = TorrentBinder()
     private var sessionManager: SessionManager? = null
     private val activeTorrents = ConcurrentHashMap<String, Boolean>()
+    private var server: CrispyServer? = null
     
     // Track pieces with active deadlines for efficient clearing on seek
     private val priorityWindows = ConcurrentHashMap<String, MutableSet<Int>>()
@@ -65,6 +66,7 @@ class TorrentService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        startServer()
         initSession()
     }
     
@@ -80,7 +82,11 @@ class TorrentService : Service() {
         mainHandler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         // CRITICAL: Nuke everything on destroy
-        Thread { stopAll(); stopSession() }.start()
+        Thread { 
+            stopServer()
+            stopAll() 
+            stopSession() 
+        }.start()
     }
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -133,6 +139,32 @@ class TorrentService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
+    }
+
+    private fun startServer() {
+        if (server != null && server?.isAlive == true) return
+        
+        try {
+            val downloadDir = getDownloadDir()
+            server = CrispyServer(11470, downloadDir, this)
+            if (server?.safeStart() == true) {
+                Log.d(TAG, "CrispyServer started on port 11470")
+            } else {
+                Log.e(TAG, "Failed to start CrispyServer on port 11470")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting CrispyServer", e)
+        }
+    }
+
+    private fun stopServer() {
+        try {
+            server?.stop()
+            server = null
+            Log.d(TAG, "CrispyServer stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping CrispyServer", e)
+        }
     }
     
     private fun initSession() {
