@@ -69,6 +69,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
 
     // Sync external ref with internal ref using a callback ref
     const handleRef = useCallback((node: BottomSheetModal | null) => {
+      console.log('[CustomBottomSheet] handleRef', !!node);
       internalRef.current = node;
       if (typeof ref === 'function') {
         ref(node);
@@ -81,16 +82,21 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
+    console.log('[CustomBottomSheet] render', { title, index, snapPoints: effectiveSnapPoints });
+
     // Track visibility for BackHandler
     const handleSheetChanges = useCallback((index: number) => {
+      console.log('[CustomBottomSheet] handleSheetChanges', index);
       isVisible.current = index >= 0;
       onChange?.(index);
     }, [onChange]);
 
     // Handle Hardware Back Press
     React.useEffect(() => {
+      console.log('[CustomBottomSheet] mounting BackHandler');
       const backAction = () => {
         if (isVisible.current && internalRef.current) {
+          console.log('[CustomBottomSheet] backAction: dismissing sheet');
           internalRef.current.dismiss();
           return true; // Prevent default behavior (exit app/go back)
         }
@@ -102,7 +108,10 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         backAction
       );
 
-      return () => backHandler.remove();
+      return () => {
+        console.log('[CustomBottomSheet] unmounting BackHandler');
+        backHandler.remove();
+      };
     }, []);
 
     const renderBackdrop = useCallback(
@@ -186,6 +195,11 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       );
     };
 
+    const handleDismiss = useCallback(() => {
+      console.log('[CustomBottomSheet] onDismiss');
+      onDismiss?.();
+    }, [onDismiss]);
+
     return (
       <BottomSheetModal
         ref={handleRef}
@@ -196,7 +210,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         backdropComponent={renderBackdrop}
         maxDynamicContentSize={maxHeight}
         enableDynamicSizing={enableDynamicSizing}
-        onDismiss={onDismiss}
+        onDismiss={handleDismiss}
         onChange={handleSheetChanges}
         style={sheetStyle}
         backgroundStyle={backgroundStyle}
