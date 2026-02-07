@@ -48,6 +48,18 @@ export default function MetaDetailsScreen() {
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
     const scrollY = useSharedValue(0);
 
+    useEffect(() => {
+        console.log('[MetaScreen] mounted');
+        return () => console.log('[MetaScreen] unmounted');
+    }, []);
+
+    useEffect(() => {
+        if (isStreamSheetVisible) {
+            console.log('[MetaScreen] useEffect: presenting stream bottom sheet');
+            streamBottomSheetRef.current?.present();
+        }
+    }, [isStreamSheetVisible]);
+
     const onScroll = useAnimatedScrollHandler({
         onScroll: (event) => {
             scrollY.value = event.contentOffset.y;
@@ -245,7 +257,6 @@ export default function MetaDetailsScreen() {
         } else {
             console.log('[MetaScreen] Presenting stream bottom sheet');
             setStreamSheetVisible(true);
-            streamBottomSheetRef.current?.present();
         }
     }, [isSeries, selectedEpisode, watchState]);
 
@@ -264,7 +275,6 @@ export default function MetaDetailsScreen() {
         if (pendingSheetOpen && selectedEpisode) {
             console.log('[MetaScreen] pendingSheetOpen is true, presenting bottom sheet');
             setStreamSheetVisible(true);
-            streamBottomSheetRef.current?.present();
             setPendingSheetOpen(false);
         }
     }, [pendingSheetOpen, selectedEpisode]);

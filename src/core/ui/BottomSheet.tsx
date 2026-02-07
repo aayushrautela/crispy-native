@@ -82,13 +82,20 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
+    // Snap Points Logic
+    const effectiveSnapPoints = useMemo(() => {
+      if (snapPoints) return snapPoints;
+      if (enableDynamicSizing) return undefined; // Standard for v5 dynamic sizing
+      return ['50%'];
+    }, [snapPoints, enableDynamicSizing]);
+
     console.log('[CustomBottomSheet] render', { title, index, snapPoints: effectiveSnapPoints });
 
     // Track visibility for BackHandler
-    const handleSheetChanges = useCallback((index: number) => {
-      console.log('[CustomBottomSheet] handleSheetChanges', index);
-      isVisible.current = index >= 0;
-      onChange?.(index);
+    const handleSheetChanges = useCallback((idx: number) => {
+      console.log('[CustomBottomSheet] handleSheetChanges', idx);
+      isVisible.current = idx >= 0;
+      onChange?.(idx);
     }, [onChange]);
 
     // Handle Hardware Back Press
@@ -118,13 +125,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       (props: BottomSheetBackdropProps) => <CustomBackdrop {...props} />,
       []
     );
-
-    // Snap Points Logic
-    const effectiveSnapPoints = useMemo(() => {
-      if (snapPoints) return snapPoints;
-      if (enableDynamicSizing) return undefined; // Standard for v5 dynamic sizing
-      return ['50%'];
-    }, [snapPoints, enableDynamicSizing]);
 
     // Tablet specific styles
     const sheetStyle = useMemo<ViewStyle>(() => {
@@ -203,7 +203,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     return (
       <BottomSheetModal
         ref={handleRef}
-        index={index}
+        index={index === -1 ? undefined : index}
         snapPoints={effectiveSnapPoints}
         enablePanDownToClose={true}
         enableDismissOnClose={true}
