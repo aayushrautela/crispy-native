@@ -46,6 +46,18 @@ const withCrispyNative = (config) => {
 const withIosConfiguration = (config) => {
     return withPodfile(config, (config) => {
         let podfileContent = config.modResults.contents;
+
+        // Ensure use_modular_headers! is globally enabled for Swift static libraries compatibility
+        if (!podfileContent.includes('use_modular_headers!')) {
+            if (podfileContent.includes('use_expo_modules!')) {
+                podfileContent = podfileContent.replace(
+                    'use_expo_modules!',
+                    `use_modular_headers!\n  use_expo_modules!`
+                );
+            }
+        }
+
+
         
         // Define pods as per KSPlayer README
         const ksPlayerPod = `pod 'KSPlayer', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
