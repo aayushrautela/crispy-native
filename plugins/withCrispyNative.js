@@ -45,19 +45,38 @@ const withCrispyNative = (config) => {
  */
 const withIosConfiguration = (config) => {
     return withPodfile(config, (config) => {
-        const podfileContent = config.modResults.contents;
+        let podfileContent = config.modResults.contents;
         const ksPlayerPod = `pod 'KSPlayer', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
-        
+        const displayCriteriaPod = `pod 'DisplayCriteria', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
+
         if (!podfileContent.includes("pod 'KSPlayer'")) {
             if (podfileContent.includes('use_expo_modules!')) {
-                config.modResults.contents = podfileContent.replace(
+                podfileContent = podfileContent.replace(
                     'use_expo_modules!',
                     `${ksPlayerPod}\n  use_expo_modules!`
                 );
             } else {
-                config.modResults.contents += `\n${ksPlayerPod}\n`;
+                podfileContent += `\n${ksPlayerPod}\n`;
             }
         }
+
+        if (!podfileContent.includes("pod 'DisplayCriteria'")) {
+            if (podfileContent.includes("pod 'KSPlayer'")) {
+                podfileContent = podfileContent.replace(
+                    /pod 'KSPlayer'.*/,
+                    (match) => `${match}\n  ${displayCriteriaPod}`
+                );
+            } else if (podfileContent.includes('use_expo_modules!')) {
+                podfileContent = podfileContent.replace(
+                    'use_expo_modules!',
+                    `${displayCriteriaPod}\n  use_expo_modules!`
+                );
+            } else {
+                podfileContent += `\n${displayCriteriaPod}\n`;
+            }
+        }
+
+        config.modResults.contents = podfileContent;
         return config;
     });
 };
