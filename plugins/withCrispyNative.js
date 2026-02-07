@@ -83,6 +83,28 @@ const withIosConfiguration = (config) => {
         insertPod(ffmpegKitPod, 'FFmpegKit');
         insertPod(libassPod, 'Libass');
 
+        // Suppress "umbrella header for module 'React' does not include header..." warnings
+        const warningSuppression = `
+    # Suppress "umbrella header for module 'React' does not include header..." warnings
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['OTHER_CFLAGS'] ||= '$(inherited) '
+        unless config.build_settings['OTHER_CFLAGS'].include?('-Wno-incomplete-umbrella')
+          config.build_settings['OTHER_CFLAGS'] << ' -Wno-incomplete-umbrella'
+        end
+      end
+    end`;
+
+        if (!podfileContent.includes('-Wno-incomplete-umbrella')) {
+            // Try to insert it inside the post_install block
+            if (podfileContent.includes('react_native_post_install')) {
+                podfileContent = podfileContent.replace(
+                    /react_native_post_install\([\s\S]*?\)/,
+                    `$&${warningSuppression}`
+                );
+            }
+        }
+
         config.modResults.contents = podfileContent;
         return config;
     });
