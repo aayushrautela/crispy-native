@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.author         = package['author']
   s.homepage       = package['homepage']
   s.platform       = :ios, '13.0'
-  s.source         = { git: 'https://github.com/your-org/crispy-native.git' }
+  s.source         = { git: 'https://github.com/aayushrautela/crispy-native.git', :tag => s.version.to_s }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

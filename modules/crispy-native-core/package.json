@@ -7,6 +7,11 @@
         "name": "crispy-native-core",
         "slug": "crispy-native-core"
     },
+    "description": "Core native functionality for Crispy Native",
+    "license": "MIT",
+    "author": "Aayush Rautela",
+    "homepage": "https://github.com/aayushrautela/crispy-native",
+    "repository": "https://github.com/aayushrautela/crispy-native",
     "dependencies": {
         "expo-modules-core": "~1.12.11"
     }
