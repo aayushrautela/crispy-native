@@ -38,8 +38,13 @@ dependencies {
   // VLC Player library
   implementation "org.videolan.android:libvlc-all:3.6.0"
   
-  // jlibtorrent JARs
-  implementation fileTree(dir: 'libs', include: ['*.jar'])
+  // jlibtorrent - Mavenized for production (Fixes W^X security warnings and Android 15 compatibility)
+  def jlibtorrent_version = '2.0.13.6'
+  implementation "com.frostwire:jlibtorrent:${jlibtorrent_version}"
+  implementation "com.frostwire:jlibtorrent-android-arm:${jlibtorrent_version}"
+  implementation "com.frostwire:jlibtorrent-android-arm64:${jlibtorrent_version}"
+  implementation "com.frostwire:jlibtorrent-android-x86:${jlibtorrent_version}"
+  implementation "com.frostwire:jlibtorrent-android-x86_64:${jlibtorrent_version}"
   
   // NanoHTTPD for local HTTP streaming server
   implementation 'org.nanohttpd:nanohttpd:2.3.1'
@@ -63,4 +68,13 @@ dependencies {
 
   // Coil for image loading in notifications
   implementation "io.coil-kt:coil:2.6.0"
+}
+
+repositories {
+  maven {
+    url "https://dl.frostwire.com/maven"
+    content {
+      includeGroup "com.frostwire"
+    }
+  }
 }

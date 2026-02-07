@@ -178,12 +178,18 @@ class TorrentService : Service() {
             activeLimit(3)
             activeTrackerLimit(50)
             activeDhtLimit(50)
-            activeLsdLimit(10)
+            activeLsdLimit(0)
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
-            listenInterfaces("0.0.0.0:0")
+            
+            // PRODUCTION FIX: Use fixed ports to avoid [enum_route] failures on Android 11+
+            // listenInterfaces("0.0.0.0:0") triggers a restricted route scan.
+            listenInterfaces("0.0.0.0:6881,[::]:6881")
+            
             setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
-            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), false) // Restricted on Android 11+
+            setBoolean(settings_pack.bool_types.dht_ignore_lan_peers.swigValue(), true) // Reduces unnecessary network noise
+            
             setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
             
             // Production grade connectivity settings
