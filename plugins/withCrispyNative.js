@@ -41,40 +41,35 @@ const withCrispyNative = (config) => {
 // --- Sub-Plugins ---
 
 /**
- * Configure iOS Podfile to include KSPlayer from git source.
+ * Configure iOS Podfile to include KSPlayer and its dependencies from git source.
  */
 const withIosConfiguration = (config) => {
     return withPodfile(config, (config) => {
         let podfileContent = config.modResults.contents;
+        
+        // Define pods as per KSPlayer README
         const ksPlayerPod = `pod 'KSPlayer', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
         const displayCriteriaPod = `pod 'DisplayCriteria', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
+        const ffmpegKitPod = `pod 'FFmpegKit', :git => 'https://github.com/kingslay/FFmpegKit.git', :branch => 'main'`;
+        const libassPod = `pod 'Libass', :git => 'https://github.com/kingslay/FFmpegKit.git', :branch => 'main'`;
 
-        if (!podfileContent.includes("pod 'KSPlayer'")) {
-            if (podfileContent.includes('use_expo_modules!')) {
-                podfileContent = podfileContent.replace(
-                    'use_expo_modules!',
-                    `${ksPlayerPod}\n  use_expo_modules!`
-                );
-            } else {
-                podfileContent += `\n${ksPlayerPod}\n`;
+        const insertPod = (podString, podName) => {
+            if (!podfileContent.includes(`pod '${podName}'`)) {
+                if (podfileContent.includes('use_expo_modules!')) {
+                    podfileContent = podfileContent.replace(
+                        'use_expo_modules!',
+                        `${podString}\n  use_expo_modules!`
+                    );
+                } else {
+                    podfileContent += `\n${podString}\n`;
+                }
             }
-        }
+        };
 
-        if (!podfileContent.includes("pod 'DisplayCriteria'")) {
-            if (podfileContent.includes("pod 'KSPlayer'")) {
-                podfileContent = podfileContent.replace(
-                    /pod 'KSPlayer'.*/,
-                    (match) => `${match}\n  ${displayCriteriaPod}`
-                );
-            } else if (podfileContent.includes('use_expo_modules!')) {
-                podfileContent = podfileContent.replace(
-                    'use_expo_modules!',
-                    `${displayCriteriaPod}\n  use_expo_modules!`
-                );
-            } else {
-                podfileContent += `\n${displayCriteriaPod}\n`;
-            }
-        }
+        insertPod(ksPlayerPod, 'KSPlayer');
+        insertPod(displayCriteriaPod, 'DisplayCriteria');
+        insertPod(ffmpegKitPod, 'FFmpegKit');
+        insertPod(libassPod, 'Libass');
 
         config.modResults.contents = podfileContent;
         return config;
