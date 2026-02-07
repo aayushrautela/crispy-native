@@ -194,7 +194,9 @@ class CrispyServer(
         var lastPrioritizeMs = 0L
 
         while (elapsedMs < maxWaitMs) {
-            val (headerReady, progress) = service.isHeaderReady(infoHash, fileIdx)
+            val result = service.isHeaderReady(infoHash, fileIdx)
+            val headerReady = result.first
+            val progress = result.second
 
             if (headerReady) {
                 Log.d(TAG, "Header ready after ${elapsedMs}ms (buffer: ${"%.1f".format(progress)}%)")
@@ -216,7 +218,9 @@ class CrispyServer(
             }
         }
 
-        val (finalReady, finalProgress) = service.isHeaderReady(infoHash, fileIdx)
+        val finalResult = service.isHeaderReady(infoHash, fileIdx)
+        val finalReady = finalResult.first
+        val finalProgress = finalResult.second
         if (!finalReady) {
             Log.w(TAG, "Header not ready after ${elapsedMs}ms: $infoHash/$fileIdx (buffer: ${"%.1f".format(finalProgress)}%)")
 
