@@ -12,7 +12,8 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { CrispyKSVideoView, type CrispyKSVideoViewRef, type CrispyKSVideoViewProps } from '@/modules/crispy-native-core';
 
 export interface KSPlayerSurfaceRef {
     seek: (seconds: number) => void;
@@ -26,33 +27,67 @@ interface KSPlayerSurfaceProps {
     paused: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
+    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
     onEnd?: () => void;
     onError?: (error: { message: string }) => void;
     onTracksChanged?: (data: { audioTracks: any[]; subtitleTracks: any[] }) => void;
+    metadata?: any;
 }
 
 export const KSPlayerSurface = React.forwardRef<KSPlayerSurfaceRef, KSPlayerSurfaceProps>(function KSPlayerSurface(props, ref) {
-    // TODO: Implement native iOS module bridge to KSPlayer
+    const nativeRef = React.useRef<CrispyKSVideoViewRef>(null);
 
     React.useImperativeHandle(ref, () => ({
         seek: (seconds: number) => {
-            console.log('[KSPlayerSurface] seek not implemented:', seconds);
+            nativeRef.current?.seek(seconds);
         },
         setAudioTrack: (id: number) => {
-            console.log('[KSPlayerSurface] setAudioTrack not implemented:', id);
+            nativeRef.current?.setAudioTrack(id);
         },
         setSubtitleTrack: (id: number) => {
-            console.log('[KSPlayerSurface] setSubtitleTrack not implemented:', id);
+            nativeRef.current?.setSubtitleTrack(id);
         },
     }));
 
+    const handleLoad = (event: any) => {
+        const { duration, width, height } = event.nativeEvent;
+        props.onLoad?.({ duration, width, height });
+    };
+
+    const handleProgress = (event: any) => {
+        const { currentTime, duration } = event.nativeEvent;
+        props.onProgress?.({ currentTime, duration });
+    };
+
+    const handleError = (event: any) => {
+        const { error } = event.nativeEvent;
+        props.onError?.({ message: error });
+    };
+
+    const handleTracksChanged = (event: any) => {
+        props.onTracksChanged?.(event.nativeEvent);
+    };
+
     return (
         <View style={styles.container}>
-            <Text style={styles.text}>KSPlayer not yet implemented</Text>
-            <Text style={styles.subtext}>iOS video playback coming soon</Text>
+            <CrispyKSVideoView
+                ref={nativeRef as any}
+                style={styles.player}
+                source={props.source}
+                headers={props.headers}
+                paused={props.paused}
+                volume={props.volume}
+                rate={props.rate}
+                resizeMode={props.resizeMode}
+                metadata={props.metadata}
+                onLoad={handleLoad}
+                onProgress={handleProgress}
+                onEnd={props.onEnd}
+                onError={handleError}
+                onTracksChanged={handleTracksChanged}
+            />
         </View>
     );
 });
@@ -63,17 +98,8 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000',
-        justifyContent: 'center',
-        alignItems: 'center',
     },
-    text: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    subtext: {
-        color: '#888',
-        fontSize: 14,
-        marginTop: 8,
+    player: {
+        flex: 1,
     },
 });

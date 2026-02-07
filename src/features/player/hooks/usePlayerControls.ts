@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { Platform } from 'react-native';
 
 const END_EPSILON = 0.3;
 
@@ -12,7 +13,8 @@ export const usePlayerControls = (
     isMounted: React.MutableRefObject<boolean>,
     // Dual engine support
     exoPlayerRef?: React.RefObject<{ seek: (seconds: number) => void } | null>,
-    useExoPlayer?: boolean
+    useExoPlayer?: boolean,
+    iosPlayerRef?: React.RefObject<{ seek: (seconds: number) => void } | null>
 ) => {
     const togglePlayback = useCallback(() => {
         setPaused(!paused);
@@ -24,8 +26,22 @@ export const usePlayerControls = (
         console.log('[usePlayerControls] seekToTime:', {
             timeInSeconds,
             useExoPlayer,
-            duration
+            duration,
+            platform: Platform.OS
         });
+
+        // iOS KSPlayer
+        if (Platform.OS === 'ios' && iosPlayerRef?.current) {
+            isSeeking.current = true;
+            iosPlayerRef.current.seek(timeInSeconds);
+
+            setTimeout(() => {
+                if (isMounted.current) {
+                    isSeeking.current = false;
+                }
+            }, 500);
+            return;
+        }
 
         // ExoPlayer
         if (useExoPlayer && exoPlayerRef?.current && duration > 0) {
@@ -52,7 +68,7 @@ export const usePlayerControls = (
             }, 500);
             return;
         }
-    }, [duration, vlcPlayerRef, exoPlayerRef, useExoPlayer, isSeeking, isMounted]);
+    }, [duration, vlcPlayerRef, exoPlayerRef, useExoPlayer, iosPlayerRef, isSeeking, isMounted]);
 
     const skip = useCallback((seconds: number) => {
         seekToTime(currentTime + seconds);

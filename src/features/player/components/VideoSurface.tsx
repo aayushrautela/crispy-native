@@ -122,7 +122,8 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         isSeeking,
         isMounted,
         exoPlayerRef,
-        useExoPlayer
+        useExoPlayer,
+        iosPlayerRef
     );
 
     // Imperative handle - expose methods
@@ -131,12 +132,20 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
             seekToTime(seconds);
         },
         setAudioTrack: (id: number) => {
-            if (useExoPlayer) exoPlayerRef.current?.setAudioTrack(id);
-            else vlcPlayerRef.current?.setAudioTrack(id);
+            if (Platform.OS === 'ios') {
+                iosPlayerRef.current?.setAudioTrack(id);
+            } else {
+                if (useExoPlayer) exoPlayerRef.current?.setAudioTrack(id);
+                else vlcPlayerRef.current?.setAudioTrack(id);
+            }
         },
         setSubtitleTrack: (id: number) => {
-            if (useExoPlayer) exoPlayerRef.current?.setSubtitleTrack(id);
-            else vlcPlayerRef.current?.setSubtitleTrack(id);
+            if (Platform.OS === 'ios') {
+                iosPlayerRef.current?.setSubtitleTrack(id);
+            } else {
+                if (useExoPlayer) exoPlayerRef.current?.setSubtitleTrack(id);
+                else vlcPlayerRef.current?.setSubtitleTrack(id);
+            }
         },
         setSubtitleSize: (size: number) => {
             if (!useExoPlayer) vlcPlayerRef.current?.setSubtitleSize(size);
@@ -169,8 +178,23 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         },
     }));
 
-    // Apply track selection for native Exo.
+    // Apply track selection
     useEffect(() => {
+        if (Platform.OS === 'ios') {
+            if (selectedAudioTrack?.type === 'index' && typeof selectedAudioTrack.value === 'number') {
+                iosPlayerRef.current?.setAudioTrack(selectedAudioTrack.value);
+            } else if (selectedAudioTrack?.type === 'disabled') {
+                iosPlayerRef.current?.setAudioTrack(-1);
+            }
+
+            if (selectedTextTrack?.type === 'index' && typeof selectedTextTrack.value === 'number') {
+                iosPlayerRef.current?.setSubtitleTrack(selectedTextTrack.value);
+            } else if (selectedTextTrack?.type === 'disabled') {
+                iosPlayerRef.current?.setSubtitleTrack(-1);
+            }
+            return;
+        }
+
         if (!useExoPlayer) return;
 
         if (selectedAudioTrack?.type === 'index' && typeof selectedAudioTrack.value === 'number') {
@@ -184,7 +208,7 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         } else if (selectedTextTrack?.type === 'disabled') {
             exoPlayerRef.current?.setSubtitleTrack(-1);
         }
-    }, [useExoPlayer, selectedAudioTrack?.type, selectedAudioTrack?.value, selectedTextTrack?.type, selectedTextTrack?.value]);
+    }, [Platform.OS, useExoPlayer, selectedAudioTrack?.type, selectedAudioTrack?.value, selectedTextTrack?.type, selectedTextTrack?.value]);
 
     // ========== VLC Handlers ==========
     const handleVlcLoad = (data: any) => {
