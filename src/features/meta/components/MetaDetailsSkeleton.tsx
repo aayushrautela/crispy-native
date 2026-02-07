@@ -1,8 +1,11 @@
 import { useResponsive } from '@/src/core/hooks/useResponsive';
-import { Shimmer } from '@/src/core/ui/Shimmer';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { memo } from 'react';
 import { StyleSheet, ScrollView, View } from 'react-native';
+
+const Skeleton = ({ width, height, borderRadius = 8, style }: { width: number | string; height: number | string; borderRadius?: number; style?: any }) => (
+    <View style={[{ width, height, borderRadius, backgroundColor: '#2a2a2a' }, style]} />
+);
 
 const BACKDROP_HEIGHT = 420;
 const HERO_HEIGHT = 600;
@@ -16,29 +19,29 @@ export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
             <View style={styles.container}>
                 <View style={styles.splitHero}>
                     <View style={styles.leftPane}>
-                        <Shimmer height="100%" width="100%" borderRadius={0} />
+                        <Skeleton height="100%" width="100%" borderRadius={0} />
                         <View style={styles.leftPaneOverlay}>
-                            <Shimmer width={100} height={36} borderRadius={20} />
-                            <Shimmer width={400} height={120} borderRadius={12} />
+                            <Skeleton width={100} height={36} borderRadius={20} />
+                            <Skeleton width={400} height={120} borderRadius={12} />
                         </View>
                     </View>
                     <View style={styles.rightPane}>
                         <View style={styles.rightContent}>
-                            <Shimmer width="80%" height={48} borderRadius={8} />
+                            <Skeleton width="80%" height={48} borderRadius={8} />
                             <View style={styles.metaRow}>
-                                <Shimmer width={60} height={18} />
-                                <Shimmer width={40} height={18} />
-                                <Shimmer width={80} height={18} />
+                                <Skeleton width={60} height={18} />
+                                <Skeleton width={40} height={18} />
+                                <Skeleton width={80} height={18} />
                             </View>
                             <View style={styles.description}>
-                                <Shimmer width="100%" height={16} style={{ marginBottom: 8 }} />
-                                <Shimmer width="90%" height={16} style={{ marginBottom: 8 }} />
-                                <Shimmer width="40%" height={16} />
+                                <Skeleton width="100%" height={16} style={{ marginBottom: 8 }} />
+                                <Skeleton width="90%" height={16} style={{ marginBottom: 8 }} />
+                                <Skeleton width="40%" height={16} />
                             </View>
-                            <Shimmer width="100%" height={68} borderRadius={34} />
+                            <Skeleton width="100%" height={68} borderRadius={34} />
                             <View style={[styles.iconRow, { marginTop: 24 }]}>
                                 {[1, 2, 3, 4].map(i => (
-                                    <Shimmer key={i} width={56} height={56} borderRadius={28} />
+                                    <Skeleton key={i} width={56} height={56} borderRadius={28} />
                                 ))}
                             </View>
                         </View>
@@ -47,36 +50,36 @@ export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.bodyScroll}>
                     <View style={styles.body}>
-                        {/* Ratings Section Shimmer */}
+                        {/* Ratings Section Placeholder */}
                         <View style={styles.section}>
-                            <Shimmer width={100} height={24} style={styles.sectionTitle} />
+                            <Skeleton width={100} height={24} style={styles.sectionTitle} />
                             <View style={[styles.horizontalScroll, { flexWrap: 'wrap', flexDirection: 'row' }]}>
                                 {[1, 2, 3, 4].map(i => (
-                                    <Shimmer key={i} width={160} height={64} borderRadius={32} />
+                                    <Skeleton key={i} width={160} height={64} borderRadius={32} />
                                 ))}
                             </View>
                         </View>
 
                         <View style={styles.gridContainer}>
-                            {/* Cast Section Shimmer */}
+                            {/* Cast Section Placeholder */}
                             <View style={[styles.section, { flex: 1 }]}>
-                                <Shimmer width={80} height={24} style={styles.sectionTitle} />
+                                <Skeleton width={80} height={24} style={styles.sectionTitle} />
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                                     {[1, 2, 3, 4, 5, 6].map(i => (
                                         <View key={i} style={{ alignItems: 'center', width: 100 }}>
-                                            <Shimmer width={80} height={80} borderRadius={40} />
-                                            <Shimmer width={70} height={12} style={{ marginTop: 12 }} />
+                                            <Skeleton width={80} height={80} borderRadius={40} />
+                                            <Skeleton width={70} height={12} style={{ marginTop: 12 }} />
                                         </View>
                                     ))}
                                 </ScrollView>
                             </View>
 
-                            {/* Reviews Section Shimmer */}
+                            {/* Reviews Section Placeholder */}
                             <View style={[styles.section, { flex: 1 }]}>
-                                <Shimmer width={120} height={24} style={styles.sectionTitle} />
+                                <Skeleton width={120} height={24} style={styles.sectionTitle} />
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                                     {[1, 2].map(i => (
-                                        <Shimmer key={i} width={280} height={160} borderRadius={24} />
+                                        <Skeleton key={i} width={280} height={160} borderRadius={24} />
                                     ))}
                                 </ScrollView>
                             </View>
@@ -91,7 +94,7 @@ export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
         <View style={styles.container}>
             {/* Static Backdrop Skeleton */}
             <View style={styles.staticBackdrop}>
-                <Shimmer height={BACKDROP_HEIGHT} borderRadius={0} />
+                <Skeleton height={BACKDROP_HEIGHT} borderRadius={0} />
             </View>
 
             <ScrollView
@@ -108,80 +111,80 @@ export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
                     />
 
                     <View style={styles.heroContent}>
-                        {/* Trailer Button Shimmer */}
-                        <Shimmer width={100} height={36} borderRadius={20} />
+                        {/* Trailer Button Placeholder */}
+                        <Skeleton width={100} height={36} borderRadius={20} />
 
-                        {/* Logo/Title Shimmer */}
-                        <Shimmer width="70%" height={80} borderRadius={12} />
+                        {/* Logo/Title Placeholder */}
+                        <Skeleton width="70%" height={80} borderRadius={12} />
 
-                        {/* Metadata Row Shimmer */}
+                        {/* Metadata Row Placeholder */}
                         <View style={styles.metaRow}>
-                            <Shimmer width={60} height={18} />
-                            <Shimmer width={40} height={18} />
-                            <Shimmer width={80} height={18} />
+                            <Skeleton width={60} height={18} />
+                            <Skeleton width={40} height={18} />
+                            <Skeleton width={80} height={18} />
                         </View>
 
-                        {/* Description Shimmer */}
+                        {/* Description Placeholder */}
                         <View style={styles.description}>
-                            <Shimmer width="100%" height={16} style={{ marginBottom: 8 }} />
-                            <Shimmer width="90%" height={16} style={{ marginBottom: 8 }} />
-                            <Shimmer width="40%" height={16} />
+                            <Skeleton width="100%" height={16} style={{ marginBottom: 8 }} />
+                            <Skeleton width="90%" height={16} style={{ marginBottom: 8 }} />
+                            <Skeleton width="40%" height={16} />
                         </View>
 
-                        {/* Primary Action Button Shimmer */}
-                        <Shimmer width="100%" height={68} borderRadius={34} />
+                        {/* Primary Action Button Placeholder */}
+                        <Skeleton width="100%" height={68} borderRadius={34} />
                     </View>
                 </View>
 
                 {/* Body Content */}
                 <View style={styles.body}>
-                    {/* Icon Actions Shimmer (MetaActionRow) */}
+                    {/* Icon Actions Placeholder (MetaActionRow) */}
                     <View style={styles.iconRow}>
                         {[1, 2, 3, 4].map(i => (
-                            <Shimmer key={i} width={64} height={64} borderRadius={32} />
+                            <Skeleton key={i} width={64} height={64} borderRadius={32} />
                         ))}
                     </View>
 
-                    {/* Ratings Section Shimmer */}
+                    {/* Ratings Section Placeholder */}
                     <View style={styles.section}>
-                        <Shimmer width={100} height={24} style={styles.sectionTitle} />
+                        <Skeleton width={100} height={24} style={styles.sectionTitle} />
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                             {[1, 2, 3].map(i => (
-                                <Shimmer key={i} width={160} height={64} borderRadius={32} />
+                                <Skeleton key={i} width={160} height={64} borderRadius={32} />
                             ))}
                         </ScrollView>
                     </View>
 
-                    {/* Cast Section Shimmer */}
+                    {/* Cast Section Placeholder */}
                     <View style={styles.section}>
-                        <Shimmer width={80} height={24} style={styles.sectionTitle} />
+                        <Skeleton width={80} height={24} style={styles.sectionTitle} />
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                             {[1, 2, 3, 4, 5].map(i => (
                                 <View key={i} style={{ alignItems: 'center', width: 100 }}>
-                                    <Shimmer width={80} height={80} borderRadius={40} />
-                                    <Shimmer width={70} height={12} style={{ marginTop: 12 }} />
-                                    <Shimmer width={50} height={10} style={{ marginTop: 4 }} />
+                                    <Skeleton width={80} height={80} borderRadius={40} />
+                                    <Skeleton width={70} height={12} style={{ marginTop: 12 }} />
+                                    <Skeleton width={50} height={10} style={{ marginTop: 4 }} />
                                 </View>
                             ))}
                         </ScrollView>
                     </View>
 
-                    {/* Reviews/Comments Section Shimmer */}
+                    {/* Reviews/Comments Section Placeholder */}
                     <View style={styles.section}>
-                        <Shimmer width={120} height={24} style={styles.sectionTitle} />
+                        <Skeleton width={120} height={24} style={styles.sectionTitle} />
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                             {[1, 2].map(i => (
-                                <Shimmer key={i} width={280} height={160} borderRadius={24} />
+                                <Skeleton key={i} width={280} height={160} borderRadius={24} />
                             ))}
                         </ScrollView>
                     </View>
 
-                    {/* Episodes/Recommendations Section Shimmer */}
+                    {/* Episodes/Recommendations Section Placeholder */}
                     <View style={styles.section}>
-                        <Shimmer width={150} height={24} style={styles.sectionTitle} />
+                        <Skeleton width={150} height={24} style={styles.sectionTitle} />
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
                             {[1, 2].map(i => (
-                                <Shimmer key={i} width={280} height={200} borderRadius={16} />
+                                <Skeleton key={i} width={280} height={200} borderRadius={16} />
                             ))}
                         </ScrollView>
                     </View>

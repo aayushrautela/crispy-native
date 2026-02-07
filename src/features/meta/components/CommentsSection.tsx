@@ -2,7 +2,6 @@ import { TraktContentComment } from '@/src/core/services/trakt-types';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
-import { Shimmer } from '@/src/core/ui/Shimmer';
 import { Typography } from '@/src/core/ui/Typography';
 import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
 import { Star } from 'lucide-react-native';
@@ -46,8 +45,8 @@ export const CommentsSection = memo(function CommentsSection({ id, type, season,
 
             {isLoading && comments.length === 0 ? (
                 <View style={[styles.listContent, { flexDirection: 'row', gap: 16 }]}>
-                    <Shimmer width={280} height={160} borderRadius={24} />
-                    <Shimmer width={280} height={160} borderRadius={24} />
+                    <View style={{ width: 280, height: 160, borderRadius: 24, backgroundColor: '#2a2a2a' }} />
+                    <View style={{ width: 280, height: 160, borderRadius: 24, backgroundColor: '#2a2a2a' }} />
                 </View>
             ) : (
                 <FlatList
