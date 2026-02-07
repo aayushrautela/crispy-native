@@ -1,11 +1,18 @@
 {
     "platforms": [
-        "android"
+        "android",
+        "ios"
     ],
     "android": {
         "modules": [
             "aayush.crispy.core.CrispyNativeCoreModule",
             "aayush.crispy.core.CrispyExoPlayerModule"
+        ]
+    },
+    "ios": {
+        "modules": [
+            "CrispyNativeCoreModule",
+            "CrispyKSPlayerModule"
         ]
     }
 }
