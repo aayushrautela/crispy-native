@@ -26,6 +26,16 @@ android {
   }
 }
 
+repositories {
+  maven {
+    url "https://dl.frostwire.com/maven"
+    allowInsecureProtocol = true
+    content {
+      includeGroup "com.frostwire"
+    }
+  }
+}
+
 dependencies {
   implementation project(':expo-modules-core')
 
@@ -39,7 +49,8 @@ dependencies {
   implementation "org.videolan.android:libvlc-all:3.6.0"
   
   // jlibtorrent - Mavenized for production (Fixes W^X security warnings and Android 15 compatibility)
-  def jlibtorrent_version = '2.0.13.6'
+  // Using 2.0.12.7 as it's the latest available on FrostWire repo
+  def jlibtorrent_version = '2.0.12.7'
   implementation "com.frostwire:jlibtorrent:${jlibtorrent_version}"
   implementation "com.frostwire:jlibtorrent-android-arm:${jlibtorrent_version}"
   implementation "com.frostwire:jlibtorrent-android-arm64:${jlibtorrent_version}"
@@ -68,13 +79,4 @@ dependencies {
 
   // Coil for image loading in notifications
   implementation "io.coil-kt:coil:2.6.0"
-}
-
-repositories {
-  maven {
-    url "https://dl.frostwire.com/maven"
-    content {
-      includeGroup "com.frostwire"
-    }
-  }
 }
