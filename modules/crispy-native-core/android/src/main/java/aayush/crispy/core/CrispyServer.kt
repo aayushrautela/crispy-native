@@ -135,40 +135,109 @@ class CrispyServer(
 
     private fun serveTorrentFile(session: IHTTPSession): Response {
         val parts = session.uri.trim('/').split("/")
-        if (parts.size < 2) return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Invalid format")
-        
+        if (parts.size < 2) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                MIME_PLAINTEXT,
+                "Invalid URL. Expected: /{infoHash}/{fileIdx}"
+            )
+        }
+
         val infoHash = parts[0].lowercase()
         val fileIdx = parts[1].toIntOrNull() ?: 0
-        val service = torrentService ?: return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "TorrentService inactive")
-        
-        if (service.getTorrentStats(infoHash) == null) service.startInfoHash(infoHash, null)
-        
-        val stats = service.getFileStats(infoHash, fileIdx) ?: return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "Loading metadata...").apply { addHeader("Retry-After", "2") }
-        
+        val service = torrentService ?: return newFixedLengthResponse(
+            Response.Status.SERVICE_UNAVAILABLE,
+            MIME_PLAINTEXT,
+            "TorrentService not available"
+        )
+
+        if (service.getTorrentStats(infoHash) == null) {
+            Log.d(TAG, "Auto-starting torrent: $infoHash")
+            service.startInfoHash(infoHash, null)
+        }
+
+        val stats = service.getFileStats(infoHash, fileIdx)
+        if (stats == null) {
+            Log.d(TAG, "Metadata not ready for $infoHash/$fileIdx, returning 503")
+            return newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE,
+                MIME_PLAINTEXT,
+                "Loading torrent metadata..."
+            ).apply {
+                addHeader("Retry-After", "2")
+            }
+        }
+
         service.startStreaming(infoHash, fileIdx)
-        val relativeFilePath = service.getFilePath(infoHash, fileIdx) ?: return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "Finding file...").apply { addHeader("Retry-After", "2") }
-        
-        val videoFile = File(service.getDownloadDir(), relativeFilePath)
-        
-        var elapsed = 0L
-        while (elapsed < 30000L) {
-            if (service.isHeaderReady(infoHash, fileIdx)) break
-            Log.d(TAG, "Waiting for header: $infoHash/$fileIdx (elapsed: ${elapsed}ms)")
-            service.prioritizeHeader(infoHash, fileIdx)
-            Thread.sleep(1000) // Increased sleep to 1s for clearer logs
-            elapsed += 1000
+
+        val relativeFilePath = service.getFilePath(infoHash, fileIdx)
+        if (relativeFilePath == null) {
+            Log.w(TAG, "Could not get file path from torrent metadata: $infoHash/$fileIdx")
+            return newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE,
+                MIME_PLAINTEXT,
+                "File path not available yet..."
+            ).apply {
+                addHeader("Retry-After", "2")
+            }
         }
-        
-        if (!service.isHeaderReady(infoHash, fileIdx)) {
-            Log.w(TAG, "Header NOT READY after 30s: $infoHash/$fileIdx")
-            return newFixedLengthResponse(Response.Status.SERVICE_UNAVAILABLE, MIME_PLAINTEXT, "Downloading header...").apply { addHeader("Retry-After", "2") }
+
+        val actualDownloadDir = service.getDownloadDir()
+        val videoFile = File(actualDownloadDir, relativeFilePath)
+
+        Log.d(TAG, "Looking for file at: ${videoFile.absolutePath}")
+
+        val maxWaitMs = 30_000L
+        val pollIntervalMs = 500L
+        val reprioritizeIntervalMs = 3_000L
+        var elapsedMs = 0L
+        var lastPrioritizeMs = 0L
+
+        while (elapsedMs < maxWaitMs) {
+            val (headerReady, progress) = service.isHeaderReady(infoHash, fileIdx)
+
+            if (headerReady) {
+                Log.d(TAG, "Header ready after ${elapsedMs}ms (buffer: ${"%.1f".format(progress)}%)")
+                break
+            }
+
+            if (elapsedMs - lastPrioritizeMs >= reprioritizeIntervalMs) {
+                service.prioritizeHeader(infoHash, fileIdx)
+                lastPrioritizeMs = elapsedMs
+                Log.d(TAG, "Re-prioritized header for $infoHash/$fileIdx (elapsed: ${elapsedMs}ms, buffer: ${"%.1f".format(progress)}%)")
+            }
+
+            try {
+                Thread.sleep(pollIntervalMs)
+                elapsedMs += pollIntervalMs
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                break
+            }
         }
-        
+
+        val (finalReady, finalProgress) = service.isHeaderReady(infoHash, fileIdx)
+        if (!finalReady) {
+            Log.w(TAG, "Header not ready after ${elapsedMs}ms: $infoHash/$fileIdx (buffer: ${"%.1f".format(finalProgress)}%)")
+
+            return newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE,
+                MIME_PLAINTEXT,
+                "Downloading header... (${"%.1f".format(finalProgress)}%)"
+            ).apply {
+                addHeader("Retry-After", "2")
+            }
+        }
+
         if (!videoFile.exists()) {
-            Log.e(TAG, "File missing on disk: ${videoFile.absolutePath}")
-            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "File missing")
+            Log.e(TAG, "Header ready but file missing: ${videoFile.absolutePath}")
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Internal error: file missing"
+            )
         }
-        
+
         Log.d(TAG, "Serving file: ${videoFile.name} (${videoFile.length()} bytes)")
         return serveFile(session, videoFile)
     }
