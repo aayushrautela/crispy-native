@@ -117,10 +117,8 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     
     public func setVolume(_ volume: Double) {
         self.volumeValue = volume
-        // Volume is controlled via MPVolumeView's slider
-        // IOSVideoPlayerView has a volumeViewSlider property
-        if let slider = self.value(forKey: "volumeViewSlider") as? UISlider {
-            slider.value = Float(volume)
+        if let player = self.playerLayer?.player {
+            player.volume = Float(volume)
         }
     }
     
@@ -187,8 +185,6 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     private func updateVideoGravity() {
-        // Get the underlying AVPlayerLayer from the KSPlayerLayer
-        // and set its videoGravity property
         let gravity: AVLayerVideoGravity
         switch resizeModeVal {
         case "cover":
@@ -199,8 +195,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             gravity = .resizeAspect
         }
         
-        // Try to access the underlying playerLayer property which is an AVPlayerLayer
-        if let layer = self.playerLayer?.value(forKey: "playerLayer") as? AVPlayerLayer {
+        if let layer = self.playerLayer as? AVPlayerLayer {
             layer.videoGravity = gravity
         }
     }
