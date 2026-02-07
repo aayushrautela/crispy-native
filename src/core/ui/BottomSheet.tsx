@@ -1,4 +1,4 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
@@ -6,13 +6,14 @@ import {
   BottomSheetScrollView,
   BottomSheetView,
 } from '@gorhom/bottom-sheet';
-import { BackHandler, Dimensions, StyleSheet, View, ViewStyle } from 'react-native';
+import { BackHandler, ViewStyle, View, StyleSheet, LayoutChangeEvent, TextStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useResponsive } from '@/src/core/hooks/useResponsive';
+import { useTheme } from '@/src/core/ThemeContext';
 
-interface BottomSheetProps {
+export interface BottomSheetProps {
   title?: string;
   children: React.ReactNode;
   snapPoints?: (string | number)[];
@@ -26,42 +27,13 @@ interface BottomSheetProps {
 
 export type BottomSheetRef = BottomSheetModal;
 
-const MAX_TABLET_WIDTH = 640;
-const TABLET_BREAKPOINT = 768;
-const SHEET_WIDTH_PERCENTAGE = 0.9;
-
-function useSheetDimensions() {
-  const { width: windowWidth } = Dimensions.get('window');
-  const isTablet = windowWidth >= TABLET_BREAKPOINT;
-
-  return useMemo(() => {
-    if (!isTablet) {
-      return {
-        isTablet: false,
-        sheetWidth: windowWidth,
-        hasHorizontalMargin: false,
-      };
-    }
-
-    const calculatedWidth = Math.min(
-      windowWidth * SHEET_WIDTH_PERCENTAGE,
-      MAX_TABLET_WIDTH
-    );
-
-    return {
-      isTablet: true,
-      sheetWidth: calculatedWidth,
-      hasHorizontalMargin: true,
-    };
-  }, [windowWidth, isTablet]);
-}
-
 const CustomBackdrop = React.memo((props: BottomSheetBackdropProps) => (
   <BottomSheetBackdrop
     {...props}
     disappearsOnIndex={-1}
     appearsOnIndex={0}
     opacity={0.5}
+    pressBehavior="close"
   />
 ));
 
@@ -82,22 +54,41 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     },
     ref
   ) => {
-    const modalRef = useRef<BottomSheetModal>(null);
-    const { isTablet, sheetWidth } = useSheetDimensions();
+    // Internal ref to access modal methods if the parent doesn't provide one,
+    // but since we are forwarding ref, we need to handle the case where ref is null.
+    // However, BottomSheetModal requires a ref.
+    // We can use a local ref and sync it, or just trust the parent to pass one?
+    // Best practice with forwardRef and local access: use a merged ref or just internal logic without ref access if possible.
+    // Here we need internal access for BackHandler.
+    const internalRef = useRef<BottomSheetModal>(null);
+    const isVisible = useRef(false);
+
+    // Sync external ref with internal ref
+    React.useImperativeHandle(ref, () => internalRef.current as BottomSheetModal);
+
+    const { isTablet, width: windowWidth } = useResponsive();
+    const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
-    useImperativeHandle(ref, () => modalRef.current!, []);
+    // Track visibility for BackHandler
+    const handleSheetChanges = useCallback((index: number) => {
+      isVisible.current = index >= 0;
+      onChange?.(index);
+    }, [onChange]);
 
+    // Handle Hardware Back Press
     React.useEffect(() => {
+      const backAction = () => {
+        if (isVisible.current && internalRef.current) {
+          internalRef.current.dismiss();
+          return true; // Prevent default behavior (exit app/go back)
+        }
+        return false; // Let default behavior happen
+      };
+
       const backHandler = BackHandler.addEventListener(
         'hardwareBackPress',
-        () => {
-          if (modalRef.current) {
-            modalRef.current.dismiss();
-            return true;
-          }
-          return false;
-        }
+        backAction
       );
 
       return () => backHandler.remove();
@@ -108,109 +99,98 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       []
     );
 
+    // Snap Points Logic
+    // If dynamic sizing is enabled and no snapPoints are provided, pass undefined to let the library handle it.
+    // If snapPoints ARE provided, they take precedence.
     const effectiveSnapPoints = useMemo(() => {
       if (snapPoints) return snapPoints;
-      if (enableDynamicSizing) return undefined;
+      if (enableDynamicSizing) return undefined; // Standard for v5 dynamic sizing
       return ['50%'];
     }, [snapPoints, enableDynamicSizing]);
 
-    const Container = scrollable ? BottomSheetScrollView : BottomSheetView;
+    // Tablet specific styles
+    const sheetStyle = useMemo<ViewStyle>(() => {
+      if (!isTablet) return {};
+      return {
+        width: Math.min(windowWidth * 0.9, 640),
+        alignSelf: 'center',
+      };
+    }, [isTablet, windowWidth]);
 
-    const sheetContainerStyle: ViewStyle = useMemo(
-      () => ({
-        width: isTablet ? sheetWidth : '100%',
-        alignSelf: isTablet ? 'center' : 'auto',
-      }),
-      [isTablet, sheetWidth]
-    );
+    const backgroundStyle = useMemo<ViewStyle>(() => ({
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+    }), [theme.colors.surface]);
 
-    const contentContainerStyle = useMemo(
-      () => ({
-        paddingBottom: Math.max(bottom, 16) + 16,
-      }),
-      [bottom]
-    );
+    const handleIndicatorStyle = useMemo<ViewStyle>(() => ({
+      backgroundColor: theme.colors.onSurfaceVariant,
+      opacity: 0.4,
+      width: 40,
+      height: 4,
+    }), [theme.colors.onSurfaceVariant]);
 
+    // Content Styling
+    const paddingBottom = Math.max(bottom, 16) + 16;
+    
+    const headerStyle = useMemo<ViewStyle>(() => ({
+      paddingHorizontal: 24,
+      paddingTop: 16,
+      paddingBottom: 12,
+      backgroundColor: theme.colors.surface,
+    }), [theme.colors.surface]);
+
+    const titleStyle = useMemo<TextStyle>(() => ({
+      fontWeight: 'bold',
+      color: theme.colors.onSurface,
+    }), [theme.colors.onSurface]);
+
+    const ContentComponent = scrollable ? BottomSheetScrollView : BottomSheetView;
+    
+    // BottomSheetScrollView uses contentContainerStyle, BottomSheetView uses style
+    // We need to apply padding carefully.
+    
     return (
       <BottomSheetModal
-        ref={modalRef}
-        snapPoints={effectiveSnapPoints}
+        ref={internalRef}
         index={index}
+        snapPoints={effectiveSnapPoints}
         enablePanDownToClose={true}
         enableDismissOnClose={true}
         backdropComponent={renderBackdrop}
         maxDynamicContentSize={maxHeight}
-        animateOnMount={true}
         enableDynamicSizing={enableDynamicSizing}
         onDismiss={onDismiss}
-        onChange={onChange}
-        containerStyle={styles.modalContainer}
-        style={sheetContainerStyle}
-        handleIndicatorStyle={styles.handleIndicator}
-        backgroundStyle={styles.background}
-        keyboardBehavior="extend"
-        keyboardBlurBehavior="none"
+        onChange={handleSheetChanges}
+        style={sheetStyle}
+        backgroundStyle={backgroundStyle}
+        handleIndicatorStyle={handleIndicatorStyle}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
       >
-        <View style={styles.innerContainer}>
-          {title && (
-            <View style={styles.header}>
-              <Text
-                variant="titleLarge"
-                style={styles.title}
-                numberOfLines={2}
-                adjustsFontSizeToFit={false}
-              >
-                {title}
-              </Text>
-            </View>
-          )}
-          <Container
-            contentContainerStyle={
-              scrollable ? [styles.content, contentContainerStyle] : undefined
-            }
-            style={!scrollable ? styles.content : undefined}
-          >
+        {title && (
+          <View style={headerStyle}>
+            <Text variant="titleLarge" style={titleStyle}>
+              {title}
+            </Text>
+          </View>
+        )}
+        
+        <ContentComponent
+          style={!scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
+          contentContainerStyle={scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
+          stickyHeaderIndices={scrollable && title ? [0] : undefined} // Note: sticky headers inside the scrollview need the header IN the scrollview. 
+          // Current implementation puts header OUTSIDE the content component (above it).
+          // If the header is outside, we don't need stickyHeaderIndices.
+        >
             {children}
-          </Container>
-        </View>
+        </ContentComponent>
       </BottomSheetModal>
     );
   }
 );
 
 CustomBottomSheet.displayName = 'CustomBottomSheet';
-
-const styles = StyleSheet.create({
-  modalContainer: {
-    justifyContent: 'flex-end',
-  },
-  handleIndicator: {
-    backgroundColor: 'rgba(128, 128, 128, 0.5)',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-  },
-  background: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  innerContainer: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 0,
-  },
-  title: {
-    fontWeight: '600',
-  },
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-  },
-});
 
 export default CustomBottomSheet;
