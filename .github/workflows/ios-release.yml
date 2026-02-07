@@ -41,8 +41,8 @@ jobs:
         run: |
           cd ios
           xcodebuild archive \
-            -workspace crispynative.xcworkspace \
-            -scheme crispynative \
+            -workspace Crispy.xcworkspace \
+            -scheme Crispy \
             -configuration Release \
             -archivePath ../build/crispynative.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
@@ -53,7 +53,7 @@ jobs:
       - name: Package IPA
         run: |
           mkdir -p Payload
-          mv build/crispynative.xcarchive/Products/Applications/crispynative.app Payload/
+          mv build/crispynative.xcarchive/Products/Applications/Crispy.app Payload/
           zip -r crispynative-unsigned.ipa Payload
 
       - name: Upload IPA

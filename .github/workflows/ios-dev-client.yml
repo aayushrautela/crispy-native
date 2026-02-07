@@ -55,8 +55,8 @@ jobs:
         working-directory: ./ios
         run: |
           xcodebuild \
-            -workspace crispynative.xcworkspace \
-            -scheme crispynative \
+            -workspace Crispy.xcworkspace \
+            -scheme Crispy \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
