@@ -1,5 +1,4 @@
-name: Build Unsigned iOS IPA (No Dev Account)
-
+name: Build iOS IPA
 on:
   workflow_dispatch:
   push:
@@ -25,7 +24,7 @@ jobs:
       - name: Setup CocoaPods
         uses: maxim-lobanov/setup-cocoapods@v1
         with:
-          version: 1.14.x
+          version: 1.16.2
 
       - name: Install dependencies
         run: npm ci
