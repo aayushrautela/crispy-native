@@ -57,6 +57,14 @@ const withIosConfiguration = (config) => {
             }
         }
 
+        // Inhibit all warnings from pods to keep logs clean
+        if (!podfileContent.includes('inhibit_all_warnings!')) {
+            podfileContent = podfileContent.replace(
+                /platform :ios, .*/,
+                `$&\ninhibit_all_warnings!`
+            );
+        }
+
 
         
         // Define pods as per KSPlayer README
