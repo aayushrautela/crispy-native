@@ -63,8 +63,15 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     const internalRef = useRef<BottomSheetModal>(null);
     const isVisible = useRef(false);
 
-    // Sync external ref with internal ref
-    React.useImperativeHandle(ref, () => internalRef.current as BottomSheetModal);
+    // Sync external ref with internal ref using a callback ref
+    const handleRef = useCallback((node: BottomSheetModal | null) => {
+      internalRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        (ref as React.MutableRefObject<BottomSheetModal | null>).current = node;
+      }
+    }, [ref]);
 
     const { isTablet, width: windowWidth } = useResponsive();
     const { theme } = useTheme();
@@ -152,7 +159,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     
     return (
       <BottomSheetModal
-        ref={internalRef}
+        ref={handleRef}
         index={index}
         snapPoints={effectiveSnapPoints}
         enablePanDownToClose={true}
@@ -180,9 +187,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         <ContentComponent
           style={!scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
           contentContainerStyle={scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
-          stickyHeaderIndices={scrollable && title ? [0] : undefined} // Note: sticky headers inside the scrollview need the header IN the scrollview. 
-          // Current implementation puts header OUTSIDE the content component (above it).
-          // If the header is outside, we don't need stickyHeaderIndices.
         >
             {children}
         </ContentComponent>
