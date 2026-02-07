@@ -33,27 +33,6 @@ export function StreamsTab({
     const { theme } = useTheme();
     const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
-    const guessQuality = (text: string) => {
-        const t = text.toLowerCase();
-        if (t.includes('2160') || t.includes('4k')) return '4K';
-        if (t.includes('1080')) return '1080p';
-        if (t.includes('720')) return '720p';
-        if (t.includes('480')) return '480p';
-        return undefined;
-    };
-
-    if (isLoading && (!streams || streams.length === 0)) {
-        return (
-            <View style={styles.emptyContainer}>
-                <ActivityIndicator color={theme.colors.primary} />
-                <View style={{ height: 12 }} />
-                <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                    Fetching streams...
-                </Typography>
-            </View>
-        );
-    }
-
     if (!streams || streams.length === 0) {
         return (
             <View style={styles.emptyContainer}>
@@ -71,7 +50,6 @@ export function StreamsTab({
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
                 const primaryText = item.name || item.title || item.quality || (item.url ? 'Stream URL' : 'Stream');
-                const quality = item.quality || guessQuality(primaryText);
                 const isSelected = !!currentStreamUrl && !!item.url && item.url === currentStreamUrl;
                 return (
                     <Pressable
@@ -97,13 +75,6 @@ export function StreamsTab({
                                 {primaryText}
                             </Typography>
                             <View style={styles.metaRow}>
-                                {quality && (
-                                    <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                                        <Typography variant="label-small" style={{ color: theme.colors.onSecondaryContainer }}>
-                                            {quality}
-                                        </Typography>
-                                    </View>
-                                )}
                                 {item.size && (
                                     <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
                                         {item.size}
@@ -156,9 +127,4 @@ const styles = StyleSheet.create({
         gap: 8,
         marginTop: 4,
     },
-    badge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    }
 });

@@ -4,6 +4,7 @@ import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { Typography } from '@/src/core/ui/Typography';
 import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Star } from 'lucide-react-native';
 import React, { memo, useCallback, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
@@ -65,7 +66,7 @@ export const CommentsSection = memo(function CommentsSection({ id, type, season,
                 enableDynamicSizing
             >
                 {selectedComment && (
-                    <View style={styles.modalContent}>
+                    <BottomSheetScrollView contentContainerStyle={styles.modalContent}>
                         {selectedComment.user_stats?.rating && (
                             <View style={styles.modalRating}>
                                 <Star size={16} color="#FFD700" fill="#FFD700" />
@@ -80,7 +81,7 @@ export const CommentsSection = memo(function CommentsSection({ id, type, season,
                         <Typography variant="label" style={styles.modalFooter}>
                             Posted on {new Date(selectedComment.created_at).toLocaleDateString()}
                         </Typography>
-                    </View>
+                    </BottomSheetScrollView>
                 )}
             </CustomBottomSheet>
         </View>

@@ -189,7 +189,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       }
 
       return (
-        <BottomSheetView style={{ paddingBottom, paddingHorizontal: 24 }}>
+        <BottomSheetView style={[{ paddingBottom, paddingHorizontal: 24 }, !enableDynamicSizing && { flex: 1 }]}>
           {children}
         </BottomSheetView>
       );

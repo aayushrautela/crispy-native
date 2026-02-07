@@ -31,48 +31,15 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 const mainTitle = s.name?.replace(/\n/g, ' ') || "Stream";
                 const subtitle = s.title || s.description || "";
 
-                // Extract quality/size if possible or pass subtitle as is
-                // StreamsTab expects: title, quality?, size?
-                // We'll map mainTitle -> title, and put details in quality/size if we can parse them,
-                // or just put subtitle in quality for now to ensure visibility.
-
                 return {
                     ...s,
-                    title: mainTitle, // The addon name / main identifier
-                    quality: subtitle, // Detailed description
-                    // We can add more parsing logic here if needed
+                    title: mainTitle,
+                    quality: subtitle,
                 };
             });
             onStreamsLoaded(formattedStreams);
         }
     }, [streams, onStreamsLoaded]);
-
-    const renderBadges = (title: string) => {
-        const badges = [];
-        const lowerTitle = title.toLowerCase();
-
-        if (lowerTitle.includes('4k') || lowerTitle.includes('2160p')) badges.push({ text: '4K', color: '#FFD700' });
-        else if (lowerTitle.includes('1080p')) badges.push({ text: '1080p', color: '#E0E0E0' });
-        else if (lowerTitle.includes('720p')) badges.push({ text: '720p', color: '#BDBDBD' });
-
-        if (lowerTitle.includes('hdr')) badges.push({ text: 'HDR', color: '#FF4081' });
-        if (lowerTitle.includes('dv') || lowerTitle.includes('vision')) badges.push({ text: 'DV', color: '#7C4DFF' });
-        if (lowerTitle.includes('dolby') || lowerTitle.includes('5.1') || lowerTitle.includes('7.1')) badges.push({ text: 'DDP', color: '#00E5FF' });
-
-        if (badges.length === 0) return null;
-
-        return (
-            <View style={styles.badgeRow}>
-                {badges.map((b, i) => (
-                    <View key={i} style={[styles.badge, { borderColor: b.color + '40' }]}>
-                        <Typography variant="label-small" weight="black" style={{ color: b.color, fontSize: 9 }}>
-                            {b.text}
-                        </Typography>
-                    </View>
-                ))}
-            </View>
-        );
-    };
 
     const renderItem: ListRenderItem<any> = ({ item, index }: { item: any, index: number }) => {
         if (!item) return null;
@@ -105,7 +72,6 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                             <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
                                 {mainTitle}
                             </Typography>
-                            {renderBadges(subtitle)}
                         </View>
                         <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
                             {subtitle}
@@ -131,7 +97,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     }
 
     return (
-        <View style={[styles.container, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
+        <View style={[styles.container, { flex: 1 }, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
             {!hideHeader && (
                 <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
                     <Typography variant="headline-small" weight="black" style={{ color: theme.colors.onSurface }}>
@@ -144,6 +110,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 data={streams || []}
                 keyExtractor={(item: any, index: number) => `${item.url || index}-${index}`}
                 renderItem={renderItem}
+                style={{ flex: 1 }}
                 ListEmptyComponent={
                     <View style={styles.empty}>
                         <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
@@ -191,14 +158,4 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    badgeRow: {
-        flexDirection: 'row',
-        gap: 4,
-    },
-    badge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        borderWidth: 1,
-    }
 });
