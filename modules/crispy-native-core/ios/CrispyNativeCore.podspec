@@ -22,7 +22,7 @@ Pod::Spec.new do |s|
 
   # KSPlayer for advanced video playback
   # Using git-based dependency since it's not in CocoaPods trunk
-  s.dependency 'KSPlayer', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'
+  s.dependency 'KSPlayer'
 
   # Swift/LLVM optimization flags
   s.pod_target_xcconfig = {

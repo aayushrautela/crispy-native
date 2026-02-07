@@ -1,4 +1,4 @@
-const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod, withAndroidManifest, withGradleProperties } = require('@expo/config-plugins');
+const { withAppBuildGradle, withProjectBuildGradle, withDangerousMod, withAndroidManifest, withGradleProperties, withPodfile } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -32,10 +32,35 @@ const withCrispyNative = (config) => {
     // 7. Add ProGuard Rules
     config = withProGuardRules(config);
 
+    // 8. iOS Podfile Configuration (KSPlayer)
+    config = withIosConfiguration(config);
+
     return config;
 };
 
 // --- Sub-Plugins ---
+
+/**
+ * Configure iOS Podfile to include KSPlayer from git source.
+ */
+const withIosConfiguration = (config) => {
+    return withPodfile(config, (config) => {
+        const podfileContent = config.modResults.contents;
+        const ksPlayerPod = `pod 'KSPlayer', :git => 'https://github.com/kingslay/KSPlayer.git', :branch => 'main'`;
+        
+        if (!podfileContent.includes("pod 'KSPlayer'")) {
+            if (podfileContent.includes('use_expo_modules!')) {
+                config.modResults.contents = podfileContent.replace(
+                    'use_expo_modules!',
+                    `${ksPlayerPod}\n  use_expo_modules!`
+                );
+            } else {
+                config.modResults.contents += `\n${ksPlayerPod}\n`;
+            }
+        }
+        return config;
+    });
+};
 
 /**
  * Disable Bridgeless mode to support legacy modules like react-native-video.
