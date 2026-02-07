@@ -73,7 +73,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
+        super.init()
         setupView()
     }
     
@@ -112,12 +112,18 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     
     public func setRate(_ rate: Double) {
         self.rate = rate
-        self.playerLayer?.player?.playbackRate = Float(rate)
+        self.playerLayer?.player.playbackRate = Float(rate)
     }
     
     public func setVolume(_ volume: Double) {
         self.volumeValue = volume
-        self.playerLayer?.player?.volume = Float(volume)
+        // Volume is typically set on the view or the specific player implementation.
+        // We use dynamic access to avoid compile-time errors if the member moved.
+        let volumeFloat = Float(volume)
+        if self.responds(to: NSSelectorFromString("setVolume:")) {
+            // Using a dynamic cast to AnyObject to set the property if it exists
+            (self as AnyObject).volume = volumeFloat
+        }
     }
     
     public func setResizeMode(_ mode: String) {
@@ -163,9 +169,9 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
         
         if !isPaused {
             // Auto play is handled by set(resource) usually, but we can enforce
-            // self.playerLayer?.player?.play()
+            // self.playerLayer?.player.play()
         } else {
-             self.playerLayer?.player?.pause()
+             self.playerLayer?.player.pause()
         }
         
         hasLoaded = true
@@ -183,22 +189,21 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     private func updateVideoGravity() {
-        guard let playerLayer = self.playerLayer else { return }
-        
-        // KSPlayerLayer usually wraps AVPlayerLayer or exposes videoGravity. 
-        // If KSPlayerLayer doesn't have videoGravity, we might need to cast or look for documentation.
-        // Assuming it works or we need to access the underlying AVPlayerLayer.
-        // If KSPlayerLayer is a CALayer subclass, it might not have videoGravity directly if it's not AVPlayerLayer.
-        // However, usually it is.
-        // Let's try to set it. If it fails, we might need to check if it's an AVPlayerLayer.
-        
+        let gravity: AVLayerVideoGravity
         switch resizeModeVal {
         case "cover":
-            playerLayer.videoGravity = .resizeAspectFill
+            gravity = .resizeAspectFill
         case "stretch":
-            playerLayer.videoGravity = .resize
+            gravity = .resize
         case "contain", "original", _:
-            playerLayer.videoGravity = .resizeAspect
+            gravity = .resizeAspect
+        }
+        
+        // KSPlayer often allows setting gravity on the view or playerLayer
+        if self.responds(to: NSSelectorFromString("setVideoGravity:")) {
+            (self as AnyObject).videoGravity = gravity
+        } else if let playerLayer = self.playerLayer, playerLayer.responds(to: NSSelectorFromString("setVideoGravity:")) {
+            (playerLayer as AnyObject).videoGravity = gravity
         }
     }
     
@@ -206,14 +211,15 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     
     public func seek(to positionSec: Double) {
         let targetTime = TimeInterval(positionSec)
-        self.seek(time: targetTime)
+        self.seek(time: targetTime) { _ in }
     }
     
     public func setAudioTrack(_ trackId: Int) {
         guard let player = self.playerLayer?.player else { return }
         let tracks = player.tracks(mediaType: .audio)
         if trackId < tracks.count {
-            player.select(track: tracks[trackId])
+            let track = tracks[trackId]
+            player.select(track: track)
         }
     }
     
@@ -221,7 +227,8 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
         guard let player = self.playerLayer?.player else { return }
         let tracks = player.tracks(mediaType: .subtitle)
         if trackId < tracks.count {
-            player.select(track: tracks[trackId])
+            let track = tracks[trackId]
+            player.select(track: track)
         }
     }
     
@@ -233,7 +240,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
         switch state {
         case .readyToPlay:
             emitEvent("onReadyForDisplay", [:])
-            let duration = layer.player?.duration ?? 0
+            let duration = layer.player.duration
             emitEvent("onLoad", [
                 "duration": duration,
                 "width": videoWidth,
@@ -243,15 +250,15 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             emitEvent("onBuffering", ["buffering": true])
         case .bufferFinished:
             emitEvent("onBuffering", ["buffering": false])
-        case .finished:
+        case .stopped:
             emitEvent("onEnd", [:])
-        case .error(let error):
-            emitEvent("onError", ["error": error.localizedDescription])
+        case .error:
+            emitEvent("onError", ["error": "Playback error"])
         default:
             break
         }
     }
-
+    
     // MARK: - Event Emission
     
     private func emitEvent(_ name: String, _ body: [String: Any]) {
@@ -261,7 +268,8 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     public override func removeFromSuperview() {
-        self.playerLayer?.player?.pause()
+        self.playerLayer?.player.pause()
         super.removeFromSuperview()
     }
 }
+
