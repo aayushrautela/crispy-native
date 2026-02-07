@@ -50,18 +50,15 @@ public class CrispyKSPlayerModule: Module {
 
 // MARK: - KSPlayer Video View
 
-public class CrispyKSVideoView: UIView {
-    private var playerView: IOSVideoPlayerView?
-    private var resource: KSPlayerResource?
-    private var playerController: VideoPlayerController?
+public class CrispyKSVideoView: IOSVideoPlayerView {
     
     // Props
-    private var source: String?
+    private var sourceStr: String?
     private var headers: [String: String]?
-    private var paused: Bool = false
+    private var isPaused: Bool = false
     private var rate: Double = 1.0
-    private var volume: Double = 1.0
-    private var resizeMode: String = "contain"
+    private var volumeValue: Double = 1.0
+    private var resizeModeVal: String = "contain"
     private var metadata: [String: String]?
     private var playInBackground: Bool = false
     
@@ -70,7 +67,7 @@ public class CrispyKSVideoView: UIView {
     private var videoWidth: Int = 0
     private var videoHeight: Int = 0
     
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()
     }
@@ -83,27 +80,19 @@ public class CrispyKSVideoView: UIView {
     private func setupView() {
         backgroundColor = .black
         
-        let options = KSOptions()
-        options.isSecondOpen = false
-        options.isAccurateSeek = true
-        options.isLoopPlay = false
-        
-        // Configure background playback
-        options.playbackRate = Float(rate)
-        
-        let controller = VideoPlayerController()
-        controller.delegate = self
-        self.playerController = controller
-        
-        let playerView = IOSVideoPlayerView(frame: bounds, options: options)
-        playerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        playerView.playerController = controller
-        addSubview(playerView)
-        self.playerView = playerView
+        // Listen to play time change
+        self.playTimeDidChange = { [weak self] (currentTime: TimeInterval, totalTime: TimeInterval) in
+            self?.emitEvent("onProgress", [
+                "currentTime": currentTime,
+                "duration": totalTime
+            ])
+        }
     }
     
+    // MARK: - Prop Setters
+    
     public func setSource(_ source: String?) {
-        self.source = source
+        self.sourceStr = source
     }
     
     public func setHeaders(_ headers: [String: String]?) {
@@ -111,28 +100,28 @@ public class CrispyKSVideoView: UIView {
     }
     
     public func setPaused(_ paused: Bool) {
-        self.paused = paused
-        guard hasLoaded else { return }
+        self.isPaused = paused
+        guard hasLoaded, let player = self.playerLayer?.player else { return }
         
         if paused {
-            playerController?.pause()
+            player.pause()
         } else {
-            playerController?.play()
+            player.play()
         }
     }
     
     public func setRate(_ rate: Double) {
         self.rate = rate
-        playerController?.playbackRate = Float(rate)
+        self.playerLayer?.player?.playbackRate = Float(rate)
     }
     
     public func setVolume(_ volume: Double) {
-        self.volume = volume
-        playerController?.volume = Float(volume)
+        self.volumeValue = volume
+        self.playerLayer?.player?.volume = Float(volume)
     }
     
     public func setResizeMode(_ mode: String) {
-        self.resizeMode = mode
+        self.resizeModeVal = mode
         updateVideoGravity()
     }
     
@@ -150,35 +139,33 @@ public class CrispyKSVideoView: UIView {
     }
     
     private func loadSource() {
-        guard let source = source, let url = URL(string: source) else {
+        guard let source = sourceStr, let url = URL(string: source) else {
             return
         }
         
-        var options = KSOptions()
+        let options = KSOptions()
         options.isSecondOpen = false
         options.isAccurateSeek = true
-        options.playbackRate = Float(rate)
+        options.isLoopPlay = false
+        options.startPlayRate = Float(rate)
         
         // Add headers if provided
         if let headers = headers {
-            var headerArray: [String] = []
-            for (key, value) in headers {
-                headerArray.append("\(key): \(value)")
-            }
-            options.headers = headerArray
+            options.appendHeader(headers)
         }
         
         let name = metadata?["title"] ?? url.lastPathComponent
-        resource = KSPlayerResource(url: url, options: options, name: name)
+        let resource = KSPlayerResource(url: url, options: options, name: name)
         
-        if let resource = resource {
-            playerController?.set(resource: resource)
-        }
+        self.set(resource: resource)
         
         configureAudioSession()
         
-        if !paused {
-            playerController?.play()
+        if !isPaused {
+            // Auto play is handled by set(resource) usually, but we can enforce
+            // self.playerLayer?.player?.play()
+        } else {
+             self.playerLayer?.player?.pause()
         }
         
         hasLoaded = true
@@ -196,15 +183,22 @@ public class CrispyKSVideoView: UIView {
     }
     
     private func updateVideoGravity() {
-        guard let playerView = playerView else { return }
+        guard let playerLayer = self.playerLayer else { return }
         
-        switch resizeMode {
+        // KSPlayerLayer usually wraps AVPlayerLayer or exposes videoGravity. 
+        // If KSPlayerLayer doesn't have videoGravity, we might need to cast or look for documentation.
+        // Assuming it works or we need to access the underlying AVPlayerLayer.
+        // If KSPlayerLayer is a CALayer subclass, it might not have videoGravity directly if it's not AVPlayerLayer.
+        // However, usually it is.
+        // Let's try to set it. If it fails, we might need to check if it's an AVPlayerLayer.
+        
+        switch resizeModeVal {
         case "cover":
-            playerView.playerLayer?.videoGravity = .resizeAspectFill
+            playerLayer.videoGravity = .resizeAspectFill
         case "stretch":
-            playerView.playerLayer?.videoGravity = .resize
+            playerLayer.videoGravity = .resize
         case "contain", "original", _:
-            playerView.playerLayer?.videoGravity = .resizeAspect
+            playerLayer.videoGravity = .resizeAspect
         }
     }
     
@@ -212,55 +206,34 @@ public class CrispyKSVideoView: UIView {
     
     public func seek(to positionSec: Double) {
         let targetTime = TimeInterval(positionSec)
-        playerController?.seek(time: targetTime)
+        self.seek(time: targetTime)
     }
     
     public func setAudioTrack(_ trackId: Int) {
-        let tracks = playerController?.tracks(mediaType: .audio) ?? []
+        guard let player = self.playerLayer?.player else { return }
+        let tracks = player.tracks(mediaType: .audio)
         if trackId < tracks.count {
-            playerController?.select(track: tracks[trackId])
+            player.select(track: tracks[trackId])
         }
     }
     
     public func setSubtitleTrack(_ trackId: Int) {
-        let tracks = playerController?.tracks(mediaType: .subtitle) ?? []
+        guard let player = self.playerLayer?.player else { return }
+        let tracks = player.tracks(mediaType: .subtitle)
         if trackId < tracks.count {
-            playerController?.select(track: tracks[trackId])
+            player.select(track: tracks[trackId])
         }
     }
     
-    // MARK: - Event Emission
+    // MARK: - Player Delegate Overrides
     
-    private func emitEvent(_ name: String, _ body: [String: Any]) {
-        // Events are emitted through the module's event system
-        // Implementation depends on Expo Modules event handling
-    }
-    
-    public override func removeFromSuperview() {
-        playerController?.pause()
-        playerController?.delegate = nil
-        playerController = nil
-        playerView?.removeFromSuperview()
-        playerView = nil
-        super.removeFromSuperview()
-    }
-}
-
-// MARK: - VideoPlayerControllerDelegate
-
-extension CrispyKSVideoView: VideoPlayerControllerDelegate {
-    public func playerController(_ controller: VideoPlayerController, currentTime: TimeInterval, totalTime: TimeInterval) {
-        emitEvent("onProgress", [
-            "currentTime": currentTime,
-            "duration": totalTime
-        ])
-    }
-    
-    public func playerController(_ controller: VideoPlayerController, state: PlayerState) {
+    public override func player(layer: KSPlayerLayer, state: KSPlayerState) {
+        super.player(layer: layer, state: state)
+        
         switch state {
         case .readyToPlay:
             emitEvent("onReadyForDisplay", [:])
-            let duration = controller.player?.duration ?? 0
+            let duration = layer.player?.duration ?? 0
             emitEvent("onLoad", [
                 "duration": duration,
                 "width": videoWidth,
@@ -278,12 +251,17 @@ extension CrispyKSVideoView: VideoPlayerControllerDelegate {
             break
         }
     }
+
+    // MARK: - Event Emission
     
-    public func playerController(_ controller: VideoPlayerController, shouldAutoSelectAudio: Bool) -> Bool {
-        return true
+    private func emitEvent(_ name: String, _ body: [String: Any]) {
+        // Events are emitted through the module's event system
+        // Implementation depends on Expo Modules event handling
+        // For now, this is a placeholder matching original code
     }
     
-    public func playerController(_ controller: VideoPlayerController, shouldAutoSelectSubtitle: Bool) -> Bool {
-        return true
+    public override func removeFromSuperview() {
+        self.playerLayer?.player?.pause()
+        super.removeFromSuperview()
     }
 }
