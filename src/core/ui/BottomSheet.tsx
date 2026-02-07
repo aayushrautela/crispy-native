@@ -1,12 +1,13 @@
-import React, { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useMemo, useRef } from 'react';
 import {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
   BottomSheetModal,
   BottomSheetScrollView,
   BottomSheetView,
+  BottomSheetFlatList,
 } from '@gorhom/bottom-sheet';
-import { BackHandler, ViewStyle, View, StyleSheet, LayoutChangeEvent, TextStyle } from 'react-native';
+import { BackHandler, ViewStyle, View, TextStyle, FlatListProps } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,7 +16,7 @@ import { useTheme } from '@/src/core/ThemeContext';
 
 export interface BottomSheetProps {
   title?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   snapPoints?: (string | number)[];
   index?: number;
   scrollable?: boolean;
@@ -23,6 +24,12 @@ export interface BottomSheetProps {
   maxHeight?: number;
   onDismiss?: () => void;
   onChange?: (index: number) => void;
+  /**
+   * Props for rendering a FlatList inside the bottom sheet.
+   * If provided, this takes precedence over `children` and `scrollable`.
+   * Use this for long lists to ensure proper virtualization and gesture handling.
+   */
+  flatListProps?: Omit<FlatListProps<any>, 'ref'>;
 }
 
 export type BottomSheetRef = BottomSheetModal;
@@ -51,15 +58,12 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       maxHeight,
       onDismiss,
       onChange,
+      flatListProps,
     },
     ref
   ) => {
     // Internal ref to access modal methods if the parent doesn't provide one,
-    // but since we are forwarding ref, we need to handle the case where ref is null.
-    // However, BottomSheetModal requires a ref.
-    // We can use a local ref and sync it, or just trust the parent to pass one?
-    // Best practice with forwardRef and local access: use a merged ref or just internal logic without ref access if possible.
-    // Here we need internal access for BackHandler.
+    // and for BackHandler support.
     const internalRef = useRef<BottomSheetModal>(null);
     const isVisible = useRef(false);
 
@@ -107,8 +111,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     );
 
     // Snap Points Logic
-    // If dynamic sizing is enabled and no snapPoints are provided, pass undefined to let the library handle it.
-    // If snapPoints ARE provided, they take precedence.
     const effectiveSnapPoints = useMemo(() => {
       if (snapPoints) return snapPoints;
       if (enableDynamicSizing) return undefined; // Standard for v5 dynamic sizing
@@ -145,6 +147,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       paddingTop: 16,
       paddingBottom: 12,
       backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
     }), [theme.colors.surface]);
 
     const titleStyle = useMemo<TextStyle>(() => ({
@@ -152,11 +156,36 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       color: theme.colors.onSurface,
     }), [theme.colors.onSurface]);
 
-    const ContentComponent = scrollable ? BottomSheetScrollView : BottomSheetView;
-    
-    // BottomSheetScrollView uses contentContainerStyle, BottomSheetView uses style
-    // We need to apply padding carefully.
-    
+    const renderContent = () => {
+      if (flatListProps) {
+        return (
+          <BottomSheetFlatList
+            {...flatListProps}
+            contentContainerStyle={[
+              { paddingBottom },
+              flatListProps.contentContainerStyle,
+            ]}
+          />
+        );
+      }
+
+      if (scrollable) {
+        return (
+          <BottomSheetScrollView
+            contentContainerStyle={{ paddingBottom, paddingHorizontal: 24 }}
+          >
+            {children}
+          </BottomSheetScrollView>
+        );
+      }
+
+      return (
+        <BottomSheetView style={{ paddingBottom, paddingHorizontal: 24 }}>
+          {children}
+        </BottomSheetView>
+      );
+    };
+
     return (
       <BottomSheetModal
         ref={handleRef}
@@ -184,12 +213,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
           </View>
         )}
         
-        <ContentComponent
-          style={!scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
-          contentContainerStyle={scrollable ? { paddingBottom, paddingHorizontal: 24 } : undefined}
-        >
-            {children}
-        </ContentComponent>
+        {renderContent()}
       </BottomSheetModal>
     );
   }

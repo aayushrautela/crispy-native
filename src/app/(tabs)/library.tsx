@@ -382,13 +382,17 @@ export default function LibraryScreen() {
             </Animated.View>
 
             {/* Bottom Sheets */}
-            <CustomBottomSheet ref={genreSheetRef} title="Select Genre" scrollable={true}>
-                <View style={styles.sheetContent}>
-                    {genres.map((g) => {
+            <CustomBottomSheet
+                ref={genreSheetRef}
+                title="Select Genre"
+                flatListProps={{
+                    data: genres,
+                    keyExtractor: (item: { label: string; value: string }) => item.value,
+                    contentContainerStyle: styles.sheetContent,
+                    renderItem: ({ item: g }: { item: { label: string; value: string } }) => {
                         const isSelected = selectedGenre === g.value;
                         return (
                             <ExpressiveSurface
-                                key={g.value}
                                 onPress={() => {
                                     setSelectedGenre(g.value);
                                     genreSheetRef.current?.dismiss();
@@ -420,17 +424,21 @@ export default function LibraryScreen() {
                                 </View>
                             </ExpressiveSurface>
                         );
-                    })}
-                </View>
-            </CustomBottomSheet>
+                    }
+                }}
+            />
 
-            <CustomBottomSheet ref={sortSheetRef} title="Sort By" scrollable={true}>
-                <View style={styles.sheetContent}>
-                    {SORT_OPTIONS.map((s) => {
+            <CustomBottomSheet
+                ref={sortSheetRef}
+                title="Sort By"
+                flatListProps={{
+                    data: SORT_OPTIONS,
+                    keyExtractor: (item: { label: string; value: string }) => item.value,
+                    contentContainerStyle: styles.sheetContent,
+                    renderItem: ({ item: s }: { item: { label: string; value: string } }) => {
                         const isSelected = selectedSort === s.value;
                         return (
                             <ExpressiveSurface
-                                key={s.value}
                                 onPress={() => {
                                     setSelectedSort(s.value);
                                     sortSheetRef.current?.dismiss();
@@ -462,9 +470,9 @@ export default function LibraryScreen() {
                                 </View>
                             </ExpressiveSurface>
                         );
-                    })}
-                </View>
-            </CustomBottomSheet>
+                    }
+                }}
+            />
         </View>
     );
 }

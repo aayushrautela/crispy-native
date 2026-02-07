@@ -359,13 +359,17 @@ export default function DiscoverScreen() {
             </Animated.View>
 
             {/* Bottom Sheets */}
-            <CustomBottomSheet ref={genreSheetRef} title="Select Genre" scrollable={true}>
-                <View style={styles.sheetContent}>
-                    {genres.map((g) => {
+            <CustomBottomSheet
+                ref={genreSheetRef}
+                title="Select Genre"
+                flatListProps={{
+                    data: genres,
+                    keyExtractor: (item: { label: string; value: string }) => item.value,
+                    contentContainerStyle: styles.sheetContent,
+                    renderItem: ({ item: g }: { item: { label: string; value: string } }) => {
                         const isSelected = selectedGenre === g.value;
                         return (
                             <ExpressiveSurface
-                                key={g.value}
                                 onPress={() => {
                                     setSelectedGenre(g.value);
                                     genreSheetRef.current?.dismiss();
@@ -397,17 +401,21 @@ export default function DiscoverScreen() {
                                 </View>
                             </ExpressiveSurface>
                         );
-                    })}
-                </View>
-            </CustomBottomSheet>
+                    }
+                }}
+            />
 
-            <CustomBottomSheet ref={ratingSheetRef} title="Filter by Rating" scrollable={true}>
-                <View style={styles.sheetContent}>
-                    {RATING_OPTIONS.map((r) => {
+            <CustomBottomSheet
+                ref={ratingSheetRef}
+                title="Filter by Rating"
+                flatListProps={{
+                    data: RATING_OPTIONS,
+                    keyExtractor: (item: { label: string; value: number }) => item.value.toString(),
+                    contentContainerStyle: styles.sheetContent,
+                    renderItem: ({ item: r }: { item: { label: string; value: number } }) => {
                         const isSelected = selectedRating === r.value;
                         return (
                             <ExpressiveSurface
-                                key={r.value}
                                 onPress={() => {
                                     setSelectedRating(r.value);
                                     ratingSheetRef.current?.dismiss();
@@ -439,9 +447,9 @@ export default function DiscoverScreen() {
                                 </View>
                             </ExpressiveSurface>
                         );
-                    })}
-                </View>
-            </CustomBottomSheet>
+                    }
+                }}
+            />
         </View>
     );
 }

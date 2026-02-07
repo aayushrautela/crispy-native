@@ -110,14 +110,15 @@ export default function LanguageScreen() {
             <CustomBottomSheet
                 ref={bottomSheetRef}
                 title={getAppTitle()}
-            >
-                <View style={styles.sheetContent}>
-                    {LANGUAGES.map((lang) => {
+                flatListProps={{
+                    data: LANGUAGES,
+                    keyExtractor: (item: { label: string; value: string }) => item.value,
+                    contentContainerStyle: styles.sheetContent,
+                    renderItem: ({ item: lang }: { item: { label: string; value: string } }) => {
                         const currentValue = activeKey ? settings[activeKey] : null;
                         const isSelected = currentValue === lang.value;
                         return (
                             <ExpressiveSurface
-                                key={lang.value}
                                 onPress={() => onSelect(lang.value)}
                                 variant={isSelected ? 'tonal' : 'tonal'}
                                 rounding="full"
@@ -125,7 +126,7 @@ export default function LanguageScreen() {
                                     styles.sheetChip,
                                     isSelected
                                         ? { backgroundColor: theme.colors.secondaryContainer }
-                                        : { backgroundColor: theme.colors.surfaceContainerLow }
+                                        : { backgroundColor: (theme.colors as any).surfaceContainerLow || theme.colors.surfaceVariant }
                                 ]}
                             >
                                 <View style={styles.sheetOptionInner}>
@@ -143,9 +144,9 @@ export default function LanguageScreen() {
                                 </View>
                             </ExpressiveSurface>
                         );
-                    })}
-                </View>
-            </CustomBottomSheet>
+                    }
+                }}
+            />
         </SettingsSubpage>
     );
 }
