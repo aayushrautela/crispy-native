@@ -30,7 +30,7 @@ jobs:
         run: npm ci
 
       - name: Prebuild iOS
-        run: npx expo prebuild -p ios --no-interactive --clean
+        run: npx expo prebuild -p ios --clean
 
       - name: Install Pods
         run: |
