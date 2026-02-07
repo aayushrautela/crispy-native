@@ -23,26 +23,9 @@ class TorrentService : Service() {
     
     companion object {
         private const val TAG = "TorrentService"
-        private const val NOTIFICATION_CHANNEL_ID = "crispy_torrent_channel"
         private const val NOTIFICATION_ID = 1001
-        
-        private val PUBLIC_TRACKERS = listOf(
-            "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://explodie.org:6969/announce",
-            "udp://open.stealth.si:80/announce",
-            "http://tracker.opentrackr.org:1337/announce",
-            "http://open.tracker.cl:1337/announce",
-            "https://tracker.bt4g.com:443/announce"
-        )
-        
-        // Piece prioritization constants
-        private const val PIECES_TO_BUFFER = 20
-        private const val INSTANT_TIER_PIECES = 3
-        private const val DEADLINE_INCREMENT_MS = 100
-        
-        private const val IDLE_TIMEOUT_MS = 10 * 60 * 1000L
+        private const val CHANNEL_ID = "torrent_service_channel"
+        private const val IDLE_TIMEOUT_MS = 1000L // 1 second idle timeout for strictly on-demand behavior
     }
     
     private val binder = TorrentBinder()
@@ -263,21 +246,35 @@ class TorrentService : Service() {
     }
 
     fun startInfoHash(infoHash: String, sessionId: String? = null): Boolean {
-        val session = sessionManager ?: return false
         val hash = infoHash.lowercase()
+        Log.d(TAG, "startInfoHash: $hash (session: $sessionId)")
         
         if (sessionId != null) {
             this.activeSessionId = sessionId
         }
         
-        // If already tracked, don't re-add
+        // PRODUCTION: Always start from scratch. 
+        // If already active, remove it first to force libtorrent to re-scan/re-download
         if (activeTorrents.containsKey(hash)) {
-            Log.d(TAG, "Torrent already active: $hash")
-            return true
+            Log.d(TAG, "Torrent $hash already active, removing for fresh start")
+            stopTorrent(hash)
+        }
+
+        // Ensure session is initialized
+        if (sessionManager == null) {
+            initSession()
         }
         
+        val session = sessionManager ?: return false
+        
         try {
+            // Aggressive Cleanup: Wipe download directory before adding new torrent
             val downloadDir = getDownloadDir()
+            if (downloadDir.exists()) {
+                downloadDir.deleteRecursively()
+            }
+            downloadDir.mkdirs()
+
             val trackerParams = PUBLIC_TRACKERS.joinToString("") { "&tr=${java.net.URLEncoder.encode(it, "UTF-8")}" }
             val magnetUri = "magnet:?xt=urn:btih:$hash$trackerParams"
             
@@ -290,9 +287,12 @@ class TorrentService : Service() {
             val params = AddTorrentParams.parseMagnetUri(magnetUri)
             params.savePath(downloadDir.absolutePath)
             session.swig().async_add_torrent(params.swig())
+            
+            updateServiceState()
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting magnet", e)
+            activeTorrents.remove(hash)
             metadataLatches.remove(hash)
             return false
         }
@@ -380,29 +380,46 @@ class TorrentService : Service() {
         }
         
         Log.d(TAG, "Stopping all torrents and cleaning data...")
-        val torrents = activeTorrents.keys.toList()
-        torrents.forEach { deleteTorrentData(it) }
+        
+        // Remove all torrents from session first
+        val sm = sessionManager
+        if (sm != null) {
+            activeTorrents.keys.forEach { hash ->
+                try {
+                    sm.find(Sha1Hash(hash))?.let { sm.remove(it) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing torrent $hash during stopAll", e)
+                }
+            }
+        }
+        
         activeTorrents.clear()
         activeSessionId = null
+        priorityWindows.clear()
+        metadataLatches.values.forEach { it.countDown() }
+        metadataLatches.clear()
+        
+        // PRODUCTION: Always wipe data when stopping all
+        performStartupCleanup()
+        
         updateServiceState()
     }
     
     /**
-     * Delete all files in the download directory on startup.
+     * Delete all files in the download directory.
+     * Synchronous execution preferred for reliability during shutdown.
      */
     fun performStartupCleanup() {
-        Thread {
-            try {
-                val dir = getDownloadDir()
-                if (dir.exists()) {
-                    dir.deleteRecursively()
-                    dir.mkdirs()
-                    Log.d(TAG, "Startup Cleanup: Wiped data at ${dir.absolutePath}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Startup Cleanup Failed", e)
+        try {
+            val dir = getDownloadDir()
+            if (dir.exists()) {
+                val success = dir.deleteRecursively()
+                dir.mkdirs()
+                Log.d(TAG, "Cleanup: Wiped data at ${dir.absolutePath} (Success: $success)")
             }
-        }.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup Failed", e)
+        }
     }
 
     fun getDownloadDir(): File = getExternalFilesDir(null) ?: filesDir
@@ -467,6 +484,8 @@ class TorrentService : Service() {
         if (!handle.isValid || !handle.status().hasMetadata()) return null
         return handle.torrentFile()?.files()?.filePath(fileIdx)
     }
+
+    fun hasActiveTorrents(): Boolean = activeTorrents.isNotEmpty()
 
     fun isHeaderReady(infoHash: String, fileIdx: Int): Boolean {
         val handle = getHandle(infoHash) ?: return false
