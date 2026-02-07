@@ -73,7 +73,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     required init?(coder: NSCoder) {
-        super.init()
+        super.init(frame: .zero)
         setupView()
     }
     
@@ -117,12 +117,10 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     
     public func setVolume(_ volume: Double) {
         self.volumeValue = volume
-        // Volume is typically set on the view or the specific player implementation.
-        // We use dynamic access to avoid compile-time errors if the member moved.
-        let volumeFloat = Float(volume)
-        if self.responds(to: NSSelectorFromString("setVolume:")) {
-            // Using a dynamic cast to AnyObject to set the property if it exists
-            (self as AnyObject).volume = volumeFloat
+        // Volume is controlled via MPVolumeView's slider
+        // IOSVideoPlayerView has a volumeViewSlider property
+        if let slider = self.value(forKey: "volumeViewSlider") as? UISlider {
+            slider.value = Float(volume)
         }
     }
     
@@ -189,6 +187,8 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     private func updateVideoGravity() {
+        // Get the underlying AVPlayerLayer from the KSPlayerLayer
+        // and set its videoGravity property
         let gravity: AVLayerVideoGravity
         switch resizeModeVal {
         case "cover":
@@ -199,11 +199,9 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             gravity = .resizeAspect
         }
         
-        // KSPlayer often allows setting gravity on the view or playerLayer
-        if self.responds(to: NSSelectorFromString("setVideoGravity:")) {
-            (self as AnyObject).videoGravity = gravity
-        } else if let playerLayer = self.playerLayer, playerLayer.responds(to: NSSelectorFromString("setVideoGravity:")) {
-            (playerLayer as AnyObject).videoGravity = gravity
+        // Try to access the underlying playerLayer property which is an AVPlayerLayer
+        if let layer = self.playerLayer?.value(forKey: "playerLayer") as? AVPlayerLayer {
+            layer.videoGravity = gravity
         }
     }
     
@@ -250,7 +248,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             emitEvent("onBuffering", ["buffering": true])
         case .bufferFinished:
             emitEvent("onBuffering", ["buffering": false])
-        case .stopped:
+        case .playedToTheEnd:
             emitEvent("onEnd", [:])
         case .error:
             emitEvent("onError", ["error": "Playback error"])
