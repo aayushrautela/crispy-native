@@ -8,6 +8,9 @@ const path = require('path');
  * and fixes for Bridgeless mode compatibility.
  */
 const withCrispyNative = (config) => {
+    // 0. Add Frostwire Maven Repository
+    config = withFrostwireMavenRepo(config);
+
     // 1. Force NDK version in top-level build.gradle
     config = withNdkFix(config);
 
@@ -252,3 +255,25 @@ const withAndroidManifestPiP = (config) => {
 };
 
 module.exports = withCrispyNative;
+
+/**
+ * Add Frostwire Maven repository to root build.gradle.
+ */
+const withFrostwireMavenRepo = (config) => {
+    return withProjectBuildGradle(config, (config) => {
+        if (config.modResults.language === 'groovy') {
+            let buildGradle = config.modResults.contents;
+            if (!buildGradle.includes('https://dl.frostwire.com/maven')) {
+                buildGradle = buildGradle.replace(
+                    /allprojects\s*\{\s*repositories\s*\{/,
+                    `allprojects {
+        repositories {
+            maven { url "https://oss.sonatype.org/content/repositories/releases" }
+            maven { url "https://dl.frostwire.com/maven" }`
+                );
+                config.modResults.contents = buildGradle;
+            }
+        }
+        return config;
+    });
+};

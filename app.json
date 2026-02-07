@@ -53,7 +53,8 @@
             "buildToolsVersion": "35.0.0",
             "ndkVersion": "29.0.14206865",
             "extraMavenRepos": [
-              "https://oss.sonatype.org/content/repositories/snapshots"
+              "https://oss.sonatype.org/content/repositories/snapshots",
+              "https://dl.frostwire.com/maven"
             ],
             "gradleProps": {
               "org.gradle.jvmargs": "-Xmx4096m -XX:MaxMetaspaceSize=1024m"
