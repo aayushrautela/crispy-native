@@ -188,7 +188,7 @@ class TorrentService : Service() {
             
             setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), false) // Restricted on Android 11+
-            setBoolean(settings_pack.bool_types.dht_ignore_lan_peers.swigValue(), true) // Reduces unnecessary network noise
+            // setBoolean(settings_pack.bool_types.dht_ignore_lan_peers.swigValue(), true) // UNRESOLVED: dht_ignore_lan_peers not found in jlibtorrent 2.0.12.7
             
             setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
             
