@@ -26,6 +26,20 @@ class TorrentService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "torrent_service_channel"
         private const val IDLE_TIMEOUT_MS = 1000L // 1 second idle timeout for strictly on-demand behavior
+        
+        private val PUBLIC_TRACKERS = listOf(
+            "udp://tracker.opentrackr.org:1337/announce",
+            "udp://open.stealth.si:80/announce",
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://tracker.bittorrent.am:80/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.tiny-vps.com:6969/announce",
+            "udp://retracker.lanta-net.ru:2710/announce"
+        )
+        private const val INSTANT_TIER_PIECES = 3
+        private const val DEADLINE_INCREMENT_MS = 1000
+        private const val PIECES_TO_BUFFER = 30
     }
     
     private val binder = TorrentBinder()
@@ -94,7 +108,7 @@ class TorrentService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
+                CHANNEL_ID,
                 "Crispy Streaming",
                 NotificationManager.IMPORTANCE_LOW
             )
@@ -111,7 +125,7 @@ class TorrentService : Service() {
         }
         
         // Use a generic icon from android.R since we are in a library
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Crispy Native Core")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
