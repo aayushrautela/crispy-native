@@ -96,10 +96,11 @@ const withIosConfiguration = (config) => {
     end`;
 
         if (!podfileContent.includes('-Wno-incomplete-umbrella')) {
-            // Try to insert it inside the post_install block
-            if (podfileContent.includes('react_native_post_install')) {
+            // Try to insert it inside the post_install block, after react_native_post_install
+            const postInstallPattern = /react_native_post_install\([\s\S]*?\n\s*\)/;
+            if (postInstallPattern.test(podfileContent)) {
                 podfileContent = podfileContent.replace(
-                    /react_native_post_install\([\s\S]*?\)/,
+                    postInstallPattern,
                     `$&${warningSuppression}`
                 );
             }
