@@ -139,9 +139,9 @@ class TorrentService : Service() {
         if (isSessionActive) return
         
         val settings = SettingsPack().apply {
-            connectionsLimit(350)
-            maxPeerlistSize(2000)
-            activeDownloads(2)
+            connectionsLimit(100)
+            maxPeerlistSize(500)
+            activeDownloads(1)
             activeSeeds(0)
             activeLimit(3)
             activeTrackerLimit(50)
@@ -176,8 +176,8 @@ class TorrentService : Service() {
             setBoolean(settings_pack.bool_types.auto_sequential.swigValue(), true)
             setInteger(settings_pack.int_types.tracker_completion_timeout.swigValue(), 15)
             setInteger(settings_pack.int_types.tracker_receive_timeout.swigValue(), 15)
-            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
-            setInteger(settings_pack.int_types.request_timeout.swigValue(), 20)
+            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 30)
+            setInteger(settings_pack.int_types.request_timeout.swigValue(), 60)
             setInteger(settings_pack.int_types.inactivity_timeout.swigValue(), 120)
             setInteger(settings_pack.int_types.min_reconnect_time.swigValue(), 2)
             alertQueueSize(2000)
@@ -260,6 +260,9 @@ class TorrentService : Service() {
     }
 
     fun startInfoHash(infoHash: String, sessionId: String? = null): Boolean {
+        // Enforce single-stream policy: stop everything and wipe data before starting new
+        stopAll()
+
         val hash = infoHash.lowercase()
         Log.d(TAG, "startInfoHash: $hash (session: $sessionId)")
         
@@ -267,13 +270,6 @@ class TorrentService : Service() {
             this.activeSessionId = sessionId
         }
         
-        // PRODUCTION: Always start from scratch. 
-        // If already active, remove it first to force libtorrent to re-scan/re-download
-        if (activeTorrents.containsKey(hash)) {
-            Log.d(TAG, "Torrent $hash already active, removing for fresh start")
-            stopTorrent(hash)
-        }
-
         // Ensure session is initialized
         if (sessionManager == null) {
             initSession()
@@ -282,11 +278,8 @@ class TorrentService : Service() {
         val session = sessionManager ?: return false
         
         try {
-            // Aggressive Cleanup: Wipe download directory before adding new torrent
             val downloadDir = getDownloadDir()
-            if (downloadDir.exists()) {
-                downloadDir.deleteRecursively()
-            }
+            // Directory is already cleaned by stopAll() -> performStartupCleanup()
             downloadDir.mkdirs()
 
             val trackerParams = PUBLIC_TRACKERS.joinToString("") { "&tr=${java.net.URLEncoder.encode(it, "UTF-8")}" }
