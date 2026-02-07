@@ -19,7 +19,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class CrispyNativeCoreModule : Module() {
-  private var crispyServer: CrispyServer? = null
+  // CrispyServer is now owned exclusively by TorrentService (started in its onCreate).
+  // This avoids EADDRINUSE when both Module and Service try to bind port 11470.
   private var torrentService: TorrentService? = null
   private var isBound = false
   private var serviceLatch = CountDownLatch(1)
@@ -29,7 +30,6 @@ class CrispyNativeCoreModule : Module() {
       val binder = service as TorrentService.TorrentBinder
       torrentService = binder.getService()
       torrentService?.performStartupCleanup()
-      crispyServer?.setTorrentService(torrentService!!)
       isBound = true
       serviceLatch.countDown()
       Log.d("CrispyModule", "TorrentService connected")
@@ -49,28 +49,40 @@ class CrispyNativeCoreModule : Module() {
       val context = appContext.reactContext ?: return@OnCreate
       val downloadDir = context.getExternalFilesDir(null) ?: context.filesDir
 
+      // PRODUCTION: Aggressive cleanup on app startup
+      try {
+          if (downloadDir.exists()) {
+              downloadDir.deleteRecursively()
+              downloadDir.mkdirs()
+              Log.d("CrispyModule", "Startup: Wiped download directory")
+          }
+      } catch (e: Exception) {
+          Log.e("CrispyModule", "Startup cleanup failed", e)
+      }
+
       val reactContext = context as? ReactContext
       if (reactContext != null) {
         // Centralized PiP controller (events + params updates).
         val app = reactContext.applicationContext as? android.app.Application
         if (app != null) PipController.start(app, reactContext)
       }
-      
-      // 1. Start Local Server
-      crispyServer = CrispyServer(11470, downloadDir)
-      crispyServer?.safeStart()
-      
-      // TorrentService will be started lazily when needed
+      // TorrentService (with its CrispyServer) is started on-demand in ensureService()
     }
 
     OnDestroy {
       val context = appContext.reactContext ?: return@OnDestroy
+      
+      // Stop everything aggressively
       if (isBound) {
-        context.unbindService(connection)
+        try {
+          torrentService?.stopAll()
+          context.unbindService(connection)
+        } catch (e: Exception) {
+          Log.e("CrispyModule", "Error during OnDestroy unbind", e)
+        }
         isBound = false
       }
-      crispyServer?.stop()
-
+      
       PipController.stop()
     }
 
@@ -97,7 +109,20 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("destroyStream") { sessionId: String ->
+      Log.d("CrispyModule", "[JS] destroyStream: $sessionId")
       torrentService?.stopAll(sessionId)
+      
+      // PRODUCTION: If no more active torrents, unbind to allow service to stop
+      if (torrentService?.hasActiveTorrents() != true) {
+          Log.d("CrispyModule", "No active torrents, unbinding service...")
+          if (isBound) {
+              val context = appContext.reactContext
+              context?.unbindService(connection)
+              isBound = false
+              torrentService = null
+              serviceLatch = CountDownLatch(1)
+          }
+      }
     }
 
     AsyncFunction("stopTorrent") { infoHash: String ->
@@ -336,13 +361,7 @@ class CrispyNativeCoreModule : Module() {
           context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
       }
       
-      return if (waitForService()) {
-          // Pass service to server once connected
-          if (torrentService != null) {
-              crispyServer?.setTorrentService(torrentService!!)
-          }
-          torrentService
-      } else null
+      return if (waitForService()) torrentService else null
   }
 
   private fun waitForService(): Boolean {

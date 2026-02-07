@@ -163,11 +163,7 @@ class CrispyVlcVideoView(
   
   fun setResizeMode(mode: String?) {
       requestedResizeMode = mode
-      // Unlike PlayerView which handles resize mode internally, SurfaceView needs LayoutParams tweaks.
-      // But here we are inside a ReactViewGroup (ExpoView) which layout is managed by RN/Flexbox.
-      // Usually the "View" itself is resized by RN style. 
-      // If we need internal aspect ratio, we can adjust SurfaceView size. 
-      // For now, assume MATCH_PARENT.
+      playbackService?.setResizeMode(mode)
   }
 
   fun setPlayInBackground(enabled: Boolean) {
@@ -248,6 +244,7 @@ class CrispyVlcVideoView(
     service.setVolume(pendingVolume)
     service.setPaused(pendingPaused)
     service.setAudioTrack(-1) // Reset or keep? Usually we don't auto-set track on bind unless stored.
+    service.setResizeMode(requestedResizeMode)
 
     val md = latestMetadata
     if (md != null) {

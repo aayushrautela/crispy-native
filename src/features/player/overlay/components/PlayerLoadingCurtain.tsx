@@ -65,7 +65,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingVertical: 16,
         borderRadius: 16,
-        backgroundColor: 'rgba(0,0,0,0.55)',
         alignItems: 'center',
     },
 });

@@ -7,6 +7,12 @@
         "preview": {
             "distribution": "internal"
         },
-        "production": {}
+        "production": {},
+        "adhoc": {
+            "distribution": "internal",
+            "ios": {
+                "buildType": "release"
+            }
+        }
     }
 }

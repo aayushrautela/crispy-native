@@ -1,0 +1,64 @@
+name: Build Unsigned iOS IPA (No Dev Account)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ios-release
+
+jobs:
+  build_ios:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup CocoaPods
+        uses: maxim-lobanov/setup-cocoapods@v1
+        with:
+          version: 1.14.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild iOS
+        run: npx expo prebuild -p ios --no-interactive --clean
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build Archive (Unsigned)
+        run: |
+          cd ios
+          xcodebuild archive \
+            -workspace crispynative.xcworkspace \
+            -scheme crispynative \
+            -configuration Release \
+            -archivePath ../build/crispynative.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          mv build/crispynative.xcarchive/Products/Applications/crispynative.app Payload/
+          zip -r crispynative-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispynative-unsigned-ipa
+          path: crispynative-unsigned.ipa

@@ -57,6 +57,7 @@ class CrispyExoVideoView(
 
   private var resumeOnForeground: Boolean = false
   private var lastWasInPipMode: Boolean = false
+  private var resizeModeBeforePip: Int? = null
 
   private val serviceConnection = object : ServiceConnection {
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -156,6 +157,17 @@ class CrispyExoVideoView(
     if (lastWasInPipMode && !pipNow) {
       // Leaving PiP: force a surface rebind to avoid black video on return.
       playerView.post { rebindPlayerView("exitPiP") }
+      // Restore the resize mode that was set before entering PiP
+      resizeModeBeforePip?.let { previousMode ->
+        playerView.resizeMode = previousMode
+        resizeModeBeforePip = null
+      }
+    } else if (!lastWasInPipMode && pipNow) {
+      // Entering PiP: save current resize mode and switch to FIT to avoid cropping
+      if (playerView.resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+        resizeModeBeforePip = playerView.resizeMode
+        playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+      }
     }
     lastWasInPipMode = pipNow
 

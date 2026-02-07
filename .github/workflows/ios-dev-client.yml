@@ -1,0 +1,96 @@
+name: Build iOS Dev Client
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: 🏗 Setup Repo
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: ⚙️ Expo Prebuild
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_TMDB_API_KEY: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
+          EXPO_PUBLIC_TRAKT_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_ID }}
+          EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: 🏗 Setup CocoaPods
+        uses: maxim-lobanov/setup-cocoapods@v1
+        with:
+          version: '1.15.0'
+
+      - name: 📦 Install Pods
+        working-directory: ./ios
+        run: |
+          pod repo update
+          pod install --verbose
+        env:
+          # Increase timeout for large frameworks (VLC, KSPlayer)
+          COCOAPODS_DISABLE_STATS: 'true'
+          CP_REPOSITORIES_NO_NETWORK: 'false'
+
+      - name: 🔨 Build iOS Debug (Simulator)
+        working-directory: ./ios
+        run: |
+          xcodebuild \
+            -workspace crispynative.xcworkspace \
+            -scheme crispynative \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -derivedDataPath DerivedData \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            GCC_OPTIMIZATION_LEVEL=s \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
+            build
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_TMDB_API_KEY: ${{ secrets.EXPO_PUBLIC_TMDB_API_KEY }}
+          EXPO_PUBLIC_TRAKT_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_ID }}
+          EXPO_PUBLIC_TRAKT_CLIENT_SECRET: ${{ secrets.EXPO_PUBLIC_TRAKT_CLIENT_SECRET }}
+
+      - name: 📤 Upload Simulator App
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispy-native-ios-dev-simulator
+          path: ios/DerivedData/Build/Products/Debug-iphonesimulator/*.app
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 📤 Upload Build Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            ios/DerivedData/Logs/
+            ios/Pods/Pods.xcodeproj/project.pbxproj
+          if-no-files-found: ignore
+          retention-days: 3

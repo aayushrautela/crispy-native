@@ -8,6 +8,9 @@ const path = require('path');
  * and fixes for Bridgeless mode compatibility.
  */
 const withCrispyNative = (config) => {
+    // 0. Add Frostwire Maven Repository
+    config = withFrostwireMavenRepo(config);
+
     // 1. Force NDK version in top-level build.gradle
     config = withNdkFix(config);
 
@@ -57,11 +60,14 @@ const withAudioConfig = (config) => {
         const androidManifest = config.modResults.manifest;
 
         // 1. Add Permissions
-        const permissionsToAdd = [
-            'android.permission.RECORD_AUDIO',
-            'android.permission.MODIFY_AUDIO_SETTINGS',
-            'android.permission.BLUETOOTH_CONNECT',
-        ];
+    const permissionsToAdd = [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
+      'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+    ];
 
         if (!androidManifest['uses-permission']) {
             androidManifest['uses-permission'] = [];
@@ -249,3 +255,25 @@ const withAndroidManifestPiP = (config) => {
 };
 
 module.exports = withCrispyNative;
+
+/**
+ * Add Frostwire Maven repository to root build.gradle.
+ */
+const withFrostwireMavenRepo = (config) => {
+    return withProjectBuildGradle(config, (config) => {
+        if (config.modResults.language === 'groovy') {
+            let buildGradle = config.modResults.contents;
+            if (!buildGradle.includes('https://dl.frostwire.com/maven')) {
+                buildGradle = buildGradle.replace(
+                    /allprojects\s*\{\s*repositories\s*\{/,
+                    `allprojects {
+        repositories {
+            maven { url "https://oss.sonatype.org/content/repositories/releases" }
+            maven { url "https://dl.frostwire.com/maven" }`
+                );
+                config.modResults.contents = buildGradle;
+            }
+        }
+        return config;
+    });
+};

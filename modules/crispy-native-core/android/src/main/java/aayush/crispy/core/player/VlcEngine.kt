@@ -78,6 +78,10 @@ class VlcEngine(
   
   // Resize mode: contain (fit), cover (fill), stretch, original
   private var resizeMode: String = "contain"
+  
+  // Pending seek after source change - VLC needs to be fully ready before seeking
+  private var pendingSeekPositionSec: Double? = null
+  private var isSeekable: Boolean = false
 
   // Track mapping - kept for backward compatibility but now using VLC track IDs directly
   private data class TrackInfo(val id: Int, val name: String, val language: String)
@@ -134,12 +138,15 @@ class VlcEngine(
           MediaPlayer.Event.Playing -> {
             emitIsPlayingChangedIfNeeded(true)
             emitBufferingChangedIfNeeded(false)
+            // Apply pending seek when playback starts (player is ready)
+            applyPendingSeekIfReady()
           }
           MediaPlayer.Event.Paused -> {
             emitIsPlayingChangedIfNeeded(false)
           }
           MediaPlayer.Event.Stopped -> {
             emitIsPlayingChangedIfNeeded(false)
+            isSeekable = false
           }
           MediaPlayer.Event.EndReached -> {
              emitIsPlayingChangedIfNeeded(false)
@@ -152,6 +159,17 @@ class VlcEngine(
             // event.getBuffering() returns float 0-100
             val buffering = event.buffering < 100f
             emitBufferingChangedIfNeeded(buffering)
+            // When buffering completes, try to apply pending seek
+            if (!buffering) {
+              applyPendingSeekIfReady()
+            }
+          }
+          MediaPlayer.Event.SeekableChanged -> {
+            // VLC reports when the media becomes seekable
+            isSeekable = event.seekable
+            if (isSeekable) {
+              applyPendingSeekIfReady()
+            }
           }
           MediaPlayer.Event.Vout -> {
              // Vout count changed, surface attached/detached or resized
@@ -174,6 +192,11 @@ class VlcEngine(
   fun attachSurface(surface: Surface, width: Int, height: Int) {
       val mp = mediaPlayer ?: return
       val vout = mp.vlcVout
+      
+      // Store dimensions for resize mode calculations
+      surfaceWidth = width
+      surfaceHeight = height
+
       if (!vout.areViewsAttached()) {
           vout.setVideoSurface(surface, null)
           vout.setWindowSize(width, height)
@@ -184,6 +207,8 @@ class VlcEngine(
           // Update size if already attached
           vout.setWindowSize(width, height)
       }
+      
+      applyResizeMode()
   }
 
   fun setSurfaceSize(width: Int, height: Int) {
@@ -205,7 +230,8 @@ class VlcEngine(
 
   /**
    * Apply resize mode to VLC video output.
-   * Maps resize modes to VLC's aspect ratio, crop, and scale settings.
+   * Since PlayerActivity handles the actual SurfaceView resizing, we mostly
+   * just need to tell VLC to fill the provided surface dimensions exactly.
    */
   private fun applyResizeMode() {
       val mp = mediaPlayer ?: return
@@ -215,46 +241,24 @@ class VlcEngine(
           return
       }
       
-      when (resizeMode) {
-          "stretch" -> {
-              // Stretch: Fill the surface regardless of aspect ratio
-              // Use crop geometry to fill the entire surface
-              mp.aspectRatio = null
-              mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}")
-          }
-          "cover" -> {
-              // Cover: Fill surface while maintaining aspect ratio (may crop)
-              mp.aspectRatio = null
-              // Calculate crop to fill surface
-              val videoRatio = cachedWidth.toFloat() / cachedHeight.toFloat()
-              val surfaceRatio = surfaceWidth.toFloat() / surfaceHeight.toFloat()
-              
-              if (surfaceRatio > videoRatio) {
-                  // Surface is wider than video - crop top/bottom
-                  val targetHeight = (surfaceWidth / videoRatio).toInt()
-                  val cropY = ((targetHeight - surfaceHeight) / 2).coerceAtLeast(0)
-                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+0+${cropY}")
-              } else {
-                  // Surface is taller than video - crop left/right
-                  val targetWidth = (surfaceHeight * videoRatio).toInt()
-                  val cropX = ((targetWidth - surfaceWidth) / 2).coerceAtLeast(0)
-                  mp.setCropGeometry("${surfaceWidth}x${surfaceHeight}+${cropX}+0")
+      try {
+          when (resizeMode) {
+              "stretch", "cover" -> {
+                  // For Stretch and Cover, we want to fill the surface exactly.
+                  // In PlayerActivity, the surface has been resized to achieve the crop/stretch.
+                  // In other views, this will force a fill (stretch).
+                  mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
+              }
+              else -> {
+                  // For Contain and Original: Use the video's native display aspect ratio (DAR).
+                  // We use the DAR-adjusted cachedWidth/cachedHeight here.
+                  // If the surface matches this ratio (as in PlayerActivity's contain mode), it fills perfectly.
+                  // If the surface is larger (as in CrispyVlcVideoView), VLC adds black bars (standard contain).
+                  mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
               }
           }
-          "original" -> {
-              // Original: Use video's native dimensions (1:1 pixel mapping)
-              mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
-              mp.setCropGeometry(null)
-          }
-          else -> {
-              // Contain: Fit within surface while maintaining aspect ratio (default)
-              // This is VLC's default behavior with proper aspect ratio
-              val gcd = greatestCommonDivisor(cachedWidth, cachedHeight)
-              val aspectW = cachedWidth / gcd
-              val aspectH = cachedHeight / gcd
-              mp.aspectRatio = "${aspectW}:${aspectH}"
-              mp.setCropGeometry(null)
-          }
+      } catch (e: Exception) {
+          Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
       }
   }
 
@@ -306,6 +310,8 @@ class VlcEngine(
     cachedDuration = 0
     cachedWidth = 0
     cachedHeight = 0
+    pendingSeekPositionSec = null
+    isSeekable = false
     
     val mp = mediaPlayer ?: return
     val lib = libVLC ?: return
@@ -365,9 +371,48 @@ class VlcEngine(
   }
 
   fun seek(positionSec: Double) {
+    val mp = mediaPlayer ?: return
+    
+    // If seeking to 0 or very close to start, just do it directly
+    if (positionSec <= 0.5) {
+      try {
+        mp.time = (positionSec * 1000.0).toLong()
+      } catch (_: Throwable) {}
+      return
+    }
+    
+    // Check if player is ready to seek
+    val canSeekNow = isSeekable && hasLoadEventFired && mp.length > 0
+    
+    if (canSeekNow) {
+      try {
+        mp.time = (positionSec * 1000.0).toLong()
+        Log.d(TAG, "Seek applied immediately to ${positionSec}s")
+      } catch (_: Throwable) {}
+    } else {
+      // Queue the seek for when the player is ready
+      pendingSeekPositionSec = positionSec
+      Log.d(TAG, "Seek queued: ${positionSec}s (seekable=$isSeekable, loaded=$hasLoadEventFired, length=${mp.length})")
+    }
+  }
+  
+  private fun applyPendingSeekIfReady() {
+    val seekPos = pendingSeekPositionSec ?: return
+    val mp = mediaPlayer ?: return
+    
+    // Check if player is truly ready
+    if (!isSeekable || mp.length <= 0) {
+      return
+    }
+    
+    pendingSeekPositionSec = null
+    
     try {
-      mediaPlayer?.time = (positionSec * 1000.0).toLong()
-    } catch (_: Throwable) {}
+      mp.time = (seekPos * 1000.0).toLong()
+      Log.d(TAG, "Pending seek applied: ${seekPos}s")
+    } catch (e: Throwable) {
+      Log.w(TAG, "Failed to apply pending seek", e)
+    }
   }
 
   fun setRate(rate: Double) {
@@ -468,10 +513,19 @@ class VlcEngine(
       sarNum: Int,
       sarDen: Int
   ) {
-      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight})")
+      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight}, sar: ${sarNum}:${sarDen})")
       if (width > 0 && height > 0) {
-          cachedWidth = width
+          // Calculate Display Aspect Ratio (DAR) width based on Sample Aspect Ratio (SAR).
+          // This ensures that anamorphic content is correctly scaled.
+          val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
+              (width.toDouble() * sarNum / sarDen).toInt()
+          } else {
+              width
+          }
+
+          cachedWidth = darWidth
           cachedHeight = height
+          
           // Apply resize mode with new video dimensions
           applyResizeMode()
           // Try to fire load event now that we have dimensions
@@ -481,37 +535,30 @@ class VlcEngine(
 
   private fun parseAndSendTracks() {
       val mp = mediaPlayer ?: return
-      val media = mp.media ?: return
-      
-      // Get full track info from Media object (has language codes and descriptions)
-      val allTracks = media.tracks
-      if (allTracks == null || allTracks.isEmpty()) return
+      // val media = mp.media ?: return // Not needed for mp.audioTracks
       
       // Audio Tracks
       val audioTracks = mutableListOf<Map<String, Any>>()
       val newAudioMap = mutableMapOf<Int, Int>()
       
-      var audioIndex = 0
-      for (track in allTracks) {
-          if (track.type != Media.Track.Type.Audio) continue
-          
-          val vlcTrackId = track.id
-          if (vlcTrackId < 0) continue
-          
-          val index = audioIndex
-          newAudioMap[index] = vlcTrackId
-          
-          // Build track name from description and codec info
-          val trackName = buildTrackName(track)
-          val language = track.language ?: ""
-          
-          audioTracks.add(mapOf(
-              "id" to vlcTrackId,  // Use VLC's native track ID for selection
-              "name" to trackName,
-              "language" to language,
-              "selected" to (mp.audioTrack == vlcTrackId)
-          ))
-          audioIndex++
+      val vlcAudioTracks = mp.audioTracks
+      if (vlcAudioTracks != null) {
+          var audioIndex = 0
+          for (track in vlcAudioTracks) {
+              if (track.id < 0) continue // Skip disabled/invalid
+
+              val vlcTrackId = track.id
+              val index = audioIndex
+              newAudioMap[index] = vlcTrackId
+              
+              audioTracks.add(mapOf(
+                  "id" to vlcTrackId,
+                  "name" to (track.name ?: "Audio Track"),
+                  "language" to "", // Not available in TrackDescription
+                  "selected" to (mp.audioTrack == vlcTrackId)
+              ))
+              audioIndex++
+          }
       }
       audioTrackMap = newAudioMap
       
@@ -519,75 +566,34 @@ class VlcEngine(
       val subtitleTracks = mutableListOf<Map<String, Any>>()
       val newSpuMap = mutableMapOf<Int, Int>()
       
-      var spuIndex = 0
-      for (track in allTracks) {
-          if (track.type != Media.Track.Type.Text) continue
-          
-          val vlcTrackId = track.id
-          if (vlcTrackId < 0) continue
-          
-          val index = spuIndex
-          newSpuMap[index] = vlcTrackId
-          
-          // Build track name from description and codec info
-          val trackName = buildTrackName(track)
-          val language = track.language ?: ""
-          
-          subtitleTracks.add(mapOf(
-              "id" to vlcTrackId,  // Use VLC's native track ID for selection
-              "name" to trackName,
-              "language" to language,
-              "selected" to (mp.spuTrack == vlcTrackId)
-          ))
-          spuIndex++
+      val vlcSpuTracks = mp.spuTracks
+      if (vlcSpuTracks != null) {
+          var spuIndex = 0
+          for (track in vlcSpuTracks) {
+              if (track.id < 0) continue // Skip disabled/invalid
+
+              val vlcTrackId = track.id
+              val index = spuIndex
+              newSpuMap[index] = vlcTrackId
+              
+              subtitleTracks.add(mapOf(
+                  "id" to vlcTrackId,
+                  "name" to (track.name ?: "Subtitle"),
+                  "language" to "", // Not available in TrackDescription
+                  "selected" to (mp.spuTrack == vlcTrackId)
+              ))
+              spuIndex++
+          }
       }
       spuTrackMap = newSpuMap
       
       listeners.forEach { it.onTracksChanged(audioTracks, subtitleTracks) }
   }
 
-  /**
-   * Build a human-readable track name from Media.Track metadata.
-   * Combines description, language, and codec information.
+  /*
+   * Build a human-readable track name - Removed as Media.Track is not available
    */
-  private fun buildTrackName(track: Media.Track): String {
-      val description = track.description
-      val language = track.language
-      val codec = track.codec
-      
-      val parts = mutableListOf<String>()
-      
-      // Use description if available (usually contains quality/format info)
-      if (!description.isNullOrBlank()) {
-          parts.add(description)
-      }
-      
-      // Add language if available and different from description
-      if (!language.isNullOrBlank() && !description.equals(language, ignoreCase = true)) {
-          val langDisplay = language.uppercase()
-          if (!parts.any { it.contains(langDisplay, ignoreCase = true) }) {
-              parts.add(langDisplay)
-          }
-      }
-      
-      // Add codec info if available and not already mentioned
-      if (!codec.isNullOrBlank()) {
-          val codecUpper = codec.uppercase()
-          if (!parts.any { it.contains(codecUpper, ignoreCase = true) }) {
-              parts.add(codecUpper)
-          }
-      }
-      
-      return if (parts.isNotEmpty()) {
-          parts.joinToString(" - ")
-      } else {
-          when (track.type) {
-              Media.Track.Type.Audio -> "Audio Track"
-              Media.Track.Type.Text -> "Subtitle"
-              else -> "Track"
-          }
-      }
-  }
+
 
   private fun emitIsPlayingChangedIfNeeded(isPlaying: Boolean) {
     val prev = lastEmittedIsPlaying

@@ -3,22 +3,14 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
+import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-
-const LOCAL_STREAM_BASE = 'http://127.0.0.1:11470';
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const pickParam = (v: string | string[] | undefined): string | undefined => {
     if (Array.isArray(v)) return v[0];
     return v;
-};
-
-const normalizeLocalStreamUrl = (url: string) => {
-    if (!url) return url;
-    return url.replace('http://localhost:11470', LOCAL_STREAM_BASE).replace('http://127.0.0.1:11470', LOCAL_STREAM_BASE);
 };
 
 const normalizeContentType = (raw: unknown): PlayerContentType => {
@@ -43,25 +35,6 @@ const parseJsonParam = <T,>(raw: string | undefined): T | undefined => {
     }
 };
 
-const waitForLocalStreamReady = async (url: string, signal: AbortSignal, timeoutMs = 45_000) => {
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < timeoutMs) {
-        if (signal.aborted) throw new Error('aborted');
-        try {
-            const res = await fetch(url, {
-                method: 'GET',
-                headers: { Range: 'bytes=0-1' },
-                signal,
-            });
-            if (res.status === 200 || res.status === 206) return;
-            await sleep(750);
-        } catch {
-            await sleep(750);
-        }
-    }
-    throw new Error(`Timed out waiting for local stream (${timeoutMs}ms)`);
-};
-
 export default function PlayerScreenAndroid() {
     const params = useLocalSearchParams();
     const router = useRouter();
@@ -83,121 +56,87 @@ export default function PlayerScreenAndroid() {
 
     const sessionId = useMemo(() => Math.random().toString(36).slice(2), []);
     const launchedRef = useRef(false);
-    const handoffRef = useRef(false);
 
-    const [status, setStatus] = useState<'resolving' | 'launching' | 'failed'>('resolving');
-    const [message, setMessage] = useState<string>('Resolving stream...');
-
-    const preferredEngine = useMemo<'exoplayer' | 'vlc'>(() => {
-        if (settings.videoPlayerEngine === 'vlc') return 'vlc';
-        return 'exoplayer';
-    }, [settings.videoPlayerEngine]);
-
+    // Use machine to resolve stream (skip native load, as we launch Activity manually)
+    const { state, dispatch } = usePlayerLogic(sessionId, { skipNativeLoad: true });
+    
+    // Initial Load
     useEffect(() => {
-        let mounted = true;
-        const controller = new AbortController();
+        if (urlParam || infoHash) {
+            dispatch({
+                type: 'LOAD_STREAM',
+                stream: {
+                    url: urlParam,
+                    infoHash,
+                    fileIdx,
+                    behaviorHints: { headers }
+                },
+                engine: settings.videoPlayerEngine === 'vlc' ? 'vlc' : 'exo'
+            });
+        }
+    }, [urlParam, infoHash, fileIdx, headers, settings.videoPlayerEngine, dispatch]);
 
-        const run = async () => {
-            try {
-                setStatus('resolving');
-                setMessage('Resolving stream...');
+    // Launch Activity when ready
+    useEffect(() => {
+        if (launchedRef.current) return;
+        
+        // If we have a resolved URL (meaning torrent is ready or HTTP is ready)
+        if (state.resolvedUrl && (state.status === 'loading_media' || state.status === 'playing')) {
+             launchedRef.current = true;
+             
+             // Create Session
+             useNativePlayerSessionStore.getState().upsertSession({
+                 sessionId,
+                 id,
+                 type,
+                 title,
+                 poster,
+                 episodeTitle,
+                 url: state.resolvedUrl,
+                 headers,
+                 streams: warmStreams,
+                 infoHash: infoHash || undefined,
+                 fileIdx: fileIdx,
+                 engine: state.engine,
+                 paused: false,
+                 artist: type === 'movie' ? 'Movie' : title,
+                 artworkUrl: poster,
+             });
 
-                let finalUrl = urlParam;
-                let resolvedInfoHash: string | undefined = infoHash || undefined;
-                let resolvedFileIdx: number | undefined = typeof fileIdx === 'number' && Number.isFinite(fileIdx) ? fileIdx : undefined;
-
-                if (!finalUrl && resolvedInfoHash) {
-                    setMessage('Starting torrent stream...');
-                    const localUrl = await CrispyNativeCore.startStream(resolvedInfoHash, resolvedFileIdx ?? -1, sessionId);
-                    if (!localUrl) throw new Error('Failed to start stream');
-                    finalUrl = normalizeLocalStreamUrl(localUrl);
-                    setMessage('Connecting to peers...');
-                    await waitForLocalStreamReady(finalUrl, controller.signal, 60_000);
-                }
-
-                if (!finalUrl) {
-                    throw new Error('Missing playback URL');
-                }
-
-                if (!mounted) return;
-
-                setStatus('launching');
-                setMessage('Opening player...');
-
-                 useNativePlayerSessionStore.getState().upsertSession({
-                     sessionId,
-                     id,
-                     type,
-                    title,
-                    poster,
-                    episodeTitle,
-                    url: finalUrl,
-                    headers,
-                     streams: warmStreams,
-                     infoHash: resolvedInfoHash,
-                     fileIdx: resolvedFileIdx,
-                     engine: preferredEngine,
-                     paused: false,
-                     artist: type === 'movie' ? 'Movie' : title,
-                     artworkUrl: poster,
-                 });
-
-                if (launchedRef.current) return;
-                launchedRef.current = true;
-
-                 const tryOpen = (engineToUse: 'exoplayer' | 'vlc') => CrispyNativeCore.openPlayerActivity({
-                     sessionId,
-                     url: finalUrl,
-                     headers,
-                     engine: engineToUse,
-                     paused: false,
-                     metadata: {
-                         title: episodeTitle || title || 'Now Playing',
-                         subtitle: type === 'movie' ? 'Movie' : title || 'Series',
-                         artworkUrl: poster || undefined,
-                     },
-                 });
-
-                 let ok = await tryOpen(preferredEngine);
-                 if (!ok && settings.videoPlayerEngine === 'auto' && preferredEngine === 'exoplayer') {
-                     console.warn('[player.android] ExoPlayer open failed; retrying with VLC');
-                     useNativePlayerSessionStore.getState().patchSession(sessionId, { engine: 'vlc' });
-                     ok = await tryOpen('vlc');
+             // Launch Native Activity
+             CrispyNativeCore.openPlayerActivity({
+                 sessionId,
+                 url: state.resolvedUrl,
+                 headers,
+                 engine: state.engine,
+                 paused: false,
+                 metadata: {
+                     title: episodeTitle || title || 'Now Playing',
+                     subtitle: type === 'movie' ? 'Movie' : title || 'Series',
+                     artworkUrl: poster || undefined,
+                 },
+             }).then((ok) => {
+                 if (ok) {
+                     router.back();
+                 } else {
+                     // Fallback logic if needed, or dispatch error
+                     dispatch({ type: 'ERROR', error: 'Failed to open native player', fatal: true });
                  }
-
-                 if (!ok) throw new Error('Failed to open native player');
-                 handoffRef.current = true;
-                 router.back();
-            } catch (e: any) {
-                if (!mounted) return;
-                console.error('[player.android] launch failed', e);
-                setStatus('failed');
-                setMessage(e?.message ? String(e.message) : 'Failed to open player');
-            }
-        };
-
-        run();
-
-        return () => {
-            mounted = false;
-            controller.abort();
-            if (handoffRef.current) return;
-            try {
-                CrispyNativeCore.destroyStream?.(sessionId);
-            } catch {
-                // ignore
-            }
-        };
-     }, [preferredEngine, episodeTitle, fileIdx, headers, id, infoHash, poster, router, sessionId, settings.videoPlayerEngine, title, type, urlParam, warmStreams]);
+             });
+        }
+    }, [state.resolvedUrl, state.status, state.engine, sessionId, id, type, title, poster, episodeTitle, headers, warmStreams, infoHash, fileIdx, router, dispatch]);
 
     return (
         <View style={styles.root}>
             <LoadingIndicator size="large" color="#fff" />
             <Typography variant="body" style={styles.text}>
-                {message}
+                {state.status === 'booting_torrent' ? 'Starting torrent stream...' :
+                 state.status === 'polling_localhost' ? 'Connecting to peers...' :
+                 state.error ? `Error: ${state.error}` :
+                 'Resolving stream...'}
             </Typography>
 
-            {status === 'failed' && (
+            {state.status === 'error' && (
                 <Pressable style={styles.backBtn} onPress={() => router.back()}>
                     <Typography variant="label" style={styles.backText}>
                         Back
@@ -207,6 +146,7 @@ export default function PlayerScreenAndroid() {
         </View>
     );
 }
+
 
 const styles = StyleSheet.create({
     root: {

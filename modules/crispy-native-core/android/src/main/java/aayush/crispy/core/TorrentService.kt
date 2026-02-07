@@ -23,31 +23,29 @@ class TorrentService : Service() {
     
     companion object {
         private const val TAG = "TorrentService"
-        private const val NOTIFICATION_CHANNEL_ID = "crispy_torrent_channel"
         private const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "torrent_service_channel"
+        private const val IDLE_TIMEOUT_MS = 1000L // 1 second idle timeout for strictly on-demand behavior
         
         private val PUBLIC_TRACKERS = listOf(
             "udp://tracker.opentrackr.org:1337/announce",
-            "udp://open.demonii.com:1337/announce",
-            "udp://tracker.torrent.eu.org:451/announce",
-            "udp://explodie.org:6969/announce",
             "udp://open.stealth.si:80/announce",
-            "http://tracker.opentrackr.org:1337/announce",
-            "http://open.tracker.cl:1337/announce",
-            "https://tracker.bt4g.com:443/announce"
+            "udp://tracker.torrent.eu.org:451/announce",
+            "udp://tracker.bittorrent.am:80/announce",
+            "udp://tracker.openbittorrent.com:6969/announce",
+            "udp://exodus.desync.com:6969/announce",
+            "udp://tracker.tiny-vps.com:6969/announce",
+            "udp://retracker.lanta-net.ru:2710/announce"
         )
-        
-        // Piece prioritization constants
-        private const val PIECES_TO_BUFFER = 20
         private const val INSTANT_TIER_PIECES = 3
-        private const val DEADLINE_INCREMENT_MS = 100
-        
-        private const val IDLE_TIMEOUT_MS = 10 * 60 * 1000L
+        private const val DEADLINE_INCREMENT_MS = 1000
+        private const val PIECES_TO_BUFFER = 30
     }
     
     private val binder = TorrentBinder()
     private var sessionManager: SessionManager? = null
     private val activeTorrents = ConcurrentHashMap<String, Boolean>()
+    private var server: CrispyServer? = null
     
     // Track pieces with active deadlines for efficient clearing on seek
     private val priorityWindows = ConcurrentHashMap<String, MutableSet<Int>>()
@@ -68,6 +66,7 @@ class TorrentService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        startServer()
         initSession()
     }
     
@@ -83,7 +82,11 @@ class TorrentService : Service() {
         mainHandler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         // CRITICAL: Nuke everything on destroy
-        Thread { stopAll(); stopSession() }.start()
+        Thread { 
+            stopServer()
+            stopAll() 
+            stopSession() 
+        }.start()
     }
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -111,7 +114,7 @@ class TorrentService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
+                CHANNEL_ID,
                 "Crispy Streaming",
                 NotificationManager.IMPORTANCE_LOW
             )
@@ -128,7 +131,7 @@ class TorrentService : Service() {
         }
         
         // Use a generic icon from android.R since we are in a library
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Crispy Native Core")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download)
@@ -137,25 +140,67 @@ class TorrentService : Service() {
             .setOngoing(true)
             .build()
     }
+
+    private fun startServer() {
+        if (server != null && server?.isAlive == true) return
+        
+        try {
+            val downloadDir = getDownloadDir()
+            server = CrispyServer(11470, downloadDir, this)
+            if (server?.safeStart() == true) {
+                Log.d(TAG, "CrispyServer started on port 11470")
+            } else {
+                Log.e(TAG, "Failed to start CrispyServer on port 11470")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting CrispyServer", e)
+        }
+    }
+
+    private fun stopServer() {
+        try {
+            server?.stop()
+            server = null
+            Log.d(TAG, "CrispyServer stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping CrispyServer", e)
+        }
+    }
     
     private fun initSession() {
         if (isSessionActive) return
         
         val settings = SettingsPack().apply {
-            connectionsLimit(350)
-            maxPeerlistSize(2000)
-            activeDownloads(2)
+            connectionsLimit(100)
+            maxPeerlistSize(500)
+            activeDownloads(1)
             activeSeeds(0)
             activeLimit(3)
             activeTrackerLimit(50)
             activeDhtLimit(50)
-            activeLsdLimit(10)
+            activeLsdLimit(0)
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
-            listenInterfaces("0.0.0.0:0")
-            setEnableDht(true)
-            setEnableLsd(true)
+            
+            // PRODUCTION FIX: Use fixed ports to avoid [enum_route] failures on Android 11+
+            // listenInterfaces("0.0.0.0:0") triggers a restricted route scan.
+            listenInterfaces("0.0.0.0:6881,[::]:6881")
+            
+            setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), false) // Restricted on Android 11+
+            // setBoolean(settings_pack.bool_types.dht_ignore_lan_peers.swigValue(), true) // UNRESOLVED: dht_ignore_lan_peers not found in jlibtorrent 2.0.12.7
+            
             setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
+            
+            // Production grade connectivity settings
+            setString(settings_pack.string_types.user_agent.swigValue(), "qBittorrent/4.6.3")
+            
+            // Encryption: Enabled (Prefer) - allows both but prefers encryption
+            // 0=forced, 1=enabled, 2=disabled (Note: libtorrent enums vary, verifying standard: 1 is usually enabled/preferred)
+            setInteger(settings_pack.int_types.in_enc_policy.swigValue(), 1)
+            setInteger(settings_pack.int_types.out_enc_policy.swigValue(), 1)
+            setInteger(settings_pack.int_types.allowed_enc_level.swigValue(), 2) // Both plaintext and RC4 allowed
+            
             setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
             setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
             setBoolean(settings_pack.bool_types.prefer_udp_trackers.swigValue(), true)
@@ -169,8 +214,8 @@ class TorrentService : Service() {
             setBoolean(settings_pack.bool_types.auto_sequential.swigValue(), true)
             setInteger(settings_pack.int_types.tracker_completion_timeout.swigValue(), 15)
             setInteger(settings_pack.int_types.tracker_receive_timeout.swigValue(), 15)
-            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 7)
-            setInteger(settings_pack.int_types.request_timeout.swigValue(), 20)
+            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 30)
+            setInteger(settings_pack.int_types.request_timeout.swigValue(), 60)
             setInteger(settings_pack.int_types.inactivity_timeout.swigValue(), 120)
             setInteger(settings_pack.int_types.min_reconnect_time.swigValue(), 2)
             alertQueueSize(2000)
@@ -253,21 +298,28 @@ class TorrentService : Service() {
     }
 
     fun startInfoHash(infoHash: String, sessionId: String? = null): Boolean {
-        val session = sessionManager ?: return false
+        // Enforce single-stream policy: stop everything and wipe data before starting new
+        stopAll()
+
         val hash = infoHash.lowercase()
+        Log.d(TAG, "startInfoHash: $hash (session: $sessionId)")
         
         if (sessionId != null) {
             this.activeSessionId = sessionId
         }
         
-        // If already tracked, don't re-add
-        if (activeTorrents.containsKey(hash)) {
-            Log.d(TAG, "Torrent already active: $hash")
-            return true
+        // Ensure session is initialized
+        if (sessionManager == null) {
+            initSession()
         }
+        
+        val session = sessionManager ?: return false
         
         try {
             val downloadDir = getDownloadDir()
+            // Directory is already cleaned by stopAll() -> performStartupCleanup()
+            downloadDir.mkdirs()
+
             val trackerParams = PUBLIC_TRACKERS.joinToString("") { "&tr=${java.net.URLEncoder.encode(it, "UTF-8")}" }
             val magnetUri = "magnet:?xt=urn:btih:$hash$trackerParams"
             
@@ -280,9 +332,12 @@ class TorrentService : Service() {
             val params = AddTorrentParams.parseMagnetUri(magnetUri)
             params.savePath(downloadDir.absolutePath)
             session.swig().async_add_torrent(params.swig())
+            
+            updateServiceState()
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting magnet", e)
+            activeTorrents.remove(hash)
             metadataLatches.remove(hash)
             return false
         }
@@ -370,29 +425,46 @@ class TorrentService : Service() {
         }
         
         Log.d(TAG, "Stopping all torrents and cleaning data...")
-        val torrents = activeTorrents.keys.toList()
-        torrents.forEach { deleteTorrentData(it) }
+        
+        // Remove all torrents from session first
+        val sm = sessionManager
+        if (sm != null) {
+            activeTorrents.keys.forEach { hash ->
+                try {
+                    sm.find(Sha1Hash(hash))?.let { sm.remove(it) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing torrent $hash during stopAll", e)
+                }
+            }
+        }
+        
         activeTorrents.clear()
         activeSessionId = null
+        priorityWindows.clear()
+        metadataLatches.values.forEach { it.countDown() }
+        metadataLatches.clear()
+        
+        // PRODUCTION: Always wipe data when stopping all
+        performStartupCleanup()
+        
         updateServiceState()
     }
     
     /**
-     * Delete all files in the download directory on startup.
+     * Delete all files in the download directory.
+     * Synchronous execution preferred for reliability during shutdown.
      */
     fun performStartupCleanup() {
-        Thread {
-            try {
-                val dir = getDownloadDir()
-                if (dir.exists()) {
-                    dir.deleteRecursively()
-                    dir.mkdirs()
-                    Log.d(TAG, "Startup Cleanup: Wiped data at ${dir.absolutePath}")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Startup Cleanup Failed", e)
+        try {
+            val dir = getDownloadDir()
+            if (dir.exists()) {
+                val success = dir.deleteRecursively()
+                dir.mkdirs()
+                Log.d(TAG, "Cleanup: Wiped data at ${dir.absolutePath} (Success: $success)")
             }
-        }.start()
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup Failed", e)
+        }
     }
 
     fun getDownloadDir(): File = getExternalFilesDir(null) ?: filesDir
@@ -458,68 +530,230 @@ class TorrentService : Service() {
         return handle.torrentFile()?.files()?.filePath(fileIdx)
     }
 
-    fun isHeaderReady(infoHash: String, fileIdx: Int): Boolean {
-        val handle = getHandle(infoHash) ?: return false
-        if (!handle.isValid || !handle.status().hasMetadata()) return false
-        val torrentInfo = handle.torrentFile() ?: return false
-        val startPiece = (torrentInfo.files().fileOffset(fileIdx) / torrentInfo.pieceLength()).toInt()
-        for (i in 0 until 3) if (!handle.havePiece(startPiece + i)) return false
-        return true
+    fun hasActiveTorrents(): Boolean = activeTorrents.isNotEmpty()
+
+    fun isHeaderReady(infoHash: String, fileIdx: Int): Pair<Boolean, Float> {
+        val handle = getHandle(infoHash) ?: return Pair(false, 0f)
+        if (!handle.isValid || !handle.status().hasMetadata()) return Pair(false, 0f)
+        val torrentInfo = handle.torrentFile() ?: return Pair(false, 0f)
+
+        val files = torrentInfo.files()
+        val pieceLength = torrentInfo.pieceLength()
+        val fileOffset = files.fileOffset(fileIdx)
+        val fileSize = files.fileSize(fileIdx)
+
+        // Calculate which piece contains the start of this file
+        val startPiece = (fileOffset / pieceLength).toInt()
+
+        // Check if the first 3 pieces are downloaded (typically ~48KB-96KB)
+        // This is enough for any video container header (MKV, MP4, AVI)
+        var downloadedPieces = 0
+        for (i in 0 until 3) {
+            if (handle.havePiece(startPiece + i)) downloadedPieces++
+        }
+
+        val ready = downloadedPieces >= 3
+        // Calculate overall file progress for better UX
+        val endPiece = ((fileOffset + fileSize - 1) / pieceLength).toInt()
+        val totalPieces = endPiece - startPiece + 1
+        var totalDownloaded = 0
+        for (i in startPiece..endPiece) {
+            if (handle.havePiece(i)) totalDownloaded++
+        }
+        val progress = if (totalPieces > 0) (totalDownloaded.toFloat() / totalPieces * 100f) else 0f
+
+        return Pair(ready, progress)
     }
 
     fun prioritizeHeader(infoHash: String, fileIdx: Int) {
         val handle = getHandle(infoHash) ?: return
         if (!handle.isValid || !handle.status().hasMetadata()) return
         val torrentInfo = handle.torrentFile() ?: return
-        
-        val startPiece = (torrentInfo.files().fileOffset(fileIdx) / torrentInfo.pieceLength()).toInt()
-        
-        // Tiered priority for header
+
+        val files = torrentInfo.files()
+        val pieceLength = torrentInfo.pieceLength()
+        val fileOffset = files.fileOffset(fileIdx)
+        val startPiece = (fileOffset / pieceLength).toInt()
+
+        // Set deadline 0 for first 3 pieces (CRITICAL priority)
+        // Set deadline 1000ms for pieces 3-4 (URGENT priority)
         for (i in 0 until 5) {
             val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
-            handle.setPieceDeadline(startPiece + i, deadline)
+            try {
+                handle.setPieceDeadline(startPiece + i, deadline)
+            } catch (e: Exception) {
+                // Piece might be out of range for very small files
+                break
+            }
         }
+
+        Log.d(TAG, "Prioritized header pieces ${startPiece}-${startPiece + 4} for $infoHash/$fileIdx")
     }
 
     fun startStreaming(infoHash: String, fileIdx: Int) {
-        val handle = getHandle(infoHash) ?: return
-        if (!handle.isValid || !handle.status().hasMetadata()) return
-        handle.setFlags(handle.flags().or_(TorrentFlags.SEQUENTIAL_DOWNLOAD))
-        prioritizeHeader(infoHash, fileIdx)
+        val handle = getHandle(infoHash) ?: run {
+            Log.w(TAG, "startStreaming: torrent not found: $infoHash")
+            return
+        }
+        
+        if (!handle.isValid) {
+            Log.w(TAG, "startStreaming: handle invalid: $infoHash")
+            return
+        }
+        
+        if (!handle.status().hasMetadata()) {
+            Log.w(TAG, "startStreaming: torrent metadata not ready: $infoHash")
+            return
+        }
+        
+        val torrentInfo = handle.torrentFile() ?: run {
+            Log.w(TAG, "startStreaming: could not get torrent info: $infoHash")
+            return
+        }
+        
+        if (fileIdx < 0 || fileIdx >= torrentInfo.numFiles()) {
+            Log.w(TAG, "startStreaming: invalid fileIdx: $fileIdx")
+            return
+        }
+        
+        val files = torrentInfo.files()
+        val pieceLength = torrentInfo.pieceLength()
+        val fileOffset = files.fileOffset(fileIdx)
+        val fileSize = files.fileSize(fileIdx)
+        
+        val startPiece = (fileOffset / pieceLength).toInt()
+        val endPiece = ((fileOffset + fileSize - 1) / pieceLength).toInt()
+        
+        // Get or create priority window for this stream
+        val windowKey = "$infoHash:$fileIdx"
+        val priorityWindow = priorityWindows.getOrPut(windowKey) {
+            java.util.concurrent.ConcurrentHashMap.newKeySet()
+        }
+        
+        // Clear any existing deadlines from previous playback
+        val iter = priorityWindow.iterator()
+        while (iter.hasNext()) {
+            val p = iter.next()
+            try { handle.resetPieceDeadline(p) } catch (_: Exception) {}
+            iter.remove()
+        }
+        
+        // Set tiered deadlines for first N pieces
+        val piecesToSet = minOf(PIECES_TO_BUFFER, endPiece - startPiece + 1)
+        for (i in 0 until piecesToSet) {
+            val pieceIdx = startPiece + i
+            // Tier 1: First 3 pieces = deadline 0 (CRITICAL - download ASAP)
+            // Tier 2: Remaining pieces = incremental deadline
+            val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
+            try {
+                handle.setPieceDeadline(pieceIdx, deadline)
+                priorityWindow.add(pieceIdx)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not set deadline for piece $pieceIdx: ${e.message}")
+            }
+        }
+        
+        // Enable sequential download as "autopilot" for continuous playback
+        // This ensures pieces 21, 22, 23... are downloaded after our buffer
+        try {
+            val currentFlags = handle.flags()
+            handle.setFlags(currentFlags.or_(TorrentFlags.SEQUENTIAL_DOWNLOAD))
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not set sequential download flag: ${e.message}")
+        }
+        
+        // Boost peer discovery for faster stream start
+        boostPeerDiscovery(handle)
+        
+        Log.d(TAG, "startStreaming: set tiered deadlines for pieces $startPiece-${startPiece + piecesToSet - 1} (instant: $INSTANT_TIER_PIECES) for $infoHash/$fileIdx")
+    }
+    
+    private fun boostPeerDiscovery(handle: TorrentHandle) {
+        try {
+            handle.forceReannounce()
+            handle.forceDHTAnnounce()
+            Log.d(TAG, "Boosted peer discovery for ${handle.infoHash().toHex()}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not boost peer discovery: ${e.message}")
+        }
     }
 
-    fun handleSeek(infoHash: String, fileIdx: Int, position: Long) {
-        val handle = getHandle(infoHash) ?: return
-        if (!handle.isValid || !handle.status().hasMetadata()) return
-        val torrentInfo = handle.torrentFile() ?: return
+    fun handleSeek(infoHash: String, fileIdx: Int, seekPosition: Long) {
+        val handle = getHandle(infoHash) ?: run {
+            Log.w(TAG, "handleSeek: torrent not found: $infoHash")
+            return
+        }
         
-        val pieceLen = torrentInfo.pieceLength()
-        val fileOffset = torrentInfo.files().fileOffset(fileIdx)
-        val fileSize = torrentInfo.files().fileSize(fileIdx)
+        if (!handle.isValid) {
+            Log.w(TAG, "handleSeek: handle invalid: $infoHash")
+            return
+        }
         
-        val seekPiece = ((fileOffset + position) / pieceLen).toInt()
-        val endPiece = ((fileOffset + fileSize - 1) / pieceLen).toInt()
+        if (!handle.status().hasMetadata()) {
+            Log.w(TAG, "handleSeek: torrent metadata not ready: $infoHash")
+            return
+        }
         
+        val torrentInfo = handle.torrentFile() ?: run {
+            Log.w(TAG, "handleSeek: could not get torrent info: $infoHash")
+            return
+        }
+        
+        if (fileIdx < 0 || fileIdx >= torrentInfo.numFiles()) {
+            Log.w(TAG, "handleSeek: invalid fileIdx: $fileIdx")
+            return
+        }
+        
+        val files = torrentInfo.files()
+        val pieceLength = torrentInfo.pieceLength()
+        val fileOffset = files.fileOffset(fileIdx)
+        val fileSize = files.fileSize(fileIdx)
+        
+        // Calculate piece at seek position
+        val seekPiece = ((fileOffset + seekPosition) / pieceLength).toInt()
+        val endPiece = ((fileOffset + fileSize - 1) / pieceLength).toInt()
+        
+        // Get or create priority window for this stream
         val windowKey = "$infoHash:$fileIdx"
-        val window = priorityWindows.getOrPut(windowKey) { ConcurrentHashMap.newKeySet() }
+        val priorityWindow = priorityWindows.getOrPut(windowKey) {
+            java.util.concurrent.ConcurrentHashMap.newKeySet()
+        }
         
-        // 1. Clear old deadlines
-        val it = window.iterator()
-        while (it.hasNext()) {
-            val p = it.next()
+        // OPTIMIZED CLEAR: Only reset the pieces we previously prioritized
+        // Instead of looping 2000+ times for a 2GB file, we loop ~20 times.
+        // This is the key optimization that prevents seek stutter/jank.
+        val iter = priorityWindow.iterator()
+        while (iter.hasNext()) {
+            val p = iter.next()
             try { handle.resetPieceDeadline(p) } catch (_: Exception) {}
-            it.remove()
+            iter.remove()
         }
         
-        // 2. Set new tiered deadlines
-        val toBuffer = minOf(PIECES_TO_BUFFER, endPiece - seekPiece + 1)
-        for (i in 0 until toBuffer) {
-            val p = seekPiece + i
-            val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
-            handle.setPieceDeadline(p, deadline)
-            window.add(p)
+        // Set new tiered deadlines from seek position
+        val piecesToSet = minOf(PIECES_TO_BUFFER, endPiece - seekPiece + 1)
+        for (i in 0 until piecesToSet) {
+            val pieceIdx = seekPiece + i
+            if (pieceIdx <= endPiece) {
+                // Tier 1: First 3 pieces = deadline 0 (CRITICAL - tells swarm "send NOW or I disconnect")
+                // Tier 2: Remaining pieces = incremental deadline for smooth buffering
+                val deadline = if (i < INSTANT_TIER_PIECES) 0 else (i - INSTANT_TIER_PIECES + 1) * DEADLINE_INCREMENT_MS
+                try {
+                    handle.setPieceDeadline(pieceIdx, deadline)
+                    priorityWindow.add(pieceIdx)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not set deadline for piece $pieceIdx: ${e.message}")
+                }
+            }
         }
         
-        Log.d(TAG, "handleSeek: Prioritized pieces $seekPiece to ${seekPiece + toBuffer - 1}")
+        // Ensure sequential download is enabled (autopilot for continuous playback)
+        try {
+            val currentFlags = handle.flags()
+            handle.setFlags(currentFlags.or_(TorrentFlags.SEQUENTIAL_DOWNLOAD))
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not set sequential download flag: ${e.message}")
+        }
+        
+        Log.d(TAG, "handleSeek: Prioritized pieces $seekPiece-${seekPiece + piecesToSet - 1} (instant: $INSTANT_TIER_PIECES) for $infoHash/$fileIdx")
     }
 }

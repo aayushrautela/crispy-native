@@ -747,6 +747,18 @@ class PlayerActivity : ReactActivity() {
   }
 
   private fun stopPlaybackAndFinish() {
+    // Stop playback directly via the bound service first (synchronous)
+    try {
+      if (engine == ENGINE_VLC) {
+        vlcService?.stopPlayback()
+      } else {
+        exoService?.stopPlayback()
+      }
+    } catch (_: Throwable) {
+      // ignore
+    }
+    
+    // Also send stop intent to the service as a backup
     try {
       if (engine == ENGINE_VLC) {
         startService(Intent(this, VlcPlaybackService::class.java).setAction(VlcPlaybackService.ACTION_STOP))
@@ -818,6 +830,10 @@ class PlayerActivity : ReactActivity() {
     resizeMode = mode
     applyResizeTransform()
     updatePipParams()
+    // Also apply resize mode to VLC engine for its internal aspect ratio handling
+    if (engine == ENGINE_VLC) {
+      vlcService?.setResizeMode(mode)
+    }
   }
 
   fun setAudioTrackFromJs(trackId: Int) {

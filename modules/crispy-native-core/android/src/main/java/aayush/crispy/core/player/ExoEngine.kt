@@ -129,7 +129,8 @@ class ExoEngine(
       }
 
       override fun onIsPlayingChanged(isPlaying: Boolean) {
-        isPaused = !isPlaying
+        // DO NOT set isPaused here - isPaused should only be controlled by explicit setPaused() calls
+        // onIsPlayingChanged fires during buffering/seeking which would incorrectly pause the video
         PipController.updateIsPlayingFromNative(isPlaying)
         mediaSessionHandler?.updatePlaybackState(isPlaying)
 

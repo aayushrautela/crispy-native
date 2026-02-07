@@ -1,7 +1,6 @@
 import { Meta } from '@/src/core/hooks/useHeroItems';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
-import { Shimmer } from '@/src/core/ui/Shimmer';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
@@ -75,13 +74,13 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
     if (isLoading || !items || items.length === 0) {
         return (
             <View style={[styles.skeletonContainer, { height: heroHeight }]}>
-                <Shimmer height={heroHeight} width={SCREEN_WIDTH} borderRadius={0} />
+                <View style={{ height: heroHeight, width: SCREEN_WIDTH, backgroundColor: '#2a2a2a' }} />
                 <View style={styles.skeletonContent}>
-                    <Shimmer width="60%" height={40} borderRadius={8} style={{ marginBottom: 12 }} />
-                    <Shimmer width="40%" height={20} borderRadius={4} style={{ marginBottom: 24 }} />
+                    <View style={{ width: '60%', height: 40, borderRadius: 8, backgroundColor: '#2a2a2a', marginBottom: 12 }} />
+                    <View style={{ width: '40%', height: 20, borderRadius: 4, backgroundColor: '#2a2a2a', marginBottom: 24 }} />
                     <View style={{ flexDirection: 'row', gap: 12 }}>
-                        <Shimmer width={120} height={48} borderRadius={24} />
-                        <Shimmer width={120} height={48} borderRadius={24} />
+                        <View style={{ width: 120, height: 48, borderRadius: 24, backgroundColor: '#2a2a2a' }} />
+                        <View style={{ width: 120, height: 48, borderRadius: 24, backgroundColor: '#2a2a2a' }} />
                     </View>
                 </View>
             </View>

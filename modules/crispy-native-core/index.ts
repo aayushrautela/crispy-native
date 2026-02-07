@@ -105,7 +105,34 @@ export interface CrispyExoVideoViewRef {
 
 export const CrispyExoVideoView = requireNativeViewManager('CrispyExoPlayer') as NativeView<CrispyExoVideoViewProps>;
 
+// KSPlayer view (iOS only)
+export interface CrispyKSVideoViewProps extends ViewProps {
+    source?: string;
+    headers?: Record<string, string>;
+    paused?: boolean;
+    rate?: number;
+    volume?: number;
+    resizeMode?: CrispyResizeMode;
+    metadata?: CrispyMediaMetadata;
+    playInBackground?: boolean;
 
+    // Events
+    onLoad?: (event: { nativeEvent: { duration: number, width: number, height: number } }) => void;
+    onProgress?: (event: { nativeEvent: { currentTime: number, duration: number } }) => void;
+    onEnd?: () => void;
+    onError?: (event: { nativeEvent: { error: string } }) => void;
+    onTracksChanged?: (event: { nativeEvent: any }) => void;
+    onBuffering?: (event: { nativeEvent: { buffering: boolean } }) => void;
+    onReadyForDisplay?: () => void;
+}
+
+export interface CrispyKSVideoViewRef {
+    seek: (positionSec: number) => void;
+    setAudioTrack: (trackId: number) => void;
+    setSubtitleTrack: (trackId: number) => void;
+}
+
+export const CrispyKSVideoView = requireNativeViewManager('CrispyKSPlayer') as NativeView<CrispyKSVideoViewProps>;
 
 export default {
     /**

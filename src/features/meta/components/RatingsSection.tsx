@@ -2,7 +2,6 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { OmdbData, OmdbService } from '@/src/core/services/OmdbService';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
-import { Shimmer } from '@/src/core/ui/Shimmer';
 import { Typography } from '@/src/core/ui/Typography';
 import { Star } from 'lucide-react-native';
 import React, { memo, useEffect, useState } from 'react';
@@ -106,8 +105,8 @@ export const RatingsSection = memo(function RatingsSection({ enriched, colors, p
             ))}
             {isLoadingOmdb && ratings.length === 0 && (
                 <>
-                    <Shimmer width={160} height={64} borderRadius={32} style={{ marginRight: 16 }} />
-                    <Shimmer width={160} height={64} borderRadius={32} />
+                    <View style={{ width: 160, height: 64, borderRadius: 32, backgroundColor: '#2a2a2a', marginRight: 16 }} />
+                    <View style={{ width: 160, height: 64, borderRadius: 32, backgroundColor: '#2a2a2a' }} />
                 </>
             )}
         </>
