@@ -55,6 +55,7 @@ jobs:
         working-directory: ./ios
         run: |
           xcodebuild \
+            -quiet \
             -workspace Crispy.xcworkspace \
             -scheme Crispy \
             -configuration Debug \
@@ -68,6 +69,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             GCC_OPTIMIZATION_LEVEL=s \
             SWIFT_OPTIMIZATION_LEVEL=-Onone \
+            SHOW_S_ENV=NO \
             build
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
