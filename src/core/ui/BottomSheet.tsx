@@ -78,7 +78,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       }
     }, [ref]);
 
-    const { isTablet, width: windowWidth } = useResponsive();
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
@@ -126,14 +125,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       []
     );
 
-    // Tablet specific styles
-    const sheetStyle = useMemo<ViewStyle>(() => {
-      if (!isTablet) return {};
-      return {
-        width: Math.min(windowWidth * 0.9, 640),
-        alignSelf: 'center',
-      };
-    }, [isTablet, windowWidth]);
 
     const backgroundStyle = useMemo<ViewStyle>(() => ({
       backgroundColor: theme.colors.surface,
@@ -222,7 +213,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         enableDynamicSizing={enableDynamicSizing}
         onDismiss={handleDismiss}
         onChange={handleSheetChanges}
-        style={sheetStyle}
         backgroundStyle={backgroundStyle}
         handleIndicatorStyle={handleIndicatorStyle}
         keyboardBehavior="interactive"
