@@ -20,6 +20,8 @@ import { CatalogActionsProvider } from '../features/catalog/context/CatalogActio
 import { TraktProvider } from '../features/trakt/context/TraktContext';
 import '../styles/global.css';
 
+console.log('[CRISPY-BOOT] _layout.tsx module evaluating');
+
 // Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +44,10 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    console.log('[CRISPY-BOOT] RootLayoutNav mounted');
+  }, []);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -77,6 +83,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (loaded || error) {
+      console.log('[CRISPY-BOOT] Fonts loaded state:', { loaded, error });
       SplashScreen.hideAsync();
     }
   }, [loaded, error]);
@@ -130,6 +137,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  console.log('[CRISPY-BOOT] RootLayout component rendering');
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>

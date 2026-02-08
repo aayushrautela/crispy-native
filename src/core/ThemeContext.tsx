@@ -28,6 +28,7 @@ const getAccentHex = (colorName: string): string => {
 };
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+    console.log('[CRISPY-BOOT] ThemeProvider rendering');
     const colorScheme = useColorScheme();
     const { settings } = useUserStore();
     const { amoledMode, accentColor, useMaterialYou } = settings;

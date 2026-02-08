@@ -225,6 +225,7 @@ function loadInitialAddons(): Addon[] {
 }
 
 export const useUserStore = create<UserStoreState>((set, get) => {
+    console.log('[CRISPY-BOOT] useUserStore initializing');
     // 1. Load initial state synchronously from MMKV
     const initialAddons = loadInitialAddons();
 
