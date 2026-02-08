@@ -6,7 +6,7 @@ import { Typography } from '@/src/core/ui/Typography';
 import { useTraktComments } from '@/src/features/trakt/hooks/useTraktComments';
 import { Star } from 'lucide-react-native';
 import React, { memo, useCallback, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { CommentCard } from './CommentCard';
 
 interface CommentsSectionProps {
@@ -19,6 +19,7 @@ interface CommentsSectionProps {
 
 export const CommentsSection = memo(function CommentsSection({ id, type, season, episode, colors }: CommentsSectionProps) {
     const { theme } = useTheme();
+    const { height: screenHeight } = useWindowDimensions();
     const { comments, isLoading } = useTraktComments({ id, type, season, episode });
     const [selectedComment, setSelectedComment] = useState<TraktContentComment | null>(null);
     const bottomSheetRef = useRef<BottomSheetRef>(null);
@@ -64,6 +65,7 @@ export const CommentsSection = memo(function CommentsSection({ id, type, season,
                 title={selectedComment ? (selectedComment.user.name || selectedComment.user.username) : 'Review'}
                 enableDynamicSizing
                 scrollable
+                maxHeight={screenHeight * 0.5}
             >
                 {selectedComment && (
                     <View style={styles.modalContent}>
