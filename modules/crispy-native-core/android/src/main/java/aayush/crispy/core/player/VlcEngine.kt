@@ -29,6 +29,17 @@ class VlcEngine(
   companion object {
     private const val TAG = "VlcEngine"
     private const val PROGRESS_INTERVAL_MS = 500L
+    private const val READY_POLL_INTERVAL_MS = 250L
+  }
+
+  enum class PlayerState {
+    IDLE,
+    PREPARING,
+    READY,
+    PLAYING,
+    PAUSED,
+    ERROR,
+    ENDED
   }
 
   interface NotificationCallbacks {
@@ -46,7 +57,6 @@ class VlcEngine(
     fun onEnd()
     fun onError(error: String)
     fun onTracksChanged(audioTracks: List<Map<String, Any>>, subtitleTracks: List<Map<String, Any>>)
-
     fun onIsPlayingChanged(isPlaying: Boolean) {}
     fun onBufferingChanged(buffering: Boolean) {}
     fun onFirstFrameRendered() {}
@@ -57,85 +67,73 @@ class VlcEngine(
 
   private var libVLC: LibVLC? = null
   private var mediaPlayer: MediaPlayer? = null
-
   private var mediaSessionHandler: MediaSessionHandler? = null
   private var latestMetadata: MediaMetadataState? = null
 
+  private var currentState = PlayerState.IDLE
   private var isPaused: Boolean = true
-  private var hasLoadEventFired: Boolean = false
-  
-  private var lastEmittedIsPlaying: Boolean? = null
-  private var lastEmittedBuffering: Boolean? = null
+  private var hasSentLoadEvent: Boolean = false
   private var firstFrameEmitted: Boolean = false
-  
+
   private var cachedDuration: Long = 0L
   private var cachedWidth: Int = 0
   private var cachedHeight: Int = 0
-  
-  // Surface/container dimensions for resize calculations
   private var surfaceWidth: Int = 0
   private var surfaceHeight: Int = 0
-  
-  // Resize mode: contain (fit), cover (fill), stretch, original
   private var resizeMode: String = "contain"
-  
-  // Pending seek after source change - VLC needs to be fully ready before seeking
+
   private var pendingSeekPositionSec: Double? = null
   private var isSeekable: Boolean = false
   private var lastSeekRequestTime: Long = 0
   private var seekTargetTime: Long? = null
 
-  // Track mapping - kept for backward compatibility but now using VLC track IDs directly
-  private data class TrackInfo(val id: Int, val name: String, val language: String)
-  private var audioTrackMap: Map<Int, Int> = emptyMap() // Index -> VLC Track ID (deprecated)
-  private var spuTrackMap: Map<Int, Int> = emptyMap()   // Index -> VLC Track ID (deprecated)
+  private var audioTrackMap: Map<Int, Int> = emptyMap()
+  private var spuTrackMap: Map<Int, Int> = emptyMap()
 
   private val progressRunnable = object : Runnable {
     override fun run() {
       val mp = mediaPlayer
-      if (mp != null && !mp.isReleased) {
+      if (mp != null && !mp.isReleased && currentState != PlayerState.IDLE) {
         try {
-          // Suppress progress updates during buffering
-          if (lastEmittedBuffering == true) {
-             mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
-             return
-          }
-
-          val posMs = mp.time
-          
-          // Seek Handling: suppress updates until we are close to the target
-          // or a safety timeout has passed.
-          if (seekTargetTime != null) {
+          if (currentState == PlayerState.READY || currentState == PlayerState.PLAYING || currentState == PlayerState.PAUSED) {
+            val posMs = mp.time
+            
+            if (seekTargetTime != null) {
               val diff = Math.abs(posMs - seekTargetTime!!)
               val timeSinceSeek = System.currentTimeMillis() - lastSeekRequestTime
-              
-              // If within 2s of target (keyframe tolerance) OR >2.5s elapsed (safety)
               if (diff < 2000 || timeSinceSeek > 2500) {
-                  seekTargetTime = null // Stabilized
+                seekTargetTime = null
               } else {
-                  // Still seeking/stabilizing - suppress old time
-                  mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
-                  return
+                mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
+                return
               }
-          }
+            }
 
-          val durMs = mp.length
-            
-          // VLC might return -1 for live streams or unknown duration
-          val safeDur = if (durMs > 0) durMs else cachedDuration
+            val durMs = mp.length
+            val safeDur = if (durMs > 0) durMs else cachedDuration
             if (safeDur > cachedDuration) cachedDuration = safeDur
 
             val posSec = if (posMs >= 0) posMs.toDouble() / 1000.0 else 0.0
             val durSec = if (safeDur > 0) safeDur.toDouble() / 1000.0 else 0.0
 
-            listeners.forEach { it.onProgress(posSec, durSec) }
+            dispatch { it.onProgress(posSec, durSec) }
             mediaSessionHandler?.updatePosition(posSec)
             mediaSessionHandler?.updateDuration(durSec)
+          }
         } catch (e: Throwable) {
           Log.w(TAG, "Error in progressRunnable", e)
         }
       }
       mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
+    }
+  }
+
+  private val readyPollRunnable = object : Runnable {
+    override fun run() {
+      if (currentState == PlayerState.PREPARING) {
+        checkReadyState()
+        mainHandler.postDelayed(this, READY_POLL_INTERVAL_MS)
+      }
     }
   }
 
@@ -150,8 +148,8 @@ class VlcEngine(
     try {
       val args = ArrayList<String>()
       args.add("--no-stats")
-      args.add("--network-caching=2000") // 2s buffer
-      args.add("--android-display-chroma=RV32") // RV32 is generally safest for Android SurfaceView
+      args.add("--network-caching=2000")
+      args.add("--no-osd")
       args.add("--no-drop-late-frames")
       args.add("--no-skip-frames")
       
@@ -161,50 +159,44 @@ class VlcEngine(
       mediaPlayer?.setEventListener { event ->
         when (event.type) {
           MediaPlayer.Event.Playing -> {
-            emitIsPlayingChangedIfNeeded(true)
-            emitBufferingChangedIfNeeded(false)
-            // Apply pending seek when playback starts (player is ready)
-            applyPendingSeekIfReady()
+            currentState = PlayerState.PLAYING
+            dispatchIsPlayingChanged(true)
+            dispatchBufferingChanged(false)
+            checkReadyState()
           }
           MediaPlayer.Event.Paused -> {
-            emitIsPlayingChangedIfNeeded(false)
+            currentState = PlayerState.PAUSED
+            dispatchIsPlayingChanged(false)
           }
           MediaPlayer.Event.Stopped -> {
-            emitIsPlayingChangedIfNeeded(false)
+            currentState = PlayerState.IDLE
+            dispatchIsPlayingChanged(false)
             isSeekable = false
           }
           MediaPlayer.Event.EndReached -> {
-             emitIsPlayingChangedIfNeeded(false)
-             listeners.forEach { it.onEnd() }
+            currentState = PlayerState.ENDED
+            dispatchIsPlayingChanged(false)
+            dispatch { it.onEnd() }
           }
           MediaPlayer.Event.EncounteredError -> {
-            listeners.forEach { it.onError("VLC encountered an error") }
+            currentState = PlayerState.ERROR
+            dispatch { it.onError("VLC encountered an error") }
           }
           MediaPlayer.Event.Buffering -> {
-            // event.getBuffering() returns float 0-100
             val buffering = event.buffering < 100f
-            emitBufferingChangedIfNeeded(buffering)
-            // When buffering completes, try to apply pending seek
-            if (!buffering) {
-              applyPendingSeekIfReady()
-            }
+            dispatchBufferingChanged(buffering)
+            if (!buffering) checkReadyState()
           }
           MediaPlayer.Event.SeekableChanged -> {
-            // VLC reports when the media becomes seekable
             isSeekable = event.seekable
-            if (isSeekable) {
-              applyPendingSeekIfReady()
-            }
+            if (isSeekable) checkReadyState()
           }
           MediaPlayer.Event.Vout -> {
-             // Vout count changed, surface attached/detached or resized
-             mediaPlayer?.let { mp ->
-                mp.updateVideoSurfaces() // Ensure layout
-             }
-             checkForLoadEvent()
+            mediaPlayer?.updateVideoSurfaces()
+            checkReadyState()
           }
           MediaPlayer.Event.ESAdded, MediaPlayer.Event.ESDeleted, MediaPlayer.Event.ESSelected -> {
-             parseAndSendTracks()
+            parseAndSendTracks()
           }
         }
       }
@@ -212,106 +204,112 @@ class VlcEngine(
       Log.e(TAG, "Failed to init VLC", e)
     }
   }
-  
-  // Surface Management
-  fun attachSurface(surface: Surface, width: Int, height: Int) {
-      val mp = mediaPlayer ?: return
-      val vout = mp.vlcVout
-      
-      // Store dimensions for resize mode calculations
-      surfaceWidth = width
-      surfaceHeight = height
 
-      if (!vout.areViewsAttached()) {
-          vout.setVideoSurface(surface, null)
-          vout.setWindowSize(width, height)
-          vout.addCallback(this)
-          vout.attachViews()
-          Log.d(TAG, "Surface attached: ${width}x${height}")
-      } else {
-          // Update size if already attached
-          vout.setWindowSize(width, height)
+  private fun checkReadyState() {
+    val mp = mediaPlayer ?: return
+    
+    // Decoupled Ready Check: duration > 0 OR isSeekable is enough to start features
+    val hasMetadata = mp.length > 0 || isSeekable
+    val hasTracks = (mp.media?.trackCount ?: 0) > 0
+    
+    if (hasMetadata || hasTracks) {
+      if (currentState == PlayerState.PREPARING) {
+        currentState = PlayerState.READY
+        mainHandler.removeCallbacks(readyPollRunnable)
       }
       
-      applyResizeMode()
+      if (!hasSentLoadEvent) {
+        if (mp.length > 0) cachedDuration = mp.length
+        val durSec = cachedDuration.toDouble() / 1000.0
+        
+        // We fire onLoad even if dimensions are 0, UI will update when they arrive
+        hasSentLoadEvent = true
+        dispatch { it.onLoad(durSec, cachedWidth, cachedHeight) }
+        
+        if (!firstFrameEmitted && mp.isPlaying) {
+          firstFrameEmitted = true
+          dispatch { it.onFirstFrameRendered() }
+        }
+        
+        applyPendingSeekIfReady()
+      }
+    }
+  }
+
+  fun attachSurface(surface: Surface, width: Int, height: Int) {
+    val mp = mediaPlayer ?: return
+    val vout = mp.vlcVout
+    surfaceWidth = width
+    surfaceHeight = height
+
+    if (!vout.areViewsAttached()) {
+      vout.setVideoSurface(surface, null)
+      vout.setWindowSize(width, height)
+      vout.addCallback(this)
+      vout.attachViews()
+      Log.d(TAG, "Surface attached: ${width}x${height}")
+    } else {
+      vout.setWindowSize(width, height)
+    }
+    applyResizeMode()
   }
 
   fun setSurfaceSize(width: Int, height: Int) {
-      val mp = mediaPlayer ?: return
-      val vout = mp.vlcVout
-      if (vout.areViewsAttached()) {
-          vout.setWindowSize(width, height)
-      }
-      // Store dimensions for resize mode calculations
-      surfaceWidth = width
-      surfaceHeight = height
-      applyResizeMode()
+    val mp = mediaPlayer ?: return
+    val vout = mp.vlcVout
+    if (vout.areViewsAttached()) {
+      vout.setWindowSize(width, height)
+    }
+    surfaceWidth = width
+    surfaceHeight = height
+    applyResizeMode()
   }
 
   fun setResizeMode(mode: String) {
-      resizeMode = mode.lowercase()
-      applyResizeMode()
+    resizeMode = mode.lowercase()
+    applyResizeMode()
   }
 
-  /**
-   * Apply resize mode to VLC video output.
-   * Since PlayerActivity handles the actual SurfaceView resizing, we mostly
-   * just need to tell VLC to fill the provided surface dimensions exactly.
-   */
   private fun applyResizeMode() {
-      val mp = mediaPlayer ?: return
-      
-      // Need both video and surface dimensions to calculate
-      if (cachedWidth <= 0 || cachedHeight <= 0 || surfaceWidth <= 0 || surfaceHeight <= 0) {
-          return
-      }
-      
-      try {
-          when (resizeMode) {
-              "stretch", "cover" -> {
-                  // For Stretch and Cover, we want to fill the surface exactly.
-                  // In PlayerActivity, the surface has been resized to achieve the crop/stretch.
-                  // In other views, this will force a fill (stretch).
-                  mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
-              }
-              else -> {
-                  // For Contain and Original: Use the video's native display aspect ratio (DAR).
-                  // We use the DAR-adjusted cachedWidth/cachedHeight here.
-                  // If the surface matches this ratio (as in PlayerActivity's contain mode), it fills perfectly.
-                  // If the surface is larger (as in CrispyVlcVideoView), VLC adds black bars (standard contain).
-                  mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
-              }
+    val mp = mediaPlayer ?: return
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) return
+    
+    try {
+      when (resizeMode) {
+        "stretch", "cover" -> {
+          mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
+        }
+        else -> {
+          if (cachedWidth > 0 && cachedHeight > 0) {
+            mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
+          } else {
+            mp.aspectRatio = null // Reset to default
           }
-      } catch (e: Exception) {
-          Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
+        }
       }
-  }
-
-  private fun greatestCommonDivisor(a: Int, b: Int): Int {
-      return if (b == 0) a else greatestCommonDivisor(b, a % b)
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
+    }
   }
 
   fun detachSurface() {
-      val mp = mediaPlayer ?: return
-      val vout = mp.vlcVout
-      if (vout.areViewsAttached()) {
-          vout.removeCallback(this)
-          vout.detachViews()
-          Log.d(TAG, "Surface detached")
-      }
+    val mp = mediaPlayer ?: return
+    val vout = mp.vlcVout
+    if (vout.areViewsAttached()) {
+      vout.removeCallback(this)
+      vout.detachViews()
+      Log.d(TAG, "Surface detached")
+    }
   }
 
   fun addListener(listener: Listener) {
     listeners.add(listener)
-    // Snapshot
-    if (hasLoadEventFired) {
+    if (hasSentLoadEvent) {
       val durSec = if (cachedDuration > 0) cachedDuration.toDouble() / 1000.0 else 0.0
       listener.onLoad(durSec, cachedWidth, cachedHeight)
     }
-    // Initial tracks
     if (audioTrackMap.isNotEmpty() || spuTrackMap.isNotEmpty()) {
-         // Re-parse to send current state to new listener
-         parseAndSendTracks()
+      parseAndSendTracks()
     }
   }
 
@@ -319,19 +317,12 @@ class VlcEngine(
     listeners.remove(listener)
   }
 
-  fun setHeaders(headers: Map<String, String>?) {
-    // VLC doesn't support setting headers globally easily like Exo's HttpDataSource.
-    // We handle this per-media if needed, usually via :http-user-agent or :http-referrer options on the Media object.
-    // For now, we'll store them and apply when setting source if feasible.
-    // NOTE: LibVLC support for arbitrary headers is limited. We might need to use :http-referrer etc.
-  }
-
   fun setSource(url: String?) {
     if (url.isNullOrBlank()) return
-    hasLoadEventFired = false
+    
+    currentState = PlayerState.PREPARING
+    hasSentLoadEvent = false
     firstFrameEmitted = false
-    lastEmittedBuffering = null
-    lastEmittedIsPlaying = null
     cachedDuration = 0
     cachedWidth = 0
     cachedHeight = 0
@@ -342,37 +333,48 @@ class VlcEngine(
     val mp = mediaPlayer ?: return
     val lib = libVLC ?: return
 
-    // Encode the URL to handle spaces and special characters that VLC treats as file paths
     val encodedUrl = encodeUrlForVlc(url)
 
     try {
       mp.stop()
       val media = Media(lib, Uri.parse(encodedUrl))
-      
-      // Optimization: Hardware decoding
       media.setHWDecoderEnabled(true, false)
-      
       mp.media = media
       media.release()
       
       mp.play()
       isPaused = false
-      applyPlayPause() // Sync intended state
+      
+      mainHandler.removeCallbacks(readyPollRunnable)
+      mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
     } catch (e: Exception) {
-      listeners.forEach { it.onError(e.message ?: "Failed to load media") }
+      currentState = PlayerState.ERROR
+      dispatch { it.onError(e.message ?: "Failed to load media") }
     }
   }
 
   fun setPaused(paused: Boolean) {
     isPaused = paused
-    applyPlayPause()
+    val mp = mediaPlayer ?: return
+    try {
+      if (paused) {
+        if (mp.isPlaying) mp.pause()
+      } else {
+        if (!mp.isPlaying) mp.play()
+      }
+      mediaSessionHandler?.updatePlaybackState(!paused)
+      PipController.updateIsPlayingFromNative(!paused)
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to apply play/pause", e)
+    }
   }
 
   fun isPlaying(): Boolean = mediaPlayer?.isPlaying ?: false
 
   fun stopPlayback() {
     isPaused = true
-    hasLoadEventFired = false
+    currentState = PlayerState.IDLE
+    hasSentLoadEvent = false
     try {
       mediaPlayer?.stop()
     } catch (_: Throwable) {}
@@ -381,86 +383,49 @@ class VlcEngine(
     PipController.updateIsPlayingFromNative(false)
   }
 
-  private fun applyPlayPause() {
-    val mp = mediaPlayer ?: return
-    try {
-      if (isPaused) {
-          if (mp.isPlaying) mp.pause()
-      } else {
-          if (!mp.isPlaying) mp.play()
-      }
-      mediaSessionHandler?.updatePlaybackState(!isPaused)
-      PipController.updateIsPlayingFromNative(!isPaused)
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to apply play/pause", e)
-    }
-  }
-
   fun seek(positionSec: Double) {
     val mp = mediaPlayer ?: return
     
-    // If seeking to 0 or very close to start, just do it directly
     if (positionSec <= 0.5) {
-      try {
-        mp.time = (positionSec * 1000.0).toLong()
-      } catch (_: Throwable) {}
+      try { mp.time = (positionSec * 1000.0).toLong() } catch (_: Throwable) {}
       return
     }
     
-    // Check if player is ready to seek
-    val canSeekNow = isSeekable && hasLoadEventFired && mp.length > 0
+    val canSeekNow = isSeekable && (currentState == PlayerState.READY || currentState == PlayerState.PLAYING || currentState == PlayerState.PAUSED)
     
     if (canSeekNow) {
-      try {
-        val targetTime = (positionSec * 1000.0).toLong()
-        mp.time = targetTime
-        lastSeekRequestTime = System.currentTimeMillis()
-        seekTargetTime = targetTime
-        Log.d(TAG, "Seek applied immediately to ${positionSec}s")
-      } catch (_: Throwable) {}
+      applySeek(positionSec)
     } else {
-      // Queue the seek for when the player is ready
       pendingSeekPositionSec = positionSec
-      Log.d(TAG, "Seek queued: ${positionSec}s (seekable=$isSeekable, loaded=$hasLoadEventFired, length=${mp.length})")
+      Log.d(TAG, "Seek queued: ${positionSec}s")
     }
   }
   
-  private fun applyPendingSeekIfReady() {
-    val seekPos = pendingSeekPositionSec ?: return
+  private fun applySeek(positionSec: Double) {
     val mp = mediaPlayer ?: return
-    
-    // Check if player is truly ready
-    if (!isSeekable || mp.length <= 0) {
-      return
-    }
-    
-    pendingSeekPositionSec = null
-    
     try {
-      val targetTime = (seekPos * 1000.0).toLong()
+      val targetTime = (positionSec * 1000.0).toLong()
       mp.time = targetTime
       lastSeekRequestTime = System.currentTimeMillis()
       seekTargetTime = targetTime
-      Log.d(TAG, "Pending seek applied: ${seekPos}s")
-    } catch (e: Throwable) {
-      Log.w(TAG, "Failed to apply pending seek", e)
+      Log.d(TAG, "Seek applied to ${positionSec}s")
+    } catch (_: Throwable) {}
+  }
+
+  private fun applyPendingSeekIfReady() {
+    val seekPos = pendingSeekPositionSec ?: return
+    if (isSeekable) {
+      pendingSeekPositionSec = null
+      applySeek(seekPos)
     }
   }
 
   fun setRate(rate: Double) {
-    try {
-      mediaPlayer?.rate = rate.toFloat()
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to set playback speed", e)
-    }
+    try { mediaPlayer?.rate = rate.toFloat() } catch (_: Throwable) {}
   }
 
   fun setVolume(volume: Double) {
-    try {
-      mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100)
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to set volume", e)
-    }
+    try { mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100) } catch (_: Throwable) {}
   }
 
   private fun applyMetadataIfReady() {
@@ -475,172 +440,94 @@ class VlcEngine(
     applyMetadataIfReady()
   }
   
-  // Track Selection
-  // trackId is the VLC native track ID (not index), matching what we emit in parseAndSendTracks
   fun setAudioTrack(trackId: Int) {
-      val mp = mediaPlayer ?: return
-      if (trackId < 0) {
-          // Disable audio by setting track to -1
-          mp.setAudioTrack(-1)
-          return
-      }
-      mp.setAudioTrack(trackId)
+    mediaPlayer?.setAudioTrack(trackId)
   }
   
   fun setSubtitleTrack(trackId: Int) {
-      val mp = mediaPlayer ?: return
-      if (trackId < 0) {
-          mp.setSpuTrack(-1) // Disable subtitles
-          return
-      }
-      mp.setSpuTrack(trackId)
+    mediaPlayer?.setSpuTrack(trackId)
   }
 
-  // --- Internal Checks ---
-
-  private fun checkForLoadEvent() {
-      val mp = mediaPlayer ?: return
-      if (hasLoadEventFired) return
-      
-      // Check tracks to ensure media is parsed
-      val tracks = mp.media?.trackCount ?: 0
-      if (tracks == 0 && mp.time <= 0) return
-
-      // Video dimensions are set via IVLCVout.Callback.onNewVideoLayout
-      // Check if we have valid cached dimensions
-      if (cachedWidth <= 0 || cachedHeight <= 0) {
-          // Not ready yet, dimensions will be set by onNewVideoLayout callback
-          return
-      }
-      
-      if (mp.length > 0) cachedDuration = mp.length
-      val durSec = cachedDuration.toDouble() / 1000.0
-      
-      hasLoadEventFired = true
-      listeners.forEach { it.onLoad(durSec, cachedWidth, cachedHeight) }
-      
-      if (!firstFrameEmitted) {
-          firstFrameEmitted = true
-          listeners.forEach { it.onFirstFrameRendered() }
-      }
-      
-      PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
-  }
-  
-  // IVLCVout.Callback implementation
-  override fun onSurfacesCreated(vlcVout: IVLCVout) {
-      Log.d(TAG, "Surfaces created")
-  }
-  
-  override fun onSurfacesDestroyed(vlcVout: IVLCVout) {
-      Log.d(TAG, "Surfaces destroyed")
-  }
+  override fun onSurfacesCreated(vlcVout: IVLCVout) {}
+  override fun onSurfacesDestroyed(vlcVout: IVLCVout) {}
   
   override fun onNewVideoLayout(
-      vlcVout: IVLCVout,
-      width: Int,
-      height: Int,
-      visibleWidth: Int,
-      visibleHeight: Int,
-      sarNum: Int,
-      sarDen: Int
+    vlcVout: IVLCVout,
+    width: Int,
+    height: Int,
+    visibleWidth: Int,
+    visibleHeight: Int,
+    sarNum: Int,
+    sarDen: Int
   ) {
-      Log.d(TAG, "New video layout: ${width}x${height} (visible: ${visibleWidth}x${visibleHeight}, sar: ${sarNum}:${sarDen})")
-      if (width > 0 && height > 0) {
-          // Calculate Display Aspect Ratio (DAR) width based on Sample Aspect Ratio (SAR).
-          // This ensures that anamorphic content is correctly scaled.
-          val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
-              (width.toDouble() * sarNum / sarDen).toInt()
-          } else {
-              width
-          }
-
-          cachedWidth = darWidth
-          cachedHeight = height
-          
-          // Apply resize mode with new video dimensions
-          applyResizeMode()
-          // Try to fire load event now that we have dimensions
-          checkForLoadEvent()
+    Log.d(TAG, "New layout: ${width}x${height}")
+    if (width > 0 && height > 0) {
+      val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
+        (width.toDouble() * sarNum / sarDen).toInt()
+      } else {
+        width
       }
+      cachedWidth = darWidth
+      cachedHeight = height
+      applyResizeMode()
+      checkReadyState()
+      PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
+    }
   }
 
   private fun parseAndSendTracks() {
-      val mp = mediaPlayer ?: return
-      // val media = mp.media ?: return // Not needed for mp.audioTracks
-      
-      // Audio Tracks
-      val audioTracks = mutableListOf<Map<String, Any>>()
-      val newAudioMap = mutableMapOf<Int, Int>()
-      
-      val vlcAudioTracks = mp.audioTracks
-      if (vlcAudioTracks != null) {
-          var audioIndex = 0
-          for (track in vlcAudioTracks) {
-              if (track.id < 0) continue // Skip disabled/invalid
-
-              val vlcTrackId = track.id
-              val index = audioIndex
-              newAudioMap[index] = vlcTrackId
-              
-              audioTracks.add(mapOf(
-                  "id" to vlcTrackId,
-                  "name" to (track.name ?: "Audio Track"),
-                  "language" to "", // Not available in TrackDescription
-                  "selected" to (mp.audioTrack == vlcTrackId)
-              ))
-              audioIndex++
-          }
+    val mp = mediaPlayer ?: return
+    val audioTracks = mutableListOf<Map<String, Any>>()
+    val newAudioMap = mutableMapOf<Int, Int>()
+    
+    mp.audioTracks?.forEachIndexed { index, track ->
+      if (track.id >= 0) {
+        newAudioMap[index] = track.id
+        audioTracks.add(mapOf(
+          "id" to track.id,
+          "name" to (track.name ?: "Audio $index"),
+          "selected" to (mp.audioTrack == track.id)
+        ))
       }
-      audioTrackMap = newAudioMap
-      
-      // Subtitle Tracks (Text)
-      val subtitleTracks = mutableListOf<Map<String, Any>>()
-      val newSpuMap = mutableMapOf<Int, Int>()
-      
-      val vlcSpuTracks = mp.spuTracks
-      if (vlcSpuTracks != null) {
-          var spuIndex = 0
-          for (track in vlcSpuTracks) {
-              if (track.id < 0) continue // Skip disabled/invalid
-
-              val vlcTrackId = track.id
-              val index = spuIndex
-              newSpuMap[index] = vlcTrackId
-              
-              subtitleTracks.add(mapOf(
-                  "id" to vlcTrackId,
-                  "name" to (track.name ?: "Subtitle"),
-                  "language" to "", // Not available in TrackDescription
-                  "selected" to (mp.spuTrack == vlcTrackId)
-              ))
-              spuIndex++
-          }
+    }
+    audioTrackMap = newAudioMap
+    
+    val subtitleTracks = mutableListOf<Map<String, Any>>()
+    val newSpuMap = mutableMapOf<Int, Int>()
+    
+    mp.spuTracks?.forEachIndexed { index, track ->
+      if (track.id >= 0) {
+        newSpuMap[index] = track.id
+        subtitleTracks.add(mapOf(
+          "id" to track.id,
+          "name" to (track.name ?: "Subtitle $index"),
+          "selected" to (mp.spuTrack == track.id)
+        ))
       }
-      spuTrackMap = newSpuMap
-      
-      listeners.forEach { it.onTracksChanged(audioTracks, subtitleTracks) }
+    }
+    spuTrackMap = newSpuMap
+    
+    dispatch { it.onTracksChanged(audioTracks, subtitleTracks) }
   }
 
-  /*
-   * Build a human-readable track name - Removed as Media.Track is not available
-   */
-
-
-  private fun emitIsPlayingChangedIfNeeded(isPlaying: Boolean) {
-    val prev = lastEmittedIsPlaying
-    if (prev != null && prev == isPlaying) return
-    lastEmittedIsPlaying = isPlaying
-    listeners.forEach { it.onIsPlayingChanged(isPlaying) }
-    PipController.updateIsPlayingFromNative(isPlaying)
-    mediaSessionHandler?.updatePlaybackState(isPlaying)
+  private fun dispatch(action: (Listener) -> Unit) {
+    mainHandler.post {
+      listeners.forEach { action(it) }
+    }
   }
 
-  private fun emitBufferingChangedIfNeeded(buffering: Boolean) {
-    val prev = lastEmittedBuffering
-    if (prev != null && prev == buffering) return
-    lastEmittedBuffering = buffering
-    listeners.forEach { it.onBufferingChanged(buffering) }
+  private fun dispatchIsPlayingChanged(isPlaying: Boolean) {
+    dispatch { 
+      it.onIsPlayingChanged(isPlaying)
+    }
+    mainHandler.post {
+      PipController.updateIsPlayingFromNative(isPlaying)
+      mediaSessionHandler?.updatePlaybackState(isPlaying)
+    }
+  }
+
+  private fun dispatchBufferingChanged(buffering: Boolean) {
+    dispatch { it.onBufferingChanged(buffering) }
   }
 
   private fun ensureMediaSession() {
@@ -651,51 +538,31 @@ class VlcEngine(
       object : MediaSessionHandler.MediaSessionCallbacks {
         override fun onPlay() { setPaused(false) }
         override fun onPause() { setPaused(true) }
-        override fun onStop() {
-          val cb = serviceCallbacks
-          if (cb != null) cb.onStopRequested() else stopPlayback()
-        }
+        override fun onStop() { serviceCallbacks?.onStopRequested() ?: stopPlayback() }
         override fun onSeekTo(pos: Long) { seek(pos / 1000.0) }
       },
-      onNotificationUpdated = if (nc != null) ({ n -> nc.onNotificationUpdated(n) }) else null,
-      onNotificationCancelled = if (nc != null) ({ nc.onNotificationCancelled() }) else null
+      onNotificationUpdated = nc?.let { { n -> it.onNotificationUpdated(n) } },
+      onNotificationCancelled = nc?.let { { it.onNotificationCancelled() } }
     )
   }
 
   fun release() {
     listeners.clear()
-    try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Throwable) {}
+    mainHandler.removeCallbacksAndMessages(null)
     try {
-        mediaPlayer?.vlcVout?.removeCallback(this)
-        mediaPlayer?.release()
-        libVLC?.release()
+      mediaPlayer?.vlcVout?.removeCallback(this)
+      mediaPlayer?.release()
+      libVLC?.release()
+      mediaSessionHandler?.release()
     } catch (_: Throwable) {}
-    try { mediaSessionHandler?.release() } catch (_: Throwable) {}
     mediaSessionHandler = null
     mediaPlayer = null
     libVLC = null
-    latestMetadata = null
   }
 
-  /**
-   * Encodes a URL for VLC playback, ensuring special characters (especially spaces)
-   * are properly percent-encoded. VLC's input_item_SetURI treats URLs with unencoded
-   * spaces as local file paths, causing playback to fail.
-   *
-   * This function:
-   * - Preserves already-encoded characters (no double-encoding)
-   * - Only encodes the path component (scheme, host, port, query preserved)
-   * - Handles edge cases like malformed URLs gracefully
-   * - Falls back to the original URL if encoding fails
-   */
   private fun encodeUrlForVlc(url: String): String {
-    // Quick check: if no problematic characters, return as-is
-    if (!url.contains(' ') && !url.contains('[') && !url.contains(']')) {
-      return url
-    }
-
+    if (!url.contains(' ') && !url.contains('[') && !url.contains(']')) return url
     return try {
-      // Parse the URL to extract components
       val uri = URI(url)
       val scheme = uri.scheme ?: return url
       val host = uri.host ?: return url
@@ -704,51 +571,23 @@ class VlcEngine(
       val query = uri.rawQuery
       val fragment = uri.rawFragment
 
-      // Encode the path: decode first to avoid double-encoding, then re-encode
       val encodedPath = if (path.isNotEmpty()) {
         path.split("/").joinToString("/") { segment ->
-          if (segment.isEmpty()) {
-            segment
-          } else {
-            // Decode first to normalize (handles already-encoded chars)
-            val decoded = try {
-              URLDecoder.decode(segment, "UTF-8")
-            } catch (_: Throwable) {
-              segment
-            }
-            // Re-encode with proper escaping
-            URLEncoder.encode(decoded, "UTF-8")
-              .replace("+", "%20")  // URLEncoder uses + for space, we need %20
-              .replace("%2F", "/")  // Don't escape path separators (shouldn't happen after split)
-              .replace("%3A", ":")  // Preserve colons in path (e.g., timestamps)
+          if (segment.isEmpty()) segment else {
+            val decoded = try { URLDecoder.decode(segment, "UTF-8") } catch (_: Throwable) { segment }
+            URLEncoder.encode(decoded, "UTF-8").replace("+", "%20")
           }
         }
-      } else {
-        path
-      }
+      } else path
 
-      // Reconstruct the URL
       buildString {
-        append(scheme)
-        append("://")
-        append(host)
-        if (port != -1) {
-          append(":")
-          append(port)
-        }
+        append(scheme).append("://").append(host)
+        if (port != -1) append(":").append(port)
         append(encodedPath)
-        if (!query.isNullOrEmpty()) {
-          append("?")
-          append(query)
-        }
-        if (!fragment.isNullOrEmpty()) {
-          append("#")
-          append(fragment)
-        }
+        if (!query.isNullOrEmpty()) append("?").append(query)
+        if (!fragment.isNullOrEmpty()) append("#").append(fragment)
       }
     } catch (e: Throwable) {
-      Log.w(TAG, "Failed to encode URL for VLC, using original: ${e.message}")
-      // Fallback: simple space replacement (better than nothing)
       url.replace(" ", "%20")
     }
   }
