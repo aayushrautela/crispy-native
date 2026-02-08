@@ -1,4 +1,3 @@
-
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -17,7 +16,6 @@ import { SplitHeroLayout } from './SplitHeroLayout';
 
 const HERO_HEIGHT = 600;
 const BACKDROP_HEIGHT = 420;
-// No hardcoded DARK_BASE
 
 interface HeroSectionProps {
     meta: any;
@@ -25,6 +23,8 @@ interface HeroSectionProps {
     colors: any;
     scrollY: SharedValue<number>;
     onWatchPress: () => void;
+    onAiInsightsPress: () => void;
+    isAiLoading?: boolean;
     isMuted?: boolean;
     // Trakt Props for Split Mode
     isAuthenticated?: boolean;
@@ -95,17 +95,19 @@ const HeroMetadata = memo(function HeroMetadata({ enriched, alignment = 'center'
 });
 
 interface HeroAiInsightButtonProps {
+    onPress: () => void;
     isLoading?: boolean;
 }
 
 /**
  * SUB-COMPONENT: HeroAiInsightButton
  */
-const HeroAiInsightButton = memo(function HeroAiInsightButton({ isLoading = false }: HeroAiInsightButtonProps) {
+const HeroAiInsightButton = memo(function HeroAiInsightButton({ onPress, isLoading = false }: HeroAiInsightButtonProps) {
     const { theme } = useTheme();
 
     return (
         <Pressable
+            onPress={onPress}
             style={({ pressed }) => [
                 styles.aiBtnContainer,
                 { opacity: pressed || isLoading ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
@@ -281,7 +283,7 @@ const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpand
  * MAIN COMPONENT: HeroSection
  */
 export const HeroSection = memo(function HeroSection({
-    meta, enriched, colors, scrollY, onWatchPress, isMuted = true,
+    meta, enriched, colors, scrollY, onWatchPress, onAiInsightsPress, isAiLoading, isMuted = true,
     isAuthenticated, isListed, isCollected, isWatched, isSeries, userRating,
     onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress,
     watchState
@@ -336,7 +338,7 @@ export const HeroSection = memo(function HeroSection({
                             onToggle={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                         />
                         <View style={[styles.actionStack, { alignItems: 'center' }]}>
-                            <HeroAiInsightButton />
+                            <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
                             <HeroWatchButton
                                 onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                                 textColor={watchButtonTextColor} label={watchButtonLabel}
@@ -354,6 +356,7 @@ export const HeroSection = memo(function HeroSection({
                                 onCollectionToggle={onCollectionToggle ?? (() => {})}
                                 onWatchedToggle={onWatchedToggle ?? (() => {})}
                                 onRatePress={onRatePress ?? (() => {})}
+                                onAiInsightsPress={onAiInsightsPress}
                                 palette={palette}
                                 style={{ marginTop: 24 }}
                             />
@@ -403,7 +406,7 @@ export const HeroSection = memo(function HeroSection({
                     />
 
                     <View style={styles.actionStack}>
-                        <HeroAiInsightButton />
+                        <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
                         <HeroWatchButton
                             onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                             textColor={watchButtonTextColor} label={watchButtonLabel}

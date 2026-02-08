@@ -5,6 +5,7 @@ import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
 import { generateMediaPalette } from '@/src/core/utils/colors';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
+import { AiInsightsStory } from '@/src/features/meta/components/AiInsightsStory';
 import { CastSection } from '@/src/features/meta/components/CastSection';
 import { CommentsSection } from '@/src/features/meta/components/CommentsSection';
 import { EpisodesSection } from '@/src/features/meta/components/EpisodesSection';
@@ -122,6 +123,7 @@ export default function MetaDetailsScreen() {
     } = useTraktContext();
 
     const [showRatingModal, setShowRatingModal] = useState(false);
+    const [showAiStory, setShowAiStory] = useState(false);
 
     // Computed states
     const isListed = useMemo(() => {
@@ -176,7 +178,14 @@ export default function MetaDetailsScreen() {
     }, [isAuthenticated, isSeries, enriched.imdbId, id, isWatched, removeMovieFromHistory, markMovieAsWatched]);
 
     // AI Hooks
-    const { loadFromCache } = useAiInsights();
+    const { loadFromCache, generateInsights, insights, isLoading: isAiLoading } = useAiInsights();
+
+    const handleAiInsightsPress = useCallback(async () => {
+        if (!insights) {
+            await generateInsights(enriched);
+        }
+        setShowAiStory(true);
+    }, [insights, enriched, generateInsights]);
 
     const mediaPalette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
     const amoled = theme.dark && theme.colors.background === '#000000';
@@ -347,6 +356,8 @@ export default function MetaDetailsScreen() {
                     colors={colors}
                     scrollY={scrollY}
                     onWatchPress={handleWatchPress}
+                    onAiInsightsPress={handleAiInsightsPress}
+                    isAiLoading={isAiLoading}
                     isMuted={isMuted}
                     // Pass Trakt props for split layout
                     watchState={watchState}
@@ -375,6 +386,7 @@ export default function MetaDetailsScreen() {
                             onCollectionToggle={handleCollectionToggle}
                             onWatchedToggle={handleWatchedToggle}
                             onRatePress={() => setShowRatingModal(true)}
+                            onAiInsightsPress={handleAiInsightsPress}
                             palette={mediaPalette}
                             style={{ marginTop: 24 }}
                         />
@@ -468,6 +480,12 @@ export default function MetaDetailsScreen() {
                     isVisible={isStreamSheetVisible}
                 />
             </CustomBottomSheet>
+
+            <AiInsightsStory
+                visible={showAiStory}
+                onClose={() => setShowAiStory(false)}
+                insights={insights}
+            />
         </View>
     );
 }
