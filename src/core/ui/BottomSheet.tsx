@@ -178,6 +178,16 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         );
       }
 
+      // v5 optimization: If enableDynamicSizing is false, we want the content to fill the sheet.
+      // We use a regular View instead of BottomSheetView to avoid gesture conflicts with nested lists.
+      if (!scrollable && enableDynamicSizing === false) {
+        return (
+          <View style={[{ paddingBottom, paddingHorizontal: 24, flex: 1 }]}>
+            {children}
+          </View>
+        );
+      }
+
       if (scrollable) {
         return (
           <BottomSheetScrollView

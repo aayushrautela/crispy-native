@@ -1,7 +1,8 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Pressable } from 'react-native-gesture-handler';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import Animated, {
     interpolate,
     LinearTransition,

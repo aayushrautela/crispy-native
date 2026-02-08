@@ -97,9 +97,9 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     }
 
     return (
-        <View style={[styles.container, { flex: 1 }, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
+        <View style={[{ flex: 1 }, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
             {!hideHeader && (
-                <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
+                <View style={{ paddingHorizontal: 24, marginBottom: 24, paddingTop: 32 }}>
                     <Typography variant="headline-small" weight="black" style={{ color: theme.colors.onSurface }}>
                         Available Streams
                     </Typography>
@@ -126,7 +126,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
 
 const styles = StyleSheet.create({
     container: {
-        paddingTop: 32,
+        // Handled via inline styles for better nesting control
     },
     loading: {
         height: 300,
