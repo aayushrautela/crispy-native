@@ -42,6 +42,9 @@ class CrispyVlcVideoView(
 
   // Helper surface view for VLC output
   private val surfaceView = SurfaceView(context)
+  
+  private var videoW: Int = 0
+  private var videoH: Int = 0
 
   private var playbackService: VlcPlaybackService? = null
   private var isBound: Boolean = false
@@ -135,6 +138,13 @@ class CrispyVlcVideoView(
 
     bindPlaybackService()
   }
+  
+  override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+      super.onLayout(changed, left, top, right, bottom)
+      if (changed) {
+          applyResizeTransform()
+      }
+  }
 
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
@@ -164,6 +174,7 @@ class CrispyVlcVideoView(
   fun setResizeMode(mode: String?) {
       requestedResizeMode = mode
       playbackService?.setResizeMode(mode)
+      applyResizeTransform()
   }
 
   fun setPlayInBackground(enabled: Boolean) {
@@ -204,6 +215,11 @@ class CrispyVlcVideoView(
   // --- Listener Impl ---
   
   override fun onLoad(duration: Double, width: Int, height: Int) {
+      if (width > 0 && height > 0) {
+          videoW = width
+          videoH = height
+          applyResizeTransform()
+      }
       onLoad(mapOf("duration" to duration, "width" to width, "height" to height))
   }
 
@@ -273,5 +289,56 @@ class CrispyVlcVideoView(
     }
     playbackService = null
     isBound = false
+  }
+
+  private fun applyResizeTransform() {
+    if (width <= 0 || height <= 0 || videoW <= 0 || videoH <= 0) return
+
+    val mode = (requestedResizeMode ?: "contain").lowercase()
+    val containerW = width
+    val containerH = height
+
+    var targetW = containerW
+    var targetH = containerH
+
+    if (mode == "stretch") {
+      targetW = containerW
+      targetH = containerH
+    } else {
+      val videoRatio = videoW.toFloat() / videoH.toFloat()
+      val containerRatio = containerW.toFloat() / containerH.toFloat()
+
+      if (mode == "contain") {
+        if (containerRatio > videoRatio) {
+          // Container is wider -> fit height, adjust width
+          targetH = containerH
+          targetW = (containerH * videoRatio).toInt()
+        } else {
+          // Container is taller -> fit width, adjust height
+          targetW = containerW
+          targetH = (containerW / videoRatio).toInt()
+        }
+      } else if (mode == "cover") {
+        if (containerRatio > videoRatio) {
+          // Container is wider -> match width, exceed height
+          targetW = containerW
+          targetH = (containerW / videoRatio).toInt()
+        } else {
+          // Container is taller -> match height, exceed width
+          targetH = containerH
+          targetW = (containerH * videoRatio).toInt()
+        }
+      }
+    }
+
+    val params = surfaceView.layoutParams as? FrameLayout.LayoutParams
+      ?: FrameLayout.LayoutParams(targetW, targetH)
+
+    if (params.width != targetW || params.height != targetH) {
+      params.width = targetW
+      params.height = targetH
+      params.gravity = android.view.Gravity.CENTER
+      surfaceView.layoutParams = params
+    }
   }
 }
