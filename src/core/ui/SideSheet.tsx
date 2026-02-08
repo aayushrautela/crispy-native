@@ -1,6 +1,7 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import React, { useEffect } from 'react';
 import { BackHandler, Dimensions, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -27,6 +28,7 @@ export function SideSheet({
     width = '45%' // Default width for side sheet
 }: SideSheetProps) {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
     const sheetBg = (theme.colors as any).surfaceContainerHigh || '#1E1E1E';
 
     // Handle Hardware Back Button
@@ -55,7 +57,6 @@ export function SideSheet({
                 />
             </Pressable>
 
-            {/* Sheet Content */}
             <Animated.View
                 entering={SlideInRight.duration(300)}
                 exiting={SlideOutRight.duration(300)}
@@ -65,6 +66,9 @@ export function SideSheet({
                         width: width as any,
                         backgroundColor: sheetBg,
                         borderLeftColor: 'transparent',
+                        paddingTop: insets.top,
+                        paddingBottom: insets.bottom,
+                        paddingRight: insets.right,
                     } as any
                 ]}
             >

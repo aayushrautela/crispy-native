@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Pressable, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { StepForward } from 'lucide-react-native';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -20,11 +21,19 @@ export const PlayerSkipIntro: React.FC<PlayerSkipIntroProps> = ({
     resetControlsTimer,
 }) => {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     if (!visible) return null;
 
     return (
-        <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={styles.skipIntroContainer}>
+        <Animated.View 
+            entering={FadeIn.duration(300)} 
+            exiting={FadeOut.duration(300)} 
+            style={[
+                styles.skipIntroContainer,
+                { bottom: 120 + insets.bottom, right: 40 + insets.right }
+            ]}
+        >
             <Pressable
                 style={[styles.skipIntroBtn, { backgroundColor: theme.colors.primary, borderColor: theme.colors.outline }]}
                 onPress={() => {
@@ -58,11 +67,19 @@ export const PlayerUpNext: React.FC<PlayerUpNextProps> = ({
     onCancel,
 }) => {
     const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     if (!visible) return null;
 
     return (
-        <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={styles.upNextContainer}>
+        <Animated.View 
+            entering={FadeIn.duration(300)} 
+            exiting={FadeOut.duration(300)} 
+            style={[
+                styles.upNextContainer,
+                { bottom: 120 + insets.bottom, right: 40 + insets.right }
+            ]}
+        >
             <View style={[styles.upNextCard, { backgroundColor: 'rgba(30,30,30,0.95)' }]}> 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
                     {!!poster && <Image source={{ uri: poster }} style={styles.upNextPoster} />}

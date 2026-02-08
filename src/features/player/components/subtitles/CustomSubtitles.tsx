@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface CustomSubtitlesProps {
     visible: boolean;
@@ -20,10 +21,20 @@ export const CustomSubtitles: React.FC<CustomSubtitlesProps> = ({
     backgroundColor = 'transparent',
     textShadow = true,
 }) => {
+    const insets = useSafeAreaInsets();
     if (!visible || !text) return null;
 
     return (
-        <View style={[styles.container, { bottom: bottomOffset }]} pointerEvents="none">
+        <View 
+            style={[
+                styles.container, 
+                { 
+                    bottom: bottomOffset,
+                    paddingHorizontal: 20 + Math.max(insets.left, insets.right)
+                }
+            ]} 
+            pointerEvents="none"
+        >
             <View style={[styles.wrapper, { backgroundColor }]}>
                 <Text
                     style={[

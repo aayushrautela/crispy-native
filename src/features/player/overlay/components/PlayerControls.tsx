@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { ArrowLeft, Play, Pause, StepBack, StepForward, Headphones, Languages, Layers, Settings, Info } from 'lucide-react-native';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -51,6 +52,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
 }) => {
     const { theme } = useTheme();
     const { width } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
 
     const duration = useMemo(() => {
         const next = stableDuration > 0 ? stableDuration : progress.duration;
@@ -64,7 +66,11 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
     return (
         <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(300)} style={styles.overlay}>
             {/* Top Bar */}
-            <View style={styles.topBar}>
+            <View style={[styles.topBar, { 
+                paddingLeft: Math.max(20, insets.left), 
+                paddingRight: Math.max(20, insets.right),
+                paddingTop: Math.max(20, insets.top)
+            }]}>
                 <Pressable onPress={onClose} style={styles.backBtn}>
                     <ArrowLeft color="#fff" size={24} />
                 </Pressable>
@@ -111,15 +117,21 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
             </View>
 
             {/* Bottom Controls */}
-            <View style={styles.bottomArea}>
+            <View style={[styles.bottomArea, { paddingBottom: Math.max(20, insets.bottom) }]}>
                 <View
-                    style={styles.progressContainer}
+                    style={[styles.progressContainer, { 
+                        paddingLeft: Math.max(20, insets.left), 
+                        paddingRight: Math.max(20, insets.right) 
+                    }]}
                     onStartShouldSetResponder={() => true}
                     onMoveShouldSetResponder={() => true}
                     onResponderGrant={(e) => {
                         setIsSeeking(true);
                         const { pageX } = e.nativeEvent;
-                        const percentage = Math.max(0, Math.min(1, pageX / width));
+                        const paddingL = Math.max(20, insets.left);
+                        const paddingR = Math.max(20, insets.right);
+                        const barWidth = width - paddingL - paddingR;
+                        const percentage = Math.max(0, Math.min(1, (pageX - paddingL) / barWidth));
                         const targetPos = seekableDuration * percentage;
                         void CrispyNativeCore.nativePlayerSeek(targetPos);
                         resetControlsTimer();
@@ -127,7 +139,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     }}
                     onResponderMove={(e) => {
                         const { pageX } = e.nativeEvent;
-                        const percentage = Math.max(0, Math.min(1, pageX / width));
+                        const paddingL = Math.max(20, insets.left);
+                        const paddingR = Math.max(20, insets.right);
+                        const barWidth = width - paddingL - paddingR;
+                        const percentage = Math.max(0, Math.min(1, (pageX - paddingL) / barWidth));
                         const targetPos = seekableDuration * percentage;
                         void CrispyNativeCore.nativePlayerSeek(targetPos);
                         resetControlsTimer();
@@ -152,7 +167,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     })()}
                 </View>
 
-                <View style={styles.controlsRow}>
+                <View style={[styles.controlsRow, { 
+                    paddingLeft: Math.max(20, insets.left), 
+                    paddingRight: Math.max(20, insets.right) 
+                }]}>
                     <View style={styles.timePill}>
                         <Text style={styles.timeText}>{formatTime(progress.position)}</Text>
                         <Text style={[styles.timeText, { opacity: 0.5, marginHorizontal: 4 }]}>/</Text>
