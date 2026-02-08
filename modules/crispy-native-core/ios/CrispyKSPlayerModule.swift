@@ -44,6 +44,26 @@ public class CrispyKSPlayerModule: Module {
             OnViewDidUpdateProps { (view: CrispyKSVideoView) in
                 view.applyProps()
             }
+            
+            // Events
+            Prop("onProgress") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onProgress = handler
+            }
+            Prop("onLoad") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onLoad = handler
+            }
+            Prop("onBuffering") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onBuffering = handler
+            }
+            Prop("onEnd") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onEnd = handler
+            }
+            Prop("onError") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onError = handler
+            }
+            Prop("onReadyForDisplay") { (view: CrispyKSVideoView, handler: EventDispatcher) in
+                view.onReadyForDisplay = handler
+            }
         }
     }
 }
@@ -61,6 +81,14 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     private var resizeModeVal: String = "contain"
     private var metadata: [String: String]?
     private var playInBackground: Bool = false
+    
+    // Events
+    public var onProgress: EventDispatcher?
+    public var onLoad: EventDispatcher?
+    public var onBuffering: EventDispatcher?
+    public var onEnd: EventDispatcher?
+    public var onError: EventDispatcher?
+    public var onReadyForDisplay: EventDispatcher?
     
     private var hasLoaded: Bool = false
     private var duration: TimeInterval = 0
@@ -167,7 +195,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             // Auto play is handled by set(resource) usually, but we can enforce
             // self.playerLayer?.player.play()
         } else {
-             self.playerLayer?.player.pause()
+             self.playerLayer?.player?.pause()
         }
         
         hasLoaded = true
@@ -199,11 +227,6 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             contentMode = .scaleAspectFit
         }
         player.contentMode = contentMode
-    }
-        
-        if let layer = self.playerLayer as? AVPlayerLayer {
-            layer.videoGravity = gravity
-        }
     }
     
     // MARK: - Public Methods
@@ -238,21 +261,25 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
         
         switch state {
         case .readyToPlay:
-            emitEvent("onReadyForDisplay", [:])
+            onReadyForDisplay?([:])
             let duration = layer.player.duration
-            emitEvent("onLoad", [
+            let size = layer.player.naturalSize
+            videoWidth = Int(size.width)
+            videoHeight = Int(size.height)
+            
+            onLoad?([
                 "duration": duration,
                 "width": videoWidth,
                 "height": videoHeight
             ])
         case .buffering:
-            emitEvent("onBuffering", ["buffering": true])
+            onBuffering?(["buffering": true])
         case .bufferFinished:
-            emitEvent("onBuffering", ["buffering": false])
+            onBuffering?(["buffering": false])
         case .playedToTheEnd:
-            emitEvent("onEnd", [:])
+            onEnd?([:])
         case .error:
-            emitEvent("onError", ["error": "Playback error"])
+            onError?(["error": "Playback error"])
         default:
             break
         }
@@ -261,13 +288,26 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     // MARK: - Event Emission
     
     private func emitEvent(_ name: String, _ body: [String: Any]) {
-        // Events are emitted through the module's event system
-        // Implementation depends on Expo Modules event handling
-        // For now, this is a placeholder matching original code
+        switch name {
+        case "onProgress":
+            onProgress?(body)
+        case "onLoad":
+            onLoad?(body)
+        case "onBuffering":
+            onBuffering?(body)
+        case "onEnd":
+            onEnd?(body)
+        case "onError":
+            onError?(body)
+        case "onReadyForDisplay":
+            onReadyForDisplay?(body)
+        default:
+            break
+        }
     }
     
     public override func removeFromSuperview() {
-        self.playerLayer?.player.pause()
+        self.playerLayer?.player?.pause()
         super.removeFromSuperview()
     }
 }
