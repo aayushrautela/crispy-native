@@ -50,7 +50,7 @@ export function useAiInsights() {
 
         // Determine model
         const MODELS: Record<string, string> = {
-            'deepseek-r1': 'deepseek/deepseek-r1:free',
+            'deepseek-r1': 'deepseek/deepseek-r1-0528:free',
             'nvidia-nemotron': 'nvidia/nemotron-3-nano-30b-a3b:free'
         };
 
@@ -93,9 +93,9 @@ Generate a JSON object with:
 1. "insights": Array of 3 objects, each with:
    - "category": Short uppercase label (e.g., "CRITICAL CONSENSUS", "VISUAL STYLE").
    - "title": Punchy, short headline.
-   - "content": 1-2 sentence description.
+   - "content": 3-4 sentence description.
    - "type": One of ["consensus", "performance", "theme", "vibe", "style", "controversy", "character"].
-2. "trivia": A single interesting "Did you know?" fact.
+2. "trivia": A single interesting "Did you know?" fact (1-2 sentences).
 
 Return ONLY valid JSON.
 `;
