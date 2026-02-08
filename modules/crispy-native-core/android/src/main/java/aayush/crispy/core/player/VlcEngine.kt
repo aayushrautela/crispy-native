@@ -89,6 +89,7 @@ class VlcEngine(
 
   private var audioTrackMap: Map<Int, Int> = emptyMap()
   private var spuTrackMap: Map<Int, Int> = emptyMap()
+  private var currentHeaders: Map<String, String>? = null
 
   private val progressRunnable = object : Runnable {
     override fun run() {
@@ -317,6 +318,10 @@ class VlcEngine(
     listeners.remove(listener)
   }
 
+  fun setHeaders(headers: Map<String, String>?) {
+    currentHeaders = headers
+  }
+
   fun setSource(url: String?) {
     if (url.isNullOrBlank()) return
     
@@ -338,6 +343,15 @@ class VlcEngine(
     try {
       mp.stop()
       val media = Media(lib, Uri.parse(encodedUrl))
+
+      currentHeaders?.forEach { (key, value) ->
+        if (key.equals("User-Agent", ignoreCase = true)) {
+          media.addOption(":http-user-agent=$value")
+        } else if (key.equals("Referer", ignoreCase = true)) {
+          media.addOption(":http-referrer=$value")
+        }
+      }
+
       media.setHWDecoderEnabled(true, false)
       mp.media = media
       media.release()
