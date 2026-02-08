@@ -132,7 +132,8 @@ export interface CrispyKSVideoViewRef {
     setSubtitleTrack: (trackId: number) => void;
 }
 
-export const CrispyKSVideoView = requireNativeViewManager('CrispyKSPlayer') as NativeView<CrispyKSVideoViewProps>;
+// export const CrispyKSVideoView = requireNativeViewManager('CrispyKSPlayer') as NativeView<CrispyKSVideoViewProps>;
+export const CrispyKSVideoView = null as any;
 
 export default {
     /**
