@@ -122,15 +122,19 @@ const HeroAiInsightButton = memo(function HeroAiInsightButton({ onPress, isLoadi
             >
                 <View style={[styles.aiBtnInner, { backgroundColor: theme.colors.background }]}>
                     {isLoading ? (
-                        <LoadingIndicator color="white" size={36} />
+                        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                            <LoadingIndicator color="#9D3861" size={36} />
+                        </View>
                     ) : (
                         <>
                             <View style={styles.aiIconContainer}>
                                 <Sparkles size={20} color="white" fill="white" />
                             </View>
-                            <Typography variant="title-medium" weight="black" style={{ color: 'white', fontSize: 16 }}>
-                                AI insight
-                            </Typography>
+                            <View style={styles.aiLabelContainer}>
+                                <Typography variant="title-medium" weight="black" style={{ color: 'white', fontSize: 16 }}>
+                                    AI insight
+                                </Typography>
+                            </View>
                         </>
                     )}
                 </View>
@@ -356,7 +360,6 @@ export const HeroSection = memo(function HeroSection({
                                 onCollectionToggle={onCollectionToggle ?? (() => {})}
                                 onWatchedToggle={onWatchedToggle ?? (() => {})}
                                 onRatePress={onRatePress ?? (() => {})}
-                                onAiInsightsPress={onAiInsightsPress}
                                 palette={palette}
                                 style={{ marginTop: 24 }}
                             />
@@ -443,8 +446,9 @@ const styles = StyleSheet.create({
     watchLabelContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginRight: 60 },
     aiBtnContainer: { width: '100%', height: 68, borderRadius: 34, overflow: 'hidden', marginBottom: 12 },
     aiBtnGradientBorder: { flex: 1, padding: 1.5, borderRadius: 34 },
-    aiBtnInner: { flex: 1, borderRadius: 32.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-    aiIconContainer: { marginRight: 8 },
+    aiBtnInner: { flex: 1, borderRadius: 32.5, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12.5 },
+    aiIconContainer: { width: 60, height: 40, alignItems: 'center', justifyContent: 'center' },
+    aiLabelContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginRight: 60 },
     leftPaneOverlay: {
         position: 'absolute',
         top: 0,

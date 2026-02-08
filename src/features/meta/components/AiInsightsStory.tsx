@@ -1,34 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     View, 
     Text, 
     StyleSheet, 
     TouchableOpacity, 
     Dimensions,
-    Pressable 
+    Pressable,
+    BackHandler
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InsightCard } from '../hooks/useAiInsights';
 
 const { width, height } = Dimensions.get('window');
 
 interface AiInsightsStoryProps {
     visible: boolean;
-    insights: Array<{
-        title: string;
-        content: string;
-        type: 'fact' | 'recommendation' | 'analysis';
-    }> | null;
+    insights: InsightCard[] | null;
+    trivia?: string;
     onClose: () => void;
 }
 
-export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, onClose }) => {
+const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
+    switch (type) {
+        case 'consensus': return 'people';
+        case 'performance': return 'flash';
+        case 'theme': return 'color-palette';
+        case 'vibe': return 'musical-notes';
+        case 'style': return 'brush';
+        case 'performance_actor': return 'person';
+        case 'controversy': return 'alert-circle';
+        case 'character': return 'body';
+        case 'trivia': return 'bulb';
+        default: return 'analytics';
+    }
+};
+
+export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const { theme } = useTheme();
     const insets = useSafeAreaInsets();
 
-    if (!visible || !insights || insights.length === 0) {
+    useEffect(() => {
+        const onBackPress = () => {
+            if (visible) {
+                onClose();
+                return true;
+            }
+            return false;
+        };
+
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+        return () => subscription.remove();
+    }, [visible, onClose]);
+
+    const allInsights = React.useMemo(() => {
+        if (!insights) return [];
+        const cards: InsightCard[] = [...insights];
+        if (trivia) {
+            cards.push({
+                type: 'trivia',
+                title: 'Did You Know?',
+                content: trivia,
+                category: 'TRIVIA'
+            });
+        }
+        return cards;
+    }, [insights, trivia]);
+
+    if (!visible || allInsights.length === 0) {
         return null;
     }
 
@@ -38,7 +80,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
     };
 
     const handleNext = () => {
-        if (currentIndex < insights.length - 1) {
+        if (currentIndex < allInsights.length - 1) {
             setCurrentIndex(currentIndex + 1);
         } else {
             handleClose();
@@ -60,7 +102,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
         }
     };
 
-    const currentInsight = insights[currentIndex];
+    const currentInsight = allInsights[currentIndex];
 
     if (!currentInsight) {
         return null;
@@ -73,14 +115,11 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                     <View style={styles.header}>
                         <View style={styles.typeBadge}>
                             <Ionicons 
-                                name={
-                                    currentInsight.type === 'fact' ? 'bulb' :
-                                    currentInsight.type === 'recommendation' ? 'star' : 'analytics'
-                                } 
+                                name={getIconForType(currentInsight.type)} 
                                 size={16} 
                                 color="#FFD700" 
                             />
-                            <Text style={styles.typeText}>{currentInsight.type.toUpperCase()}</Text>
+                            <Text style={styles.typeText}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
                         </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                             <Ionicons name="close" size={28} color="white" />
@@ -94,7 +133,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
 
             {/* Indicators */}
             <View style={[styles.indicatorContainer, { top: insets.top + 20 }]}>
-                {insights.map((_, i) => (
+                {allInsights.map((_, i) => (
                     <View key={i} style={styles.indicatorBackground}>
                         <View 
                             style={[
