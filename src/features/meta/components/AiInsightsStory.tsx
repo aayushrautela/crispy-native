@@ -22,6 +22,7 @@ interface AiInsightsStoryProps {
     onClose: () => void;
     meta?: Partial<TMDBMeta>;
     backgroundColor?: string;
+    accentColor?: string;
 }
 
 const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
@@ -41,12 +42,13 @@ const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta, backgroundColor }) => {
+export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta, backgroundColor, accentColor }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
 
     const effectiveBg = backgroundColor || (theme.dark ? '#000' : '#fff');
+    const effectiveAccent = accentColor || '#FFD700';
     const isDark = theme.dark; // Or calculate brightness of effectiveBg if needed, but project uses theme.dark usually
 
     const allInsights = React.useMemo(() => {
@@ -123,9 +125,9 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                             <Ionicons 
                                 name={getIconForType(currentInsight.type)} 
                                 size={16} 
-                                color="#FFD700" 
+                                color={effectiveAccent} 
                             />
-                            <Text style={styles.typeText}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
+                            <Text style={[styles.typeText, { color: effectiveAccent }]}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
                         </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                             <Ionicons name="close" size={28} color="white" />

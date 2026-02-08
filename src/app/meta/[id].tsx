@@ -487,6 +487,7 @@ export default function MetaDetailsScreen() {
                 trivia={insights?.trivia}
                 meta={enriched}
                 backgroundColor={effectiveBackground}
+                accentColor={mediaPalette.primary}
             />
         </View>
     );
