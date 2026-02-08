@@ -1,6 +1,6 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
-import { Bookmark, Check, Circle, LayoutGrid, Star, Sparkles } from 'lucide-react-native';
+import { Bookmark, Check, Circle, LayoutGrid, Star } from 'lucide-react-native';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 
@@ -15,7 +15,6 @@ interface MetaActionRowProps {
     onCollectionToggle: () => void;
     onWatchedToggle: () => void;
     onRatePress: () => void;
-    onAiInsightsPress?: () => void;
     palette: any;
     style?: ViewStyle;
 }
@@ -31,7 +30,6 @@ export const MetaActionRow = memo(function MetaActionRow({
     onCollectionToggle,
     onWatchedToggle,
     onRatePress,
-    onAiInsightsPress,
     palette,
     style
 }: MetaActionRowProps) {
@@ -108,21 +106,6 @@ export const MetaActionRow = memo(function MetaActionRow({
                 </View>
                 <Typography variant="label" style={[styles.iconActionLabel, userRating ? { color: '#FFD700' } : { color: iconColor, opacity: 0.8 }]}>
                     {userRating ? `Rated ${userRating * 2}` : 'Rate'}
-                </Typography>
-            </Pressable>
-
-            <Pressable
-                style={styles.iconActionItem}
-                onPress={onAiInsightsPress}
-            >
-                <View style={[styles.pill, { backgroundColor: itemBg }]}>
-                    <Sparkles
-                        size={22}
-                        color={theme.colors.primary}
-                    />
-                </View>
-                <Typography variant="label" style={[styles.iconActionLabel, { color: theme.colors.primary }]}>
-                    Insights
                 </Typography>
             </Pressable>
         </View >

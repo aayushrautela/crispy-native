@@ -78,7 +78,7 @@ const HeroSlideComponent = ({
             >
                 <View style={styles.backgroundImage}>
                     <ExpoImage
-                        recyclingKey={item.id}
+                        recyclingKey={String(item.id)}
                         source={{ uri: item.background }}
                         style={StyleSheet.absoluteFill}
                         contentFit="cover"

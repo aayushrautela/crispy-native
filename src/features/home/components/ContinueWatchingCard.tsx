@@ -70,7 +70,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                 <View style={styles.imageContainer}>
                     {imageSrc ? (
                         <ExpoImage
-                            recyclingKey={displayItem.id}
+                            recyclingKey={String(displayItem.id)}
                             source={{ uri: imageSrc }}
                             style={styles.image}
                             contentFit="cover"

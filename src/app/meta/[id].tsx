@@ -386,7 +386,6 @@ export default function MetaDetailsScreen() {
                             onCollectionToggle={handleCollectionToggle}
                             onWatchedToggle={handleWatchedToggle}
                             onRatePress={() => setShowRatingModal(true)}
-                            onAiInsightsPress={handleAiInsightsPress}
                             palette={mediaPalette}
                             style={{ marginTop: 24 }}
                         />
@@ -484,7 +483,8 @@ export default function MetaDetailsScreen() {
             <AiInsightsStory
                 visible={showAiStory}
                 onClose={() => setShowAiStory(false)}
-                insights={insights}
+                insights={insights?.insights || []}
+                trivia={insights?.trivia}
             />
         </View>
     );

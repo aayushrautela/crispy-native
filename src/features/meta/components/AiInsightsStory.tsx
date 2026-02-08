@@ -1,61 +1,89 @@
-import type { AiInsightsResult, InsightCard } from '@/src/features/meta/hooks/useAiInsights';
-import { useTheme } from '@/src/core/ThemeContext';
-import { Typography } from '@/src/core/ui/Typography';
-import { Brain, Flame, Lightbulb, Palette, Sparkles, User, X, Zap, AlertCircle } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
-import { Modal, Pressable, StyleSheet, View, Dimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
+import { 
+    View, 
+    Text, 
+    StyleSheet, 
+    TouchableOpacity, 
+    Dimensions,
+    Pressable,
+    BackHandler
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/src/core/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InsightCard } from '../hooks/useAiInsights';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 interface AiInsightsStoryProps {
     visible: boolean;
+    insights: InsightCard[] | null;
+    trivia?: string;
     onClose: () => void;
-    insights: AiInsightsResult | null;
 }
 
-const getIconForType = (type: string, size: number = 32) => {
+const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
-        case 'consensus': return <Brain size={size} color="#60A5FA" />;
-        case 'performance': return <Flame size={size} color="#34D399" />;
-        case 'style': return <Palette size={size} color="#A78BFA" />;
-        case 'vibe': return <Sparkles size={size} color="#FBBF24" />;
-        case 'controversy': return <AlertCircle size={size} color="#F87171" />;
-        case 'character': return <User size={size} color="#FB923C" />;
-        default: return <Zap size={size} color="#E879F9" />;
+        case 'consensus': return 'people';
+        case 'performance': return 'flash';
+        case 'theme': return 'color-palette';
+        case 'vibe': return 'musical-notes';
+        case 'style': return 'brush';
+        case 'performance_actor': return 'person';
+        case 'controversy': return 'alert-circle';
+        case 'character': return 'body';
+        case 'trivia': return 'bulb';
+        default: return 'analytics';
     }
 };
 
-const getTextColorForType = (type: string) => {
-    switch (type) {
-        case 'consensus': return '#60A5FA';
-        case 'performance': return '#34D399';
-        case 'style': return '#A78BFA';
-        case 'vibe': return '#FBBF24';
-        case 'controversy': return '#F87171';
-        case 'character': return '#FB923C';
-        default: return '#E879F9';
-    }
-};
-
-export const AiInsightsStory = ({ visible, onClose, insights }: AiInsightsStoryProps) => {
-    const { theme } = useTheme();
+export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-
-    const totalPages = (insights?.insights?.length || 0) + (insights?.trivia ? 1 : 0);
+    const { theme } = useTheme();
+    const insets = useSafeAreaInsets();
 
     useEffect(() => {
-        if (visible) {
-            setCurrentIndex(0);
+        const onBackPress = () => {
+            if (visible) {
+                onClose();
+                return true;
+            }
+            return false;
+        };
+
+        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+        return () => subscription.remove();
+    }, [visible, onClose]);
+
+    const allInsights = React.useMemo(() => {
+        if (!insights) return [];
+        const cards: InsightCard[] = [...insights];
+        if (trivia) {
+            cards.push({
+                type: 'trivia',
+                title: 'Did You Know?',
+                content: trivia,
+                category: 'TRIVIA'
+            });
         }
-    }, [visible]);
+        return cards;
+    }, [insights, trivia]);
+
+    if (!visible || allInsights.length === 0) {
+        return null;
+    }
+
+    const handleClose = () => {
+        setCurrentIndex(0);
+        onClose();
+    };
 
     const handleNext = () => {
-        if (currentIndex < totalPages - 1) {
+        if (currentIndex < allInsights.length - 1) {
             setCurrentIndex(currentIndex + 1);
         } else {
-            onClose();
+            handleClose();
         }
     };
 
@@ -67,164 +95,131 @@ export const AiInsightsStory = ({ visible, onClose, insights }: AiInsightsStoryP
 
     const handlePress = (evt: any) => {
         const x = evt.nativeEvent.locationX;
-        if (x < SCREEN_WIDTH * 0.3) {
+        if (x < width / 3) {
             handlePrev();
         } else {
             handleNext();
         }
     };
 
-    if (!insights || totalPages === 0) return null;
+    const currentInsight = allInsights[currentIndex];
 
-    const renderPage = () => {
-        if (currentIndex < (insights.insights?.length || 0)) {
-            const insight = insights.insights[currentIndex];
-            return (
-                <View style={styles.pageContent}>
-                    <View style={styles.iconContainer}>
-                        {getIconForType(insight.type)}
-                    </View>
-                    <Typography
-                        variant="label"
-                        weight="black"
-                        style={{ color: getTextColorForType(insight.type), marginBottom: 8 }}
-                    >
-                        {insight.category}
-                    </Typography>
-                    <Typography variant="h2" weight="black" style={{ color: 'white', marginBottom: 16 }}>
-                        {insight.title}
-                    </Typography>
-                    <Typography variant="body-large" style={{ color: 'rgba(255,255,255,0.7)', lineHeight: 28 }}>
-                        {insight.content}
-                    </Typography>
-                </View>
-            );
-        } else {
-            return (
-                <View style={styles.pageContent}>
-                    <View style={styles.iconContainer}>
-                        <Lightbulb size={32} color="#EAB308" />
-                    </View>
-                    <Typography
-                        variant="label"
-                        weight="black"
-                        style={{ color: '#EAB308', marginBottom: 8 }}
-                    >
-                        DID YOU KNOW?
-                    </Typography>
-                    <Typography variant="body-large" style={{ color: 'white', fontSize: 24, lineHeight: 34, fontWeight: '700' }}>
-                        {insights.trivia}
-                    </Typography>
-                </View>
-            );
-        }
-    };
+    if (!currentInsight) {
+        return null;
+    }
 
     return (
-        <Modal
-            visible={visible}
-            transparent={false}
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <View style={[styles.container, { backgroundColor: '#050505' }]}>
-                <SafeAreaView style={styles.safeArea}>
-                    {/* Progress Bars */}
-                    <View style={styles.progressContainer}>
-                        {Array.from({ length: totalPages }).map((_, i) => (
-                            <View key={i} style={styles.progressBarBg}>
-                                <View
-                                    style={[
-                                        styles.progressBarFill,
-                                        {
-                                            width: i < currentIndex ? '100%' : i === currentIndex ? '50%' : '0%', // Static 50% for now as we don't have timer yet
-                                            backgroundColor: 'white'
-                                        }
-                                    ]}
-                                />
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Header */}
+        <View style={styles.container}>
+            <Pressable style={styles.pressArea} onPress={handlePress}>
+                <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
                     <View style={styles.header}>
-                        <Typography variant="title-medium" weight="bold" style={{ color: 'white' }}>
-                            AI Insights
-                        </Typography>
-                        <Pressable onPress={onClose} style={styles.closeBtn}>
-                            <X color="white" size={24} />
-                        </Pressable>
+                        <View style={styles.typeBadge}>
+                            <Ionicons 
+                                name={getIconForType(currentInsight.type)} 
+                                size={16} 
+                                color="#FFD700" 
+                            />
+                            <Text style={styles.typeText}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
+                        </View>
+                        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                            <Ionicons name="close" size={28} color="white" />
+                        </TouchableOpacity>
                     </View>
 
-                    {/* Interaction Area */}
-                    <Pressable onPress={handlePress} style={styles.touchArea}>
-                        {renderPage()}
-                    </Pressable>
+                    <Text style={styles.title}>{currentInsight.title}</Text>
+                    <Text style={styles.bodyText}>{currentInsight.content}</Text>
+                </View>
+            </Pressable>
 
-                    {/* Footer */}
-                    <View style={styles.footer}>
-                        <Typography variant="label-small" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                            Tap on sides to navigate
-                        </Typography>
+            {/* Indicators */}
+            <View style={[styles.indicatorContainer, { top: insets.top + 20 }]}>
+                {allInsights.map((_, i) => (
+                    <View key={i} style={styles.indicatorBackground}>
+                        <View 
+                            style={[
+                                styles.indicatorFill,
+                                { width: i <= currentIndex ? '100%' : '0%' }
+                            ]} 
+                        />
                     </View>
-                </SafeAreaView>
+                ))}
             </View>
-        </Modal>
+        </View>
     );
 };
 
 const styles = StyleSheet.create({
     container: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#000',
+        zIndex: 1000,
+    },
+    pressArea: {
         flex: 1,
     },
-    safeArea: {
-        flex: 1,
-    },
-    progressContainer: {
+    indicatorContainer: {
         flexDirection: 'row',
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        gap: 4,
+        paddingHorizontal: 10,
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        zIndex: 10,
     },
-    progressBarBg: {
+    indicatorBackground: {
         flex: 1,
         height: 2,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        marginHorizontal: 2,
         borderRadius: 1,
         overflow: 'hidden',
     },
-    progressBarFill: {
+    indicatorFill: {
         height: '100%',
+        backgroundColor: 'white',
+    },
+    content: {
+        flex: 1,
+        paddingHorizontal: 20,
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
+        marginBottom: 30,
     },
-    closeBtn: {
-        width: 40,
-        height: 40,
+    typeBadge: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 6,
     },
-    touchArea: {
-        flex: 1,
-        justifyContent: 'center',
-        paddingHorizontal: 32,
+    typeText: {
+        color: '#FFD700',
+        fontSize: 12,
+        fontWeight: 'bold',
+        letterSpacing: 1,
     },
-    pageContent: {
-        alignItems: 'flex-start',
+    closeButton: {
+        padding: 4,
     },
-    iconContainer: {
-        marginBottom: 24,
-        padding: 12,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+    title: {
+        color: 'white',
+        fontSize: 32,
+        fontWeight: 'bold',
+        marginBottom: 20,
+        lineHeight: 40,
     },
-    footer: {
-        paddingBottom: 32,
-        alignItems: 'center',
-    }
+    bodyText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 18,
+        lineHeight: 28,
+    },
 });
+

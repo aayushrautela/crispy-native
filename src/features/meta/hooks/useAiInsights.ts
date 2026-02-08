@@ -4,7 +4,7 @@ import { StorageService } from '../../../core/storage';
 import { useUserStore } from '@/src/core/stores/userStore';
 
 export interface InsightCard {
-    type: 'consensus' | 'performance' | 'theme' | 'vibe' | 'style' | 'performance_actor' | 'controversy' | 'character';
+    type: 'consensus' | 'performance' | 'theme' | 'vibe' | 'style' | 'performance_actor' | 'controversy' | 'character' | 'trivia';
     title: string;
     category: string;
     content: string;
