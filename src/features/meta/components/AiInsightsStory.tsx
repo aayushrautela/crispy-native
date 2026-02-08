@@ -12,14 +12,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InsightCard } from '../hooks/useAiInsights';
-
-const { width, height } = Dimensions.get('window');
+import { ExpressiveImage } from './ExpressiveImage';
+import { TMDBMeta } from '@/src/core/services/TMDBService';
 
 interface AiInsightsStoryProps {
     visible: boolean;
-    insights: InsightCard[] | null;
+    insights: InsightCard[];
     trivia?: string;
     onClose: () => void;
+    meta?: Partial<TMDBMeta>;
+    backgroundColor?: string;
 }
 
 const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
@@ -37,38 +39,42 @@ const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
     }
 };
 
-export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose }) => {
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta, backgroundColor }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { theme } = useTheme();
     const insets = useSafeAreaInsets();
+    const { theme } = useTheme();
 
-    useEffect(() => {
-        const onBackPress = () => {
-            if (visible) {
-                onClose();
-                return true;
-            }
-            return false;
-        };
-
-        const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-
-        return () => subscription.remove();
-    }, [visible, onClose]);
+    const effectiveBg = backgroundColor || (theme.dark ? '#000' : '#fff');
+    const isDark = theme.dark; // Or calculate brightness of effectiveBg if needed, but project uses theme.dark usually
 
     const allInsights = React.useMemo(() => {
-        if (!insights) return [];
-        const cards: InsightCard[] = [...insights];
+        const base = [...insights];
         if (trivia) {
-            cards.push({
+            base.push({
                 type: 'trivia',
-                title: 'Did You Know?',
-                content: trivia,
-                category: 'TRIVIA'
+                category: 'DID YOU KNOW?',
+                title: 'Fun Fact',
+                content: trivia
             });
         }
-        return cards;
+        return base;
     }, [insights, trivia]);
+
+    const storyImage = React.useMemo(() => {
+        if (!meta || !meta.backdrops || meta.backdrops.length === 0) {
+            console.log(`[AiInsightsStory] No backdrops available, using poster: ${meta?.poster ? 'YES' : 'NO'}`);
+            return meta?.poster;
+        }
+        // Use the index to cycle through backdrops for each slide
+        // We skip index 0 (main backdrop) if possible, starting from index 1
+        const galleryIndex = (currentIndex + 1) % meta.backdrops.length;
+        const selected = meta.backdrops[galleryIndex];
+        console.log(`[AiInsightsStory] Slide ${currentIndex}, Gallery index: ${galleryIndex}, Total backdrops: ${meta.backdrops.length}`);
+        console.log(`[AiInsightsStory] Selected backdrop: ${selected.substring(0, 60)}...`);
+        return selected;
+    }, [meta, currentIndex]);
 
     if (!visible || allInsights.length === 0) {
         return null;
@@ -95,7 +101,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
 
     const handlePress = (evt: any) => {
         const x = evt.nativeEvent.locationX;
-        if (x < width / 3) {
+        if (x < SCREEN_WIDTH / 3) {
             handlePrev();
         } else {
             handleNext();
@@ -109,7 +115,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: effectiveBg }]}>
             <Pressable style={styles.pressArea} onPress={handlePress}>
                 <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
                     <View style={styles.header}>
@@ -127,6 +133,11 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                     </View>
 
                     <Text style={styles.title}>{currentInsight.title}</Text>
+                    {storyImage && (
+                        <View style={styles.imageContainer}>
+                            <ExpressiveImage uri={storyImage} size={SCREEN_WIDTH * 0.7} />
+                        </View>
+                    )}
                     <Text style={styles.bodyText}>{currentInsight.content}</Text>
                 </View>
             </Pressable>
@@ -155,7 +166,6 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: '#000',
         zIndex: 1000,
     },
     pressArea: {
@@ -220,6 +230,11 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.9)',
         fontSize: 18,
         lineHeight: 28,
+    },
+    imageContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 40,
     },
 });
 

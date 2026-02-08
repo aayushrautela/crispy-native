@@ -485,6 +485,8 @@ export default function MetaDetailsScreen() {
                 onClose={() => setShowAiStory(false)}
                 insights={insights?.insights || []}
                 trivia={insights?.trivia}
+                meta={enriched}
+                backgroundColor={effectiveBackground}
             />
         </View>
     );

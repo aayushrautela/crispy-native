@@ -35,7 +35,9 @@ export interface TMDBMeta {
     title: string;
     logo?: string;
     backdrop?: string;
+    backdrops?: string[];
     poster?: string;
+    posters?: string[];
     year?: string;
     rating?: string;
     maturityRating?: string;
@@ -158,8 +160,11 @@ export class TMDBService {
             // 3. Fetch Images separately (Nuvio-style priority)
             let logo: string | undefined;
             let backdropFallback: string | undefined;
+            let allBackdrops: string[] = [];
+            let allPosters: string[] = [];
             try {
-                const imagesUrl = `${BASE_URL}/${findPath}/${foundTmdbId}/images?api_key=${API_KEY}&include_image_language=en,null`;
+                // Fetch images with a broader language filter to ensure we get a gallery (Nuvio-style)
+                const imagesUrl = `${BASE_URL}/${findPath}/${foundTmdbId}/images?api_key=${API_KEY}&include_image_language=en,null,fr,de,es,it,ja,ko,zh`;
                 const imagesRes = await axios.get(imagesUrl);
                 const logos = imagesRes.data.logos || [];
 
@@ -175,8 +180,16 @@ export class TMDBService {
                 }
 
                 const backdrops = imagesRes.data.backdrops || [];
+                console.log(`[TMDBService] Found ${backdrops.length} backdrops for ${data.title || data.name}`);
                 if (backdrops.length > 0) {
                     backdropFallback = backdrops[0].file_path;
+                    allBackdrops = backdrops.map((b: any) => `${IMAGE_BASE}/w780${b.file_path}`);
+                    console.log(`[TMDBService] Backdrop URLs (first 3):`, allBackdrops.slice(0, 3));
+                }
+
+                const posters = imagesRes.data.posters || [];
+                if (posters.length > 0) {
+                    allPosters = posters.map((p: any) => `${IMAGE_BASE}/w500${p.file_path}`);
                 }
             } catch (e) { }
 
@@ -289,7 +302,9 @@ export class TMDBService {
                 title: data.title || data.name,
                 logo: logo ? `${IMAGE_BASE}/w500${logo}` : undefined,
                 backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/w780${data.backdrop_path || backdropFallback}` : undefined,
+                backdrops: allBackdrops,
                 poster: data.poster_path ? `${IMAGE_BASE}/w500${data.poster_path}` : undefined,
+                posters: allPosters,
                 year: (data.release_date || data.first_air_date || '').split('-')[0],
                 runtimeMinutes: data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0,
                 runtime: (() => {
