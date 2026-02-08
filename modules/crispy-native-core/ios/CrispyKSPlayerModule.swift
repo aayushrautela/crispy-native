@@ -118,7 +118,7 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     public func setVolume(_ volume: Double) {
         self.volumeValue = volume
         if let player = self.playerLayer?.player {
-            player.volume = Float(volume)
+            player.playbackVolume = Float(volume)
         }
     }
     
@@ -185,15 +185,21 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
     }
     
     private func updateVideoGravity() {
-        let gravity: AVLayerVideoGravity
+        guard let player = self.playerLayer?.player else { return }
+        
+        let contentMode: UIView.ContentMode
         switch resizeModeVal {
+        case "contain":
+            contentMode = .scaleAspectFit
         case "cover":
-            gravity = .resizeAspectFill
+            contentMode = .scaleAspectFill
         case "stretch":
-            gravity = .resize
-        case "contain", "original", _:
-            gravity = .resizeAspect
+            contentMode = .scaleToFill
+        default:
+            contentMode = .scaleAspectFit
         }
+        player.contentMode = contentMode
+    }
         
         if let layer = self.playerLayer as? AVPlayerLayer {
             layer.videoGravity = gravity
