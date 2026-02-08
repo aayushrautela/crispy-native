@@ -48,7 +48,7 @@ export const MetaCard = ({ item, width = 144, onPress }: MetaCardProps) => {
                 <View style={styles.imageContainer}>
                     {item.poster ? (
                         <ExpoImage
-                            recyclingKey={item.id}
+                            recyclingKey={String(item.id)}
                             source={{ uri: item.poster }}
                             style={styles.image}
                             contentFit="cover"

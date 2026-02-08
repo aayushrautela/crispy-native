@@ -69,7 +69,7 @@ const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
                 <View style={styles.imageContainer}>
                     {imageSrc ? (
                         <ExpoImage
-                            recyclingKey={displayItem.id}
+                            recyclingKey={String(displayItem.id)}
                             source={{ uri: imageSrc }}
                             style={styles.image}
                             contentFit="cover"
