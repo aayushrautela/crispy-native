@@ -104,10 +104,10 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
                 
                 // Performance Optimizations
                 getItemLayout={getItemLayout}
-                removeClippedSubviews={true} // Critical for memory
-                initialNumToRender={2}       // Only render 2 items initially
-                maxToRenderPerBatch={2}      // Incremental rendering
-                windowSize={3}               // 1 screen left + 1 screen visible + 1 screen right
+                removeClippedSubviews={false} // Disabled to prevent GPU crashes on Android (VK_ERROR_DEVICE_LOST)
+                initialNumToRender={2}
+                maxToRenderPerBatch={2}
+                windowSize={5}               // Increased slightly for smoother scrolling since clipping is off
             />
 
             {/* Static Dot Indicators */}

@@ -68,11 +68,14 @@ const HeroSlideComponent = ({
 
     return (
         <View style={containerStyle}>
-            <Animated.View style={[
-                styles.heroCard,
-                cardStyle,
-                animatedStyle
-            ]}>
+            <Animated.View 
+                renderToHardwareTextureAndroid={true} // Optimize GPU composition for opacity changes
+                style={[
+                    styles.heroCard,
+                    cardStyle,
+                    animatedStyle
+                ]}
+            >
                 <View style={styles.backgroundImage}>
                     <ExpoImage
                         recyclingKey={item.id}
