@@ -140,7 +140,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     }), [theme.colors.onSurfaceVariant]);
 
     // Content Styling
-    const paddingBottom = Math.max(bottom, 16) + 16;
+    const paddingBottom = Math.max(bottom, 20) + 32;
     
     const headerStyle = useMemo<ViewStyle>(() => ({
       paddingHorizontal: 24,
@@ -149,11 +149,13 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       backgroundColor: theme.colors.surface,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
+      alignItems: 'center', // Center the title
     }), [theme.colors.surface]);
 
     const titleStyle = useMemo<TextStyle>(() => ({
       fontWeight: 'bold',
       color: theme.colors.onSurface,
+      textAlign: 'center',
     }), [theme.colors.onSurface]);
 
     const renderContent = () => {
