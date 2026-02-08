@@ -8,7 +8,7 @@ import { useHeroState } from '@/src/features/meta/hooks/useHeroState';
 import { YouTubeTrailer } from '@/src/features/player/components/YouTubeTrailer';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Star } from 'lucide-react-native';
+import { Play, Sparkles, Star } from 'lucide-react-native';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { type SharedValue } from 'react-native-reanimated';
@@ -91,6 +91,49 @@ const HeroMetadata = memo(function HeroMetadata({ enriched, alignment = 'center'
             {enriched.year && <Typography variant="label" style={styles.metaText}>{enriched.year}</Typography>}
             {enriched.runtime && <Typography variant="label" style={styles.metaText}>{enriched.runtime}</Typography>}
         </View>
+    );
+});
+
+interface HeroAiInsightButtonProps {
+    isLoading?: boolean;
+}
+
+/**
+ * SUB-COMPONENT: HeroAiInsightButton
+ */
+const HeroAiInsightButton = memo(function HeroAiInsightButton({ isLoading = false }: HeroAiInsightButtonProps) {
+    const { theme } = useTheme();
+
+    return (
+        <Pressable
+            style={({ pressed }) => [
+                styles.aiBtnContainer,
+                { opacity: pressed || isLoading ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }
+            ]}
+            disabled={isLoading}
+        >
+            <LinearGradient
+                colors={['#4F46E5', '#E11D48']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.aiBtnGradientBorder}
+            >
+                <View style={[styles.aiBtnInner, { backgroundColor: theme.colors.background }]}>
+                    {isLoading ? (
+                        <LoadingIndicator color="white" size={36} />
+                    ) : (
+                        <>
+                            <View style={styles.aiIconContainer}>
+                                <Sparkles size={20} color="white" fill="white" />
+                            </View>
+                            <Typography variant="title-medium" weight="black" style={{ color: 'white', fontSize: 16 }}>
+                                AI insight
+                            </Typography>
+                        </>
+                    )}
+                </View>
+            </LinearGradient>
+        </Pressable>
     );
 });
 
@@ -293,6 +336,7 @@ export const HeroSection = memo(function HeroSection({
                             onToggle={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                         />
                         <View style={[styles.actionStack, { alignItems: 'center' }]}>
+                            <HeroAiInsightButton />
                             <HeroWatchButton
                                 onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                                 textColor={watchButtonTextColor} label={watchButtonLabel}
@@ -359,6 +403,7 @@ export const HeroSection = memo(function HeroSection({
                     />
 
                     <View style={styles.actionStack}>
+                        <HeroAiInsightButton />
                         <HeroWatchButton
                             onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                             textColor={watchButtonTextColor} label={watchButtonLabel}
@@ -393,6 +438,10 @@ const styles = StyleSheet.create({
     watchBtn: { width: '100%', height: 68, borderRadius: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
     watchIconPill: { width: 60, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
     watchLabelContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginRight: 60 },
+    aiBtnContainer: { width: '100%', height: 68, borderRadius: 34, overflow: 'hidden', marginBottom: 12 },
+    aiBtnGradientBorder: { flex: 1, padding: 1.5, borderRadius: 34 },
+    aiBtnInner: { flex: 1, borderRadius: 32.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    aiIconContainer: { marginRight: 8 },
     leftPaneOverlay: {
         position: 'absolute',
         top: 0,
