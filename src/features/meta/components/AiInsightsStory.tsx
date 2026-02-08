@@ -3,7 +3,8 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import { Brain, Flame, Lightbulb, Palette, Sparkles, User, X, Zap, AlertCircle } from 'lucide-react-native';
 import React, { useState, useEffect } from 'react';
-import { Modal, Pressable, StyleSheet, View, Dimensions, SafeAreaView } from 'react-native';
+import { Modal, Pressable, StyleSheet, View, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
