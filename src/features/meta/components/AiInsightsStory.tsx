@@ -134,13 +134,24 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={styles.title}>{currentInsight.title}</Text>
-                    {storyImage && (
+                    <Text style={[
+                        styles.title,
+                        currentInsight.type === 'trivia' && styles.triviaTitle
+                    ]}>{currentInsight.title}</Text>
+                    {storyImage && currentIndex < allInsights.length - 1 && (
                         <View style={styles.imageContainer}>
-                            <ExpressiveImage uri={storyImage} size={SCREEN_WIDTH * 0.7} />
+                            <ExpressiveImage 
+                                uri={storyImage} 
+                                size={SCREEN_WIDTH * 0.7} 
+                                variant={currentIndex === 0 ? 'expressive' : currentIndex === 1 ? 'rectangle' : 'pill-diagonal'}
+                            />
                         </View>
                     )}
-                    <Text style={styles.bodyText}>{currentInsight.content}</Text>
+                    <Text style={[
+                        styles.bodyText,
+                        currentInsight.type === 'trivia' && styles.triviaBodyText
+                    ]}>{currentInsight.content}</Text>
+                    <Text style={styles.aiFooter}>Generative AI can make mistakes</Text>
                 </View>
             </Pressable>
 
@@ -233,10 +244,27 @@ const styles = StyleSheet.create({
         fontSize: 18,
         lineHeight: 28,
     },
+    triviaTitle: {
+        fontSize: 36,
+        marginBottom: 30,
+        lineHeight: 44,
+    },
+    triviaBodyText: {
+        fontSize: 22,
+        lineHeight: 34,
+        marginHorizontal: 20,
+    },
     imageContainer: {
         alignItems: 'center',
         justifyContent: 'center',
         marginVertical: 40,
+    },
+    aiFooter: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        textAlign: 'center',
+        marginTop: 'auto',
+        marginBottom: 40,
     },
 });
 
