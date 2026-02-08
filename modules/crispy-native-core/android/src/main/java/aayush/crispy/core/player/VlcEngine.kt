@@ -82,6 +82,8 @@ class VlcEngine(
   // Pending seek after source change - VLC needs to be fully ready before seeking
   private var pendingSeekPositionSec: Double? = null
   private var isSeekable: Boolean = false
+  private var lastSeekRequestTime: Long = 0
+  private var seekTargetTime: Long? = null
 
   // Track mapping - kept for backward compatibility but now using VLC track IDs directly
   private data class TrackInfo(val id: Int, val name: String, val language: String)
@@ -93,19 +95,43 @@ class VlcEngine(
       val mp = mediaPlayer
       if (mp != null && !mp.isReleased) {
         try {
+          // Suppress progress updates during buffering
+          if (lastEmittedBuffering == true) {
+             mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
+             return
+          }
+
           val posMs = mp.time
-          val durMs = mp.length
           
+          // Seek Handling: suppress updates until we are close to the target
+          // or a safety timeout has passed.
+          if (seekTargetTime != null) {
+              val diff = Math.abs(posMs - seekTargetTime!!)
+              val timeSinceSeek = System.currentTimeMillis() - lastSeekRequestTime
+              
+              // If within 2s of target (keyframe tolerance) OR >2.5s elapsed (safety)
+              if (diff < 2000 || timeSinceSeek > 2500) {
+                  seekTargetTime = null // Stabilized
+              } else {
+                  // Still seeking/stabilizing - suppress old time
+                  mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
+                  return
+              }
+          }
+
+          val durMs = mp.length
+            
           // VLC might return -1 for live streams or unknown duration
           val safeDur = if (durMs > 0) durMs else cachedDuration
-          if (safeDur > cachedDuration) cachedDuration = safeDur
+            if (safeDur > cachedDuration) cachedDuration = safeDur
 
-          val posSec = if (posMs >= 0) posMs.toDouble() / 1000.0 else 0.0
-          val durSec = if (safeDur > 0) safeDur.toDouble() / 1000.0 else 0.0
+            val posSec = if (posMs >= 0) posMs.toDouble() / 1000.0 else 0.0
+            val durSec = if (safeDur > 0) safeDur.toDouble() / 1000.0 else 0.0
 
-          listeners.forEach { it.onProgress(posSec, durSec) }
-          mediaSessionHandler?.updatePosition(posSec)
-          mediaSessionHandler?.updateDuration(durSec)
+            listeners.forEach { it.onProgress(posSec, durSec) }
+            mediaSessionHandler?.updatePosition(posSec)
+            mediaSessionHandler?.updateDuration(durSec)
+          }
         } catch (e: Throwable) {
           Log.w(TAG, "Error in progressRunnable", e)
         }
@@ -311,6 +337,7 @@ class VlcEngine(
     cachedWidth = 0
     cachedHeight = 0
     pendingSeekPositionSec = null
+    seekTargetTime = null
     isSeekable = false
     
     val mp = mediaPlayer ?: return
@@ -386,7 +413,10 @@ class VlcEngine(
     
     if (canSeekNow) {
       try {
-        mp.time = (positionSec * 1000.0).toLong()
+        val targetTime = (positionSec * 1000.0).toLong()
+        mp.time = targetTime
+        lastSeekRequestTime = System.currentTimeMillis()
+        seekTargetTime = targetTime
         Log.d(TAG, "Seek applied immediately to ${positionSec}s")
       } catch (_: Throwable) {}
     } else {
@@ -408,7 +438,10 @@ class VlcEngine(
     pendingSeekPositionSec = null
     
     try {
-      mp.time = (seekPos * 1000.0).toLong()
+      val targetTime = (seekPos * 1000.0).toLong()
+      mp.time = targetTime
+      lastSeekRequestTime = System.currentTimeMillis()
+      seekTargetTime = targetTime
       Log.d(TAG, "Pending seek applied: ${seekPos}s")
     } catch (e: Throwable) {
       Log.w(TAG, "Failed to apply pending seek", e)
