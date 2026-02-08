@@ -131,7 +131,6 @@ class VlcEngine(
             listeners.forEach { it.onProgress(posSec, durSec) }
             mediaSessionHandler?.updatePosition(posSec)
             mediaSessionHandler?.updateDuration(durSec)
-          }
         } catch (e: Throwable) {
           Log.w(TAG, "Error in progressRunnable", e)
         }
