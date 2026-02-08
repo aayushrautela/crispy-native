@@ -1,7 +1,7 @@
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useCallback, useState } from 'react';
 import { AIService } from '../../../core/services/AIService';
 import { StorageService } from '../../../core/storage';
-import { useUserStore } from '@/src/core/stores/userStore';
 
 export interface InsightCard {
     type: 'consensus' | 'performance' | 'theme' | 'vibe' | 'style' | 'performance_actor' | 'controversy' | 'character' | 'trivia';
@@ -93,7 +93,7 @@ Generate a JSON object with:
 1. "insights": Array of 3 objects, each with:
    - "category": Short uppercase label (e.g., "CRITICAL CONSENSUS", "VISUAL STYLE").
    - "title": Punchy, short headline.
-   - "content": 3-4 sentence description.
+   - "content": 2-3 sentence description.
    - "type": One of ["consensus", "performance", "theme", "vibe", "style", "controversy", "character"].
 2. "trivia": A single interesting "Did you know?" fact (1-2 sentences).
 
