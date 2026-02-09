@@ -1,20 +1,38 @@
 import { Session, User } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { KnownAccount, SessionManager, SessionMode } from './SessionManager';
 import { supabase } from './services/supabase';
-import { SessionManager } from './SessionManager';
-import { StorageService } from './storage';
+
+interface SignOutOptions {
+    removeAccount?: boolean;
+    fallbackMode?: 'anonymous' | 'guest';
+}
 
 interface AuthContextType {
     session: Session | null;
     user: User | null;
     loading: boolean;
-    signOut: () => Promise<void>;
+    mode: SessionMode;
+    knownAccounts: KnownAccount[];
+    activeAccount: KnownAccount | null;
+    hasKnownAccounts: boolean;
+    continueAsGuest: () => Promise<void>;
+    switchAccount: (userId: string) => Promise<void>;
+    removeAccount: (userId: string) => Promise<void>;
+    signOut: (options?: SignOutOptions) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
     session: null,
     user: null,
     loading: true,
+    mode: 'anonymous',
+    knownAccounts: [],
+    activeAccount: null,
+    hasKnownAccounts: false,
+    continueAsGuest: async () => { },
+    switchAccount: async () => { },
+    removeAccount: async () => { },
     signOut: async () => { },
 });
 
@@ -22,6 +40,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [mode, setMode] = useState<SessionMode>(SessionManager.getMode());
+    const [knownAccounts, setKnownAccounts] = useState<KnownAccount[]>(SessionManager.getAccounts());
+    const [activeAccount, setActiveAccount] = useState<KnownAccount | null>(SessionManager.getActiveAccount());
+
+    useEffect(() => {
+        const unsubscribe = SessionManager.subscribe((snapshot) => {
+            setMode(snapshot.mode);
+            setKnownAccounts(snapshot.accounts);
+            setActiveAccount(snapshot.activeAccount);
+        });
+
+        return unsubscribe;
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -29,7 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const init = async () => {
             try {
-                // If we have a previously stored session in MMKV, restore it into supabase
                 await SessionManager.restoreActiveSession();
             } catch (e) {
                 console.warn('[AuthContext] Failed to restore previous session:', e);
@@ -54,7 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             if (cancelled) return;
 
-            // Listen for changes
             const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
                 setSession(nextSession);
                 setUser(nextSession?.user ?? null);
@@ -62,6 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 if (nextSession) {
                     void SessionManager.addSession(nextSession);
+                } else {
+                    void SessionManager.handleExternalSignOut();
                 }
             });
 
@@ -76,21 +107,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
-    const signOut = useCallback(async () => {
-        StorageService.removeGlobal('crispy-guest-mode');
-        if (user) {
-            await SessionManager.removeAccount(user.id);
-        } else {
-            await supabase.auth.signOut();
+    const continueAsGuest = useCallback(async () => {
+        await SessionManager.continueAsGuest();
+    }, []);
+
+    const switchAccount = useCallback(async (userId: string) => {
+        await SessionManager.switchUser(userId);
+    }, []);
+
+    const removeAccount = useCallback(async (userId: string) => {
+        await SessionManager.removeAccount(userId);
+    }, []);
+
+    const signOut = useCallback(async (options?: SignOutOptions) => {
+        const removeCurrentAccount = options?.removeAccount ?? true;
+        const fallbackMode = options?.fallbackMode ?? 'anonymous';
+        const currentActive = SessionManager.getActiveAccount();
+
+        if (removeCurrentAccount && currentActive) {
+            await SessionManager.removeAccount(currentActive.user_id);
+            return;
         }
-    }, [user]);
+
+        if (fallbackMode === 'guest') {
+            await SessionManager.continueAsGuest();
+        } else {
+            await SessionManager.clearSession();
+        }
+    }, []);
 
     const value = useMemo(() => ({
         session,
         user,
         loading,
+        mode,
+        knownAccounts,
+        activeAccount,
+        hasKnownAccounts: knownAccounts.length > 0,
+        continueAsGuest,
+        switchAccount,
+        removeAccount,
         signOut
-    }), [session, user, loading, signOut]);
+    }), [
+        session,
+        user,
+        loading,
+        mode,
+        knownAccounts,
+        activeAccount,
+        continueAsGuest,
+        switchAccount,
+        removeAccount,
+        signOut,
+    ]);
 
     return (
         <AuthContext.Provider value={value}>

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { CheckCircle2, LogIn, LogOut, RefreshCw } from 'lucide-react-native';
+import { CheckCircle2, LogIn, LogOut, Plus, RefreshCw, Users } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { useAuth } from '../../core/AuthContext';
@@ -14,28 +14,51 @@ export default function AccountScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const auth = useAuth();
-    const user = auth?.user;
-    const [isLoading, setIsLoading] = useState(false);
+    const user = auth.user;
+    const [loadingAction, setLoadingAction] = useState<'guest' | 'signout' | null>(null);
 
-    const isSupabaseAuthenticated = !!user;
+    const isSupabaseAuthenticated = auth.mode === 'account' && !!user;
+    const profileCount = auth.knownAccounts.length;
+
+    const profileTitle = isSupabaseAuthenticated
+        ? (user?.user_metadata?.name || auth.activeAccount?.name || 'Crispy User')
+        : (auth.mode === 'guest' ? 'Guest Profile' : 'Not Signed In');
+
+    const profileSubtitle = isSupabaseAuthenticated
+        ? (user?.email || auth.activeAccount?.email || 'Signed in with Supabase')
+        : (auth.mode === 'guest'
+            ? 'Local profile, cloud sync disabled'
+            : 'Add an account to enable cloud sync');
+
+    const handleContinueAsGuest = async () => {
+        setLoadingAction('guest');
+        try {
+            await auth.continueAsGuest();
+            router.replace('/(tabs)');
+        } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Unable to switch to guest mode.');
+        } finally {
+            setLoadingAction(null);
+        }
+    };
 
     const handleLogout = async () => {
         Alert.alert(
-            'Sign Out',
-            'Are you sure you want to sign out?',
+            'Sign Out This Account',
+            'This removes the account from this device. You can add it again later.',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
                     text: 'Sign Out',
                     style: 'destructive',
                     onPress: async () => {
-                        setIsLoading(true);
+                        setLoadingAction('signout');
                         try {
-                            await auth.signOut();
+                            await auth.signOut({ removeAccount: true, fallbackMode: 'anonymous' });
                         } catch (e: any) {
                             Alert.alert('Error', e.message);
                         } finally {
-                            setIsLoading(false);
+                            setLoadingAction(null);
                         }
                     }
                 }
@@ -50,21 +73,60 @@ export default function AccountScreen() {
                     <View style={styles.statusCard}>
                         <View style={styles.statusInfo}>
                             <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSurface }}>
-                                {isSupabaseAuthenticated ? (user?.user_metadata?.name || 'Crispy User') : 'Guest Account'}
+                                {profileTitle}
                             </Typography>
                             <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
-                                {isSupabaseAuthenticated
-                                    ? (user?.email || 'Signed in via Email')
-                                    : 'Sign in to sync your library'}
+                                {profileSubtitle}
                             </Typography>
                         </View>
+                    </View>
+
+                    <SettingsItem
+                        icon={Users}
+                        label="Saved Profiles"
+                        description={`${profileCount} available on this device`}
+                        showChevron={false}
+                    />
+                </SettingsGroup>
+
+                <SettingsGroup title="Actions">
+                    <View style={styles.actions}>
                         <ExpressiveButton
-                            title={isSupabaseAuthenticated ? "Logout" : "Sign In"}
-                            icon={isSupabaseAuthenticated ? LogOut : LogIn}
-                            onPress={isSupabaseAuthenticated ? handleLogout : () => router.push('/(auth)/login')}
-                            variant={isSupabaseAuthenticated ? "tonal" : "primary"}
-                            isLoading={isLoading}
+                            title="Switch Profile"
+                            icon={Users}
+                            onPress={() => router.push('/(auth)/profiles' as never)}
+                            variant="primary"
                         />
+
+                        {isSupabaseAuthenticated ? (
+                            <>
+                                <ExpressiveButton
+                                    title="Continue as Guest"
+                                    icon={LogIn}
+                                    onPress={handleContinueAsGuest}
+                                    variant="tonal"
+                                    isLoading={loadingAction === 'guest'}
+                                    disabled={loadingAction === 'signout'}
+                                />
+
+                                <ExpressiveButton
+                                    title="Sign Out & Remove"
+                                    icon={LogOut}
+                                    onPress={handleLogout}
+                                    variant="outline"
+                                    isLoading={loadingAction === 'signout'}
+                                    disabled={loadingAction === 'guest'}
+                                />
+                            </>
+                        ) : (
+                            <ExpressiveButton
+                                title="Add Account"
+                                icon={Plus}
+                                onPress={() => router.push('/(auth)/login?mode=add-account')}
+                                variant="tonal"
+                                disabled={loadingAction === 'guest'}
+                            />
+                        )}
                     </View>
                 </SettingsGroup>
 
@@ -91,5 +153,9 @@ const styles = StyleSheet.create({
     },
     statusInfo: {
         flex: 1,
+    },
+    actions: {
+        padding: 20,
+        gap: 10,
     },
 });

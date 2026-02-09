@@ -1,5 +1,4 @@
 import { Session } from '@supabase/supabase-js';
-import { router } from 'expo-router';
 import { supabase } from './services/supabase';
 import { StorageService } from './storage';
 
@@ -12,48 +11,144 @@ export interface KnownAccount {
     last_active: number;
 }
 
-type SwitchUserOptions = {
-    navigate?: boolean;
-};
+export type SessionMode = 'anonymous' | 'guest' | 'account';
+
+export interface SessionSnapshot {
+    mode: SessionMode;
+    accounts: KnownAccount[];
+    activeAccount: KnownAccount | null;
+}
+
+const KNOWN_SESSIONS_KEY = 'crispy_known_sessions';
+const ACTIVE_USER_KEY = 'crispy_active_user_id';
+const SESSION_MODE_KEY = 'crispy_session_mode';
+const LEGACY_GUEST_KEY = 'crispy-guest-mode';
 
 class SessionManagerService {
     private accounts: Map<string, KnownAccount> = new Map();
     private activeUserId: string | null = null;
-    private listeners: ((accounts: KnownAccount[]) => void)[] = [];
+    private mode: SessionMode = 'anonymous';
+    private listeners: ((snapshot: SessionSnapshot) => void)[] = [];
+    private transitionChain: Promise<void> = Promise.resolve();
 
     constructor() {
-        console.log('[CRISPY-BOOT] SessionManagerService constructor called');
         this.loadFromStorage();
+        this.persistState();
     }
 
     private loadFromStorage() {
-        console.log('[CRISPY-BOOT] SessionManager loading from storage');
-        const stored = StorageService.getGlobal<KnownAccount[]>('crispy_known_sessions');
+        const stored = StorageService.getGlobal<KnownAccount[]>(KNOWN_SESSIONS_KEY);
         if (stored) {
-            console.log(`[CRISPY-BOOT] Found ${stored.length} stored sessions`);
             stored.forEach((acc: KnownAccount) => this.accounts.set(acc.user_id, acc));
         }
 
-        const active = StorageService.getGlobal<string>('crispy_active_user_id');
-        console.log(`[CRISPY-BOOT] Active user ID from storage: ${active}`);
+        const active = StorageService.getGlobal<string>(ACTIVE_USER_KEY);
         if (active && this.accounts.has(active)) {
             this.activeUserId = active;
         }
+
+        const storedMode = this.normalizeMode(StorageService.getGlobal<string>(SESSION_MODE_KEY));
+        const legacyGuest = StorageService.getGlobal<boolean | string>(LEGACY_GUEST_KEY);
+        const isLegacyGuest = legacyGuest === true || legacyGuest === 'true';
+
+        if (storedMode) {
+            this.mode = storedMode;
+        } else if (isLegacyGuest) {
+            this.mode = 'guest';
+        } else if (this.activeUserId) {
+            this.mode = 'account';
+        } else {
+            this.mode = 'anonymous';
+        }
+
+        if (this.mode === 'account' && (!this.activeUserId || !this.accounts.has(this.activeUserId))) {
+            const fallback = this.getSortedAccounts()[0];
+            this.activeUserId = fallback?.user_id ?? null;
+            if (!this.activeUserId) {
+                this.mode = 'anonymous';
+            }
+        }
+
+        if (this.mode !== 'account') {
+            this.activeUserId = null;
+        }
     }
 
-    private saveToStorage() {
-        const list = Array.from(this.accounts.values());
-        StorageService.setGlobal('crispy_known_sessions', list);
-        if (this.activeUserId) {
-            StorageService.setGlobal('crispy_active_user_id', this.activeUserId);
-        } else {
-            StorageService.removeGlobal('crispy_active_user_id');
+    private normalizeMode(value: unknown): SessionMode | null {
+        if (value === 'anonymous' || value === 'guest' || value === 'account') {
+            return value;
         }
+        return null;
+    }
+
+    private getSortedAccounts(): KnownAccount[] {
+        return Array.from(this.accounts.values()).sort((a, b) => b.last_active - a.last_active);
+    }
+
+    private deriveModeFromState(): SessionMode {
+        if (this.mode === 'guest') return 'guest';
+        if (this.activeUserId && this.accounts.has(this.activeUserId)) return 'account';
+        return 'anonymous';
+    }
+
+    private persistState() {
+        const list = this.getSortedAccounts();
+        StorageService.setGlobal(KNOWN_SESSIONS_KEY, list);
+
+        if (this.activeUserId) {
+            StorageService.setGlobal(ACTIVE_USER_KEY, this.activeUserId);
+        } else {
+            StorageService.removeGlobal(ACTIVE_USER_KEY);
+        }
+
+        StorageService.setGlobal(SESSION_MODE_KEY, this.mode);
+        if (this.mode === 'guest') {
+            StorageService.setGlobal(LEGACY_GUEST_KEY, true);
+        } else {
+            StorageService.removeGlobal(LEGACY_GUEST_KEY);
+        }
+
         this.notifyListeners();
     }
 
+    private upsertAccountFromSession(session: Session, setActive: boolean = true) {
+        if (!session.user) return;
+
+        const existing = this.accounts.get(session.user.id);
+        const name = session.user.user_metadata?.name || session.user.user_metadata?.full_name || existing?.name;
+        const avatar = session.user.user_metadata?.avatar_url || existing?.avatar_url;
+
+        const account: KnownAccount = {
+            user_id: session.user.id,
+            email: session.user.email || existing?.email || 'Unknown',
+            avatar_url: avatar,
+            name,
+            session,
+            last_active: Date.now(),
+        };
+
+        this.accounts.set(account.user_id, account);
+        if (setActive) {
+            this.activeUserId = account.user_id;
+        }
+    }
+
+    private runTransition<T>(operation: () => Promise<T>): Promise<T> {
+        const run = this.transitionChain.then(operation, operation);
+        this.transitionChain = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
+    public getMode(): SessionMode {
+        return this.mode;
+    }
+
+    public hasKnownAccounts(): boolean {
+        return this.accounts.size > 0;
+    }
+
     public getAccounts(): KnownAccount[] {
-        return Array.from(this.accounts.values()).sort((a, b) => b.last_active - a.last_active);
+        return this.getSortedAccounts();
     }
 
     public getActiveAccount(): KnownAccount | null {
@@ -61,88 +156,185 @@ class SessionManagerService {
         return this.accounts.get(this.activeUserId) || null;
     }
 
-    public async addSession(session: Session) {
-        if (!session.user) return;
-
-        const existing = this.accounts.get(session.user.id);
-
-        const name = session.user.user_metadata?.name || session.user.user_metadata?.full_name || existing?.name;
-        const avatar = session.user.user_metadata?.avatar_url || existing?.avatar_url;
-
-        const account: KnownAccount = {
-            user_id: session.user.id,
-            email: session.user.email || 'Unknown',
-            avatar_url: avatar,
-            name: name,
-            session: session,
-            last_active: Date.now()
+    public getSnapshot(): SessionSnapshot {
+        return {
+            mode: this.mode,
+            accounts: this.getAccounts(),
+            activeAccount: this.getActiveAccount(),
         };
-
-        this.accounts.set(account.user_id, account);
-        this.activeUserId = account.user_id;
-        this.saveToStorage();
     }
 
-    public async switchUser(userId: string, options: SwitchUserOptions = {}) {
-        const account = this.accounts.get(userId);
-        if (!account) throw new Error('User not found');
-
-        this.activeUserId = userId;
-        account.last_active = Date.now();
-        this.saveToStorage();
-
-        const { data, error } = await supabase.auth.setSession({
-            access_token: account.session.access_token,
-            refresh_token: account.session.refresh_token,
+    public async addSession(session: Session) {
+        return this.runTransition(async () => {
+            if (!session.user) return;
+            this.upsertAccountFromSession(session);
+            this.mode = 'account';
+            this.persistState();
         });
+    }
 
-        if (error) {
-            console.error('[SessionManager] Failed to restore session:', error);
-            this.accounts.delete(userId);
-            this.saveToStorage();
-            throw new Error('Your session has expired. Please log in again.');
-        }
+    public async switchUser(userId: string) {
+        return this.runTransition(async () => {
+            const account = this.accounts.get(userId);
+            if (!account) {
+                throw new Error('Account not found. Please sign in again.');
+            }
 
-        // Persist refreshed session tokens (if any)
-        if (data.session) {
-            await this.addSession(data.session);
-        }
+            const { data, error } = await supabase.auth.setSession({
+                access_token: account.session.access_token,
+                refresh_token: account.session.refresh_token,
+            });
 
-        if (options.navigate !== false) {
-            // Replace modern deep navigation logic
-            router.replace('/');
-        }
+            if (error) {
+                this.accounts.delete(userId);
+                if (this.activeUserId === userId) {
+                    this.activeUserId = null;
+                }
+                this.mode = this.deriveModeFromState();
+                this.persistState();
+                throw new Error('Your session has expired. Please sign in again.');
+            }
+
+            if (data.session) {
+                this.upsertAccountFromSession(data.session);
+            } else {
+                account.last_active = Date.now();
+                this.accounts.set(account.user_id, account);
+                this.activeUserId = account.user_id;
+            }
+
+            this.mode = 'account';
+            this.persistState();
+        });
     }
 
     public async restoreActiveSession() {
-        // Best-effort: attempt to restore the last active account into supabase auth
-        const active = this.activeUserId;
-        if (!active) return;
+        return this.runTransition(async () => {
+            if (this.mode === 'guest' || this.mode === 'anonymous') {
+                this.activeUserId = null;
+                this.persistState();
+                try {
+                    await supabase.auth.signOut();
+                } catch {
+                    // Ignore restore-time sign-out failures
+                }
+                return;
+            }
 
-        // Avoid navigation on cold-start; the auth gate will route appropriately
-        await this.switchUser(active, { navigate: false });
+            if (!this.accounts.size) {
+                this.activeUserId = null;
+                this.mode = 'anonymous';
+                this.persistState();
+                return;
+            }
+
+            if (!this.activeUserId || !this.accounts.has(this.activeUserId)) {
+                this.activeUserId = this.getSortedAccounts()[0]?.user_id ?? null;
+            }
+
+            while (this.activeUserId) {
+                const account = this.accounts.get(this.activeUserId);
+                if (!account) break;
+
+                const { data, error } = await supabase.auth.setSession({
+                    access_token: account.session.access_token,
+                    refresh_token: account.session.refresh_token,
+                });
+
+                if (!error) {
+                    if (data.session) {
+                        this.upsertAccountFromSession(data.session);
+                    } else {
+                        account.last_active = Date.now();
+                        this.accounts.set(account.user_id, account);
+                    }
+                    this.mode = 'account';
+                    this.persistState();
+                    return;
+                }
+
+                this.accounts.delete(account.user_id);
+                this.activeUserId = this.getSortedAccounts()[0]?.user_id ?? null;
+            }
+
+            this.activeUserId = null;
+            this.mode = this.deriveModeFromState();
+            this.persistState();
+        });
+    }
+
+    public async continueAsGuest() {
+        return this.runTransition(async () => {
+            this.mode = 'guest';
+            this.activeUserId = null;
+            this.persistState();
+
+            try {
+                await supabase.auth.signOut();
+            } catch {
+                // Keep local mode stable even if remote sign-out fails.
+            }
+        });
+    }
+
+    public async clearSession() {
+        return this.runTransition(async () => {
+            this.mode = 'anonymous';
+            this.activeUserId = null;
+            this.persistState();
+
+            try {
+                await supabase.auth.signOut();
+            } catch {
+                // Keep local mode stable even if remote sign-out fails.
+            }
+        });
+    }
+
+    public async handleExternalSignOut() {
+        return this.runTransition(async () => {
+            if (this.mode === 'account') {
+                this.activeUserId = null;
+                this.mode = 'anonymous';
+                this.persistState();
+            }
+        });
     }
 
     public async removeAccount(userId: string) {
-        this.accounts.delete(userId);
-        if (this.activeUserId === userId) {
-            this.activeUserId = null;
-            await supabase.auth.signOut();
-        }
-        this.saveToStorage();
+        return this.runTransition(async () => {
+            const wasActive = this.activeUserId === userId;
+
+            this.accounts.delete(userId);
+
+            if (wasActive) {
+                this.activeUserId = null;
+                try {
+                    await supabase.auth.signOut();
+                } catch {
+                    // Best-effort sign-out for active account removal.
+                }
+            }
+
+            if (this.mode === 'account' && !this.activeUserId) {
+                this.mode = 'anonymous';
+            }
+
+            this.persistState();
+        });
     }
 
-    public subscribe(callback: (accounts: KnownAccount[]) => void) {
+    public subscribe(callback: (snapshot: SessionSnapshot) => void) {
         this.listeners.push(callback);
-        callback(this.getAccounts());
+        callback(this.getSnapshot());
         return () => {
             this.listeners = this.listeners.filter(l => l !== callback);
         };
     }
 
     private notifyListeners() {
-        const list = this.getAccounts();
-        this.listeners.forEach(l => l(list));
+        const snapshot = this.getSnapshot();
+        this.listeners.forEach(listener => listener(snapshot));
     }
 }
 

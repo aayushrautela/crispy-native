@@ -1,12 +1,12 @@
 import { useTheme } from '@/src/core/ThemeContext';
+import { useAuth } from '@/src/core/AuthContext';
 import { supabase } from '@/src/core/services/supabase';
-import { StorageService } from '@/src/core/storage';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Lock, LogIn, Mail, User as UserIcon, UserPlus } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
@@ -18,12 +18,15 @@ export default function LoginScreen() {
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const { theme } = useTheme();
+    const { continueAsGuest } = useAuth();
     const router = useRouter();
+    const params = useLocalSearchParams<{ mode?: string | string[] }>();
+    const modeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+    const isAddAccountMode = modeParam === 'add-account';
 
     const handleAuth = async () => {
         setLoading(true);
         try {
-            StorageService.removeGlobal('crispy-guest-mode');
             if (isSignUp) {
                 const { data, error } = await supabase.auth.signUp({
                     email,
@@ -44,7 +47,11 @@ export default function LoginScreen() {
                 const { error } = await supabase.auth.signInWithPassword({ email, password });
                 if (error) throw error;
             }
-            router.replace('/(tabs)');
+            if (isAddAccountMode) {
+                router.replace('/(auth)/profiles' as never);
+            } else {
+                router.replace('/(tabs)');
+            }
         } catch (e: any) {
             alert(e.message);
         } finally {
@@ -52,9 +59,16 @@ export default function LoginScreen() {
         }
     };
 
-    const handleGuest = () => {
-        StorageService.setGlobal('crispy-guest-mode', true);
-        router.replace('/(tabs)');
+    const handleGuest = async () => {
+        setLoading(true);
+        try {
+            await continueAsGuest();
+            router.replace('/(tabs)');
+        } catch (e: any) {
+            alert(e.message || 'Unable to continue as guest.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const toggleMode = () => {
@@ -62,7 +76,11 @@ export default function LoginScreen() {
     };
 
     return (
-        <SettingsSubpage title={isSignUp ? "Create Account" : "Sign In"}>
+        <SettingsSubpage
+            title={isAddAccountMode
+                ? (isSignUp ? 'Create & Add Account' : 'Add Account')
+                : (isSignUp ? 'Create Account' : 'Sign In')}
+        >
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.container}
@@ -126,7 +144,9 @@ export default function LoginScreen() {
 
                     <View style={styles.actionContainer}>
                         <ExpressiveButton
-                            title={isSignUp ? "Sign Up" : "Sign In"}
+                            title={isSignUp
+                                ? (isAddAccountMode ? 'Create & Add Account' : 'Sign Up')
+                                : (isAddAccountMode ? 'Add Account' : 'Sign In')}
                             onPress={handleAuth}
                             isLoading={loading}
                             icon={isSignUp ? UserPlus : LogIn}
@@ -135,27 +155,36 @@ export default function LoginScreen() {
                         />
 
                         <ExpressiveButton
-                            title={isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
+                            title={isSignUp
+                                ? 'Already have an account? Sign In'
+                                : (isAddAccountMode ? 'Need a new account? Sign Up' : "Don't have an account? Sign Up")}
                             variant="text"
                             onPress={toggleMode}
+                            disabled={loading}
                             style={styles.toggleBtn}
                         />
 
-                        <View style={styles.divider}>
-                            <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
-                            <Typography variant="label-small" style={{ color: theme.colors.outline, marginHorizontal: 16 }}>
-                                OR
-                            </Typography>
-                            <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
-                        </View>
+                        {!isAddAccountMode && (
+                            <>
+                                <View style={styles.divider}>
+                                    <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
+                                    <Typography variant="label-small" style={{ color: theme.colors.outline, marginHorizontal: 16 }}>
+                                        OR
+                                    </Typography>
+                                    <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
+                                </View>
 
-                        <ExpressiveButton
-                            title="Continue as Guest"
-                            variant="tonal"
-                            onPress={handleGuest}
-                            size="md"
-                            style={styles.guestBtn}
-                        />
+                                <ExpressiveButton
+                                    title="Continue as Guest"
+                                    variant="tonal"
+                                    onPress={handleGuest}
+                                    size="md"
+                                    style={styles.guestBtn}
+                                    isLoading={loading}
+                                    disabled={loading}
+                                />
+                            </>
+                        )}
                     </View>
                 </View>
             </KeyboardAvoidingView>
