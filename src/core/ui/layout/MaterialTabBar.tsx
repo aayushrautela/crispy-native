@@ -53,9 +53,12 @@ const MaterialTabItem = ({
             <Typography
                 variant="label-medium"
                 weight={isActive ? 'bold' : 'medium'}
+                numberOfLines={1}
+                allowFontScaling={false}
                 style={{
                     color: isActive ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
-                    marginTop: 4
+                    marginTop: 4,
+                    paddingHorizontal: 2,
                 }}
             >
                 {route.title}

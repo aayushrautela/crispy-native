@@ -85,7 +85,6 @@ export const Typography = ({
                     color: theme.colors.onSurface,
                     fontFamily: getFontFamily(),
                     includeFontPadding: false,
-                    textAlignVertical: 'center',
                 },
                 style,
             ]}
