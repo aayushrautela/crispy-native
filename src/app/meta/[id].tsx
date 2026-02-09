@@ -1,4 +1,5 @@
 import { useResponsive } from '@/src/core/hooks/useResponsive';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { RatingModal } from '@/src/core/ui/RatingModal';
@@ -32,6 +33,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function MetaDetailsScreen() {
     const { id, type } = useLocalSearchParams();
     const { theme } = useTheme();
+    const { settings } = useUserStore();
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { isTablet, isLandscape } = useResponsive();
@@ -192,10 +194,14 @@ export default function MetaDetailsScreen() {
     const effectiveBackground = amoled ? '#000000' : mediaPalette.surface;
 
     useEffect(() => {
-        if (enriched.tmdbId) {
+        if (!enriched.tmdbId) return;
+
+        if (settings.aiInsightsMode === 'always') {
+            generateInsights(enriched);
+        } else {
             loadFromCache(enriched.tmdbId.toString());
         }
-    }, [enriched.tmdbId]);
+    }, [enriched.tmdbId, settings.aiInsightsMode]);
 
     const handleStreamSelect = useCallback((stream: any) => {
         streamBottomSheetRef.current?.dismiss();

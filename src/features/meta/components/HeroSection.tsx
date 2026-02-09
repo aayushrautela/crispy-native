@@ -1,5 +1,6 @@
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { TMDBMeta } from '@/src/core/services/TMDBService';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
@@ -294,6 +295,7 @@ export const HeroSection = memo(function HeroSection({
 }: HeroSectionProps) {
     const { width, isTablet, isLandscape } = useResponsive();
     const { theme } = useTheme();
+    const { settings } = useUserStore();
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,
@@ -342,7 +344,9 @@ export const HeroSection = memo(function HeroSection({
                             onToggle={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                         />
                         <View style={[styles.actionStack, { alignItems: 'center' }]}>
-                            <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
+                            {settings.aiInsightsMode !== 'off' && (
+                                <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
+                            )}
                             <HeroWatchButton
                                 onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                                 textColor={watchButtonTextColor} label={watchButtonLabel}
@@ -409,7 +413,9 @@ export const HeroSection = memo(function HeroSection({
                     />
 
                     <View style={styles.actionStack}>
-                        <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
+                        {settings.aiInsightsMode !== 'off' && (
+                            <HeroAiInsightButton onPress={onAiInsightsPress} isLoading={isAiLoading} />
+                        )}
                         <HeroWatchButton
                             onPress={onWatchPress} isLoading={isLoading} color={watchButtonColor}
                             textColor={watchButtonTextColor} label={watchButtonLabel}
