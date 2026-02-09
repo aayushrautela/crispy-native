@@ -34,6 +34,10 @@ const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
     const displayAny = displayItem as any;
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
+    const decodeWidth = Math.max(1, Math.round(width ?? 160));
+    const decodeHeight = Math.max(1, Math.round(decodeWidth / aspectRatio));
+    const logoDecodeWidth = Math.max(1, Math.round(decodeWidth * 0.7));
+    const logoDecodeHeight = Math.max(1, Math.round(decodeHeight * 0.5));
 
     const imageSrc = displayItem.posterShape === 'landscape'
         ? (displayItem.backdrop || displayItem.poster)
@@ -70,7 +74,7 @@ const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
                     {imageSrc ? (
                         <ExpoImage
                             recyclingKey={String(displayItem.id)}
-                            source={{ uri: imageSrc }}
+                            source={{ uri: imageSrc, width: decodeWidth, height: decodeHeight }}
                             style={styles.image}
                             contentFit="cover"
                             transition={Platform.OS === 'android' ? 0 : 150}
@@ -83,7 +87,7 @@ const CatalogCardComponent = ({ item, width }: CatalogCardProps) => {
                         <View style={styles.logoOverlay}>
                             <ExpoImage
                                 recyclingKey={`${displayItem.id}-logo`}
-                                source={{ uri: displayItem.logo }}
+                                source={{ uri: displayItem.logo, width: logoDecodeWidth, height: logoDecodeHeight }}
                                 style={styles.logo}
                                 contentFit="contain"
                                 transition={Platform.OS === 'android' ? 0 : 150}

@@ -35,6 +35,10 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
+    const decodeWidth = Math.max(1, Math.round(width));
+    const decodeHeight = Math.max(1, Math.round(height));
+    const logoDecodeWidth = Math.max(1, Math.round(width * 0.7));
+    const logoDecodeHeight = Math.max(1, Math.round(height * 0.5));
 
     const imageSrc = displayItem.posterShape === 'landscape'
         ? (displayItem.backdrop || displayItem.poster)
@@ -71,7 +75,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                     {imageSrc ? (
                         <ExpoImage
                             recyclingKey={String(displayItem.id)}
-                            source={{ uri: imageSrc }}
+                            source={{ uri: imageSrc, width: decodeWidth, height: decodeHeight }}
                             style={styles.image}
                             contentFit="cover"
                             transition={Platform.OS === 'android' ? 0 : 150}
@@ -84,7 +88,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                         <View style={styles.logoOverlay}>
                             <ExpoImage
                                 recyclingKey={`${displayItem.id}-logo`}
-                                source={{ uri: displayItem.logo }}
+                                source={{ uri: displayItem.logo, width: logoDecodeWidth, height: logoDecodeHeight }}
                                 style={styles.logo}
                                 contentFit="contain"
                                 transition={Platform.OS === 'android' ? 0 : 150}
