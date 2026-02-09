@@ -53,6 +53,7 @@ class VlcEngine(
 
   interface Listener {
     fun onLoad(duration: Double, width: Int, height: Int)
+    fun onVideoSizeChanged(width: Int, height: Int) {}
     fun onProgress(currentTime: Double, duration: Double)
     fun onEnd()
     fun onError(error: String)
@@ -276,16 +277,21 @@ class VlcEngine(
     if (surfaceWidth <= 0 || surfaceHeight <= 0) return
     
     try {
+      val videoAspectRatio = if (cachedWidth > 0 && cachedHeight > 0) {
+        "${cachedWidth}:${cachedHeight}"
+      } else {
+        null
+      }
+
       when (resizeMode) {
-        "stretch", "cover" -> {
+        "stretch" -> {
           mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
         }
+        "cover", "contain" -> {
+          mp.aspectRatio = videoAspectRatio
+        }
         else -> {
-          if (cachedWidth > 0 && cachedHeight > 0) {
-            mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
-          } else {
-            mp.aspectRatio = null // Reset to default
-          }
+          mp.aspectRatio = videoAspectRatio
         }
       }
     } catch (e: Exception) {
@@ -308,6 +314,9 @@ class VlcEngine(
     if (hasSentLoadEvent) {
       val durSec = if (cachedDuration > 0) cachedDuration.toDouble() / 1000.0 else 0.0
       listener.onLoad(durSec, cachedWidth, cachedHeight)
+    }
+    if (cachedWidth > 0 && cachedHeight > 0) {
+      listener.onVideoSizeChanged(cachedWidth, cachedHeight)
     }
     if (audioTrackMap.isNotEmpty() || spuTrackMap.isNotEmpty()) {
       parseAndSendTracks()
@@ -481,10 +490,18 @@ class VlcEngine(
       } else {
         width
       }
+
+      val sizeChanged = cachedWidth != darWidth || cachedHeight != height
       cachedWidth = darWidth
       cachedHeight = height
+
       applyResizeMode()
       checkReadyState()
+
+      if (sizeChanged) {
+        dispatch { it.onVideoSizeChanged(cachedWidth, cachedHeight) }
+      }
+
       PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
     }
   }

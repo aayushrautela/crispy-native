@@ -217,12 +217,12 @@ class CrispyVlcVideoView(
   // --- Listener Impl ---
   
   override fun onLoad(duration: Double, width: Int, height: Int) {
-      if (width > 0 && height > 0) {
-          videoW = width
-          videoH = height
-          applyResizeTransform()
-      }
+      updateVideoSize(width, height)
       onLoad(mapOf("duration" to duration, "width" to width, "height" to height))
+  }
+
+  override fun onVideoSizeChanged(width: Int, height: Int) {
+      updateVideoSize(width, height)
   }
 
   override fun onProgress(currentTime: Double, duration: Double) {
@@ -291,6 +291,15 @@ class CrispyVlcVideoView(
     }
     playbackService = null
     isBound = false
+  }
+
+  private fun updateVideoSize(width: Int, height: Int) {
+    if (width <= 0 || height <= 0) return
+    if (videoW == width && videoH == height) return
+
+    videoW = width
+    videoH = height
+    applyResizeTransform()
   }
 
   private fun applyResizeTransform() {

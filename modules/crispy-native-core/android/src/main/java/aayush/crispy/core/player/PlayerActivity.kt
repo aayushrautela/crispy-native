@@ -363,14 +363,19 @@ class PlayerActivity : ReactActivity() {
     }
   }
 
+  private fun updateVideoSize(width: Int, height: Int) {
+    if (width <= 0 || height <= 0) return
+    if (videoW == width && videoH == height) return
+
+    videoW = width
+    videoH = height
+    applyResizeTransform()
+    updatePipParams()
+  }
+
   private val vlcListener = object : VlcEngine.Listener {
     override fun onLoad(duration: Double, width: Int, height: Int) {
-      if (width > 0 && height > 0) {
-        videoW = width
-        videoH = height
-        applyResizeTransform()
-        updatePipParams()
-      }
+      updateVideoSize(width, height)
 
       emitNativePlayerEvent(
         "load",
@@ -380,6 +385,10 @@ class PlayerActivity : ReactActivity() {
           "height" to height
         )
       )
+    }
+
+    override fun onVideoSizeChanged(width: Int, height: Int) {
+      updateVideoSize(width, height)
     }
 
     override fun onProgress(position: Double, duration: Double) {
@@ -447,12 +456,7 @@ class PlayerActivity : ReactActivity() {
 
   private val exoListener = object : ExoEngine.Listener {
     override fun onLoad(duration: Double, width: Int, height: Int) {
-      if (width > 0 && height > 0) {
-        videoW = width
-        videoH = height
-        applyResizeTransform()
-        updatePipParams()
-      }
+      updateVideoSize(width, height)
 
       emitNativePlayerEvent(
         "load",
@@ -887,7 +891,7 @@ class PlayerActivity : ReactActivity() {
       } catch (_: Throwable) {
         // ignore
       }
-      setSeamlessResizeEnabledCompat(builder, true)
+      setSeamlessResizeEnabledCompat(builder, false)
     }
 
     return builder.build()
