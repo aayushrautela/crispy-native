@@ -161,7 +161,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                             <View style={styles.progressBackground}>
                                 <View style={[styles.progressFill, { backgroundColor: theme.colors.primary, width: `${fillWidth}%` }]} />
                                 <View style={[styles.progressInactive, { left: `${inactiveLeft}%`, right: 0 }]} />
-                                <View style={[styles.progressThumb, { left: `${percent}%`, backgroundColor: '#fff' }]} />
+                                <View style={[styles.progressThumb, { left: `${percent}%`, backgroundColor: theme.colors.primary }]} />
                             </View>
                         );
                     })()}
@@ -293,11 +293,12 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
     },
     progressThumb: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        width: 2,
+        height: 14,
+        borderRadius: 1,
         position: 'absolute',
-        marginLeft: -6,
+        marginLeft: -1,
+        zIndex: 2,
     },
     controlsRow: {
         flexDirection: 'row',

@@ -54,9 +54,12 @@ const NavigationRailItem = ({
             <Typography
                 variant="label-medium"
                 weight={isActive ? 'bold' : 'medium'}
+                numberOfLines={1}
+                allowFontScaling={false}
                 style={{
                     color: isActive ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
-                    marginTop: 4
+                    marginTop: 4,
+                    paddingHorizontal: 2,
                 }}
             >
                 {route.title}
@@ -79,7 +82,7 @@ export const MaterialNavigationRail = () => {
             }
         ]}>
             <View style={styles.topSection}>
-                <Clapperboard variant="h3" weight="black" style={{ color: theme.colors.primary }} size={32} />
+                <Clapperboard color={theme.colors.primary} size={32} />
             </View>
 
             <View style={styles.itemsSection}>

@@ -1,5 +1,6 @@
 import { requireNativeViewManager } from 'expo-modules-core';
-import { ViewProps } from 'react-native';
+import React from 'react';
+import { Platform, View, ViewProps } from 'react-native';
 
 export interface LoadingIndicatorViewProps extends ViewProps {
     color?: number;
@@ -8,5 +9,9 @@ export interface LoadingIndicatorViewProps extends ViewProps {
     containerSize?: number;
 }
 
+const DummyView = (props: LoadingIndicatorViewProps) => <View {...props} />;
+
 export const LoadingIndicatorView: React.ComponentType<LoadingIndicatorViewProps> =
-    requireNativeViewManager('LoadingIndicator');
+    Platform.OS === 'android'
+        ? requireNativeViewManager('LoadingIndicator')
+        : DummyView;

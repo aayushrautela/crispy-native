@@ -22,16 +22,20 @@ class SessionManagerService {
     private listeners: ((accounts: KnownAccount[]) => void)[] = [];
 
     constructor() {
+        console.log('[CRISPY-BOOT] SessionManagerService constructor called');
         this.loadFromStorage();
     }
 
     private loadFromStorage() {
+        console.log('[CRISPY-BOOT] SessionManager loading from storage');
         const stored = StorageService.getGlobal<KnownAccount[]>('crispy_known_sessions');
         if (stored) {
+            console.log(`[CRISPY-BOOT] Found ${stored.length} stored sessions`);
             stored.forEach((acc: KnownAccount) => this.accounts.set(acc.user_id, acc));
         }
 
         const active = StorageService.getGlobal<string>('crispy_active_user_id');
+        console.log(`[CRISPY-BOOT] Active user ID from storage: ${active}`);
         if (active && this.accounts.has(active)) {
             this.activeUserId = active;
         }

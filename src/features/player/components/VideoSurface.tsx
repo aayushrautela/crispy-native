@@ -241,9 +241,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     };
 
     if (Platform.OS !== 'android') {
-        // KSPlayer temporarily disabled for debugging crash
-        return <View style={styles.container} />;
-        /*
         return (
             <KSPlayerSurface
                 ref={iosPlayerRef as any}
@@ -260,7 +257,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
                 onTracksChanged={onTracksChanged}
             />
         );
-        */
     }
 
     return (

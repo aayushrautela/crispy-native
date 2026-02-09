@@ -1,6 +1,6 @@
 import { requireNativeModule, requireNativeViewManager } from 'expo-modules-core';
 import type React from 'react';
-import { ViewProps } from 'react-native';
+import { Platform, ViewProps } from 'react-native';
 
 // requireNativeModule will look for a module with the same name as in CrispyNativeCoreModule.kt
 const CrispyNativeCore = requireNativeModule('CrispyNativeCore');
@@ -70,7 +70,12 @@ export interface CrispyVideoViewRef {
 
 type NativeView<P> = React.ForwardRefExoticComponent<React.PropsWithoutRef<P> & React.RefAttributes<any>>;
 
-export const CrispyVideoView = requireNativeViewManager('CrispyNativeCore') as NativeView<CrispyVideoViewProps>;
+// Helper for unavailable views
+const UnavailableView = (_: any) => null;
+
+export const CrispyVideoView = Platform.OS === 'android'
+    ? (requireNativeViewManager('CrispyNativeCore') as NativeView<CrispyVideoViewProps>)
+    : (UnavailableView as unknown as NativeView<CrispyVideoViewProps>);
 
 // VLC view (native: CrispyVlcVideoView). Keep CrispyVideoView export for backwards compatibility.
 export const CrispyVlcVideoView = CrispyVideoView;
@@ -103,7 +108,9 @@ export interface CrispyExoVideoViewRef {
     setSubtitleTrack: (trackId: number) => void;
 }
 
-export const CrispyExoVideoView = requireNativeViewManager('CrispyExoPlayer') as NativeView<CrispyExoVideoViewProps>;
+export const CrispyExoVideoView = Platform.OS === 'android'
+    ? (requireNativeViewManager('CrispyExoPlayer') as NativeView<CrispyExoVideoViewProps>)
+    : (UnavailableView as unknown as NativeView<CrispyExoVideoViewProps>);
 
 // KSPlayer view (iOS only)
 export interface CrispyKSVideoViewProps extends ViewProps {
@@ -132,8 +139,9 @@ export interface CrispyKSVideoViewRef {
     setSubtitleTrack: (trackId: number) => void;
 }
 
-// export const CrispyKSVideoView = requireNativeViewManager('CrispyKSPlayer') as NativeView<CrispyKSVideoViewProps>;
-export const CrispyKSVideoView = null as any;
+export const CrispyKSVideoView = Platform.OS === 'ios'
+    ? (requireNativeViewManager('CrispyKSPlayer') as NativeView<CrispyKSVideoViewProps>)
+    : (UnavailableView as unknown as NativeView<CrispyKSVideoViewProps>);
 
 export default {
     /**
