@@ -956,7 +956,7 @@ export default function PlayerScreen() {
                                                     styles.progressThumb,
                                                     {
                                                         left: `${percent}%`,
-                                                        backgroundColor: '#fff'
+                                                        backgroundColor: theme.colors.primary
                                                     }
                                                 ]}
                                             />
@@ -1309,11 +1309,11 @@ const styles = StyleSheet.create({
     },
     progressThumb: {
         position: 'absolute',
-        top: -8, // Center 26px handle on 10px track
-        height: 26,
-        width: 4,
-        borderRadius: 2,
-        marginLeft: -2,
+        top: -4, // Center 18px handle on 10px track
+        height: 18,
+        width: 2,
+        borderRadius: 1,
+        marginLeft: -1,
         zIndex: 2,
     },
     controlsRow: {
