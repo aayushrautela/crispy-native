@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
     View, 
     Text, 
     StyleSheet, 
     TouchableOpacity, 
-    Dimensions,
-    Pressable,
-    BackHandler
+    Pressable
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -14,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InsightCard } from '../hooks/useAiInsights';
 import { ExpressiveImage } from './ExpressiveImage';
 import { TMDBMeta } from '@/src/core/services/TMDBService';
+import { useResponsive } from '@/src/core/hooks/useResponsive';
 
 interface AiInsightsStoryProps {
     visible: boolean;
@@ -40,16 +39,16 @@ const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
     }
 };
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta, backgroundColor, accentColor }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
+    const { isTablet, isLandscape, width: windowWidth, height: windowHeight } = useResponsive();
+
+    const isSplitLayout = isTablet && isLandscape;
 
     const effectiveBg = backgroundColor || (theme.dark ? '#000' : '#fff');
     const effectiveAccent = accentColor || '#FFD700';
-    const isDark = theme.dark; // Or calculate brightness of effectiveBg if needed, but project uses theme.dark usually
 
     const allInsights = React.useMemo(() => {
         const base = [...insights];
@@ -103,7 +102,7 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
 
     const handlePress = (evt: any) => {
         const x = evt.nativeEvent.locationX;
-        if (x < SCREEN_WIDTH / 3) {
+        if (x < windowWidth / 3) {
             handlePrev();
         } else {
             handleNext();
@@ -119,7 +118,11 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
     return (
         <View style={[styles.container, { backgroundColor: effectiveBg }]}>
             <Pressable style={styles.pressArea} onPress={handlePress}>
-                <View style={[styles.content, { paddingTop: insets.top + 60 }]}>
+                <View style={[
+                    styles.content, 
+                    { paddingTop: insets.top + 60 },
+                    isSplitLayout && styles.splitContent
+                ]}>
                     <View style={styles.header}>
                         <View style={styles.typeBadge}>
                             <Ionicons 
@@ -134,23 +137,54 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={[
-                        styles.title,
-                        currentInsight.type === 'trivia' && styles.triviaTitle
-                    ]}>{currentInsight.title}</Text>
-                    {storyImage && currentIndex < allInsights.length - 1 && (
-                        <View style={styles.imageContainer}>
-                            <ExpressiveImage 
-                                uri={storyImage} 
-                                size={SCREEN_WIDTH * 0.7} 
-                                variant={currentIndex === 0 ? 'expressive' : currentIndex === 1 ? 'rectangle' : 'pill-diagonal'}
-                            />
+                    {isSplitLayout ? (
+                        <View style={styles.splitLayout}>
+                            <View style={styles.splitLeft}>
+                                {storyImage && currentIndex < allInsights.length - 1 && (
+                                    <View style={styles.imageContainer}>
+                                        <ExpressiveImage 
+                                            uri={storyImage} 
+                                            size={Math.min(windowWidth * 0.4, windowHeight * 0.6)} 
+                                            variant={currentIndex === 0 ? 'expressive' : currentIndex === 1 ? 'rectangle' : 'pill-diagonal'}
+                                        />
+                                    </View>
+                                )}
+                            </View>
+                            <View style={styles.splitRight}>
+                                <Text style={[
+                                    styles.title,
+                                    currentInsight.type === 'trivia' && styles.triviaTitle,
+                                    { fontSize: 44, lineHeight: 52 }
+                                ]}>{currentInsight.title}</Text>
+                                <Text style={[
+                                    styles.bodyText,
+                                    currentInsight.type === 'trivia' && styles.triviaBodyText,
+                                    { fontSize: 24, lineHeight: 36 }
+                                ]}>{currentInsight.content}</Text>
+                            </View>
                         </View>
+                    ) : (
+                        <>
+                            <Text style={[
+                                styles.title,
+                                currentInsight.type === 'trivia' && styles.triviaTitle
+                            ]}>{currentInsight.title}</Text>
+                            {storyImage && currentIndex < allInsights.length - 1 && (
+                                <View style={styles.imageContainer}>
+                                    <ExpressiveImage 
+                                        uri={storyImage} 
+                                        size={windowWidth * 0.7} 
+                                        variant={currentIndex === 0 ? 'expressive' : currentIndex === 1 ? 'rectangle' : 'pill-diagonal'}
+                                    />
+                                </View>
+                            )}
+                            <Text style={[
+                                styles.bodyText,
+                                currentInsight.type === 'trivia' && styles.triviaBodyText
+                            ]}>{currentInsight.content}</Text>
+                        </>
                     )}
-                    <Text style={[
-                        styles.bodyText,
-                        currentInsight.type === 'trivia' && styles.triviaBodyText
-                    ]}>{currentInsight.content}</Text>
+                    
                     <Text style={styles.aiFooter}>Generative AI can make mistakes</Text>
                 </View>
             </Pressable>
@@ -265,6 +299,24 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 'auto',
         marginBottom: 40,
+    },
+    splitContent: {
+        paddingHorizontal: 60,
+    },
+    splitLayout: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 60,
+    },
+    splitLeft: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    splitRight: {
+        flex: 1.2,
+        justifyContent: 'center',
     },
 });
 
