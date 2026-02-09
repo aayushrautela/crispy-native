@@ -1,5 +1,5 @@
 import React from 'react';
-import { processColor, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, processColor, StyleSheet, View } from 'react-native';
 import { LoadingIndicatorView } from '../../../modules/loading-indicator';
 
 export interface LoadingIndicatorProps {
@@ -37,6 +37,17 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
 
     if (!animating) {
         return <View style={sizeStyle} />;
+    }
+
+    if (Platform.OS === 'ios') {
+        return (
+            <View style={sizeStyle}>
+                <ActivityIndicator
+                    color={color}
+                    size={resolvedSize >= 36 ? 'large' : 'small'}
+                />
+            </View>
+        );
     }
 
     return (
