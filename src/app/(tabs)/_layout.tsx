@@ -1,72 +1,99 @@
 import { useTheme } from '@/src/core/ThemeContext';
-import { MaterialNavigationRail } from '@/src/core/ui/layout/MaterialNavigationRail';
-import { SplitTabBar } from '@/src/core/ui/layout/SplitTabBar';
-import { Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
 import React from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Platform } from 'react-native';
 
 export const unstable_settings = {
   initialRouteName: 'index',
 };
 
 export default function TabLayout() {
-  const { width } = useWindowDimensions();
   const { theme } = useTheme();
-  const isTablet = width >= 768;
-
 
   return (
-    <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column' }}>
-      {/* Tablet: Side Rail */}
-      {isTablet && <MaterialNavigationRail />}
-
-      <View style={{ flex: 1 }}>
-        <Tabs
-          tabBar={() => null}
-          backBehavior="firstRoute"
-          screenOptions={{
-            headerShown: false,
-            animation: 'fade',
-            // No sceneContainerStyle needed anymore! Flex layout handles it.
+    <NativeTabs
+      backBehavior="history"
+      disableTransparentOnScrollEdge
+      minimizeBehavior="onScrollDown"
+      blurEffect="systemChromeMaterialDark"
+      indicatorColor={theme.colors.primary}
+      backgroundColor={Platform.OS === 'android' ? theme.colors.surface : null}
+      iconColor={{
+        default: theme.colors.onSurfaceVariant,
+        selected: theme.colors.primary,
+      }}
+      labelStyle={{
+        default: {
+          fontFamily: 'GoogleSans-Medium',
+          fontSize: 11,
+          color: theme.colors.onSurfaceVariant,
+        },
+        selected: {
+          fontFamily: 'GoogleSans-SemiBold',
+          fontSize: 11,
+          color: theme.colors.primary,
+        },
+      }}
+      rippleColor={theme.colors.primary}
+      badgeBackgroundColor={theme.colors.primary}
+      badgeTextColor={theme.colors.onPrimary}
+      labelVisibilityMode="labeled"
+    >
+      <NativeTabs.Trigger name="index">
+        <Icon
+          sf={{ default: 'house', selected: 'house.fill' }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="home-outline" />,
+            selected: <VectorIcon family={Ionicons} name="home" />,
           }}
-        >
-          <Tabs.Screen
-            name="index"
-            options={{
-              title: 'Home',
-              // We still define options for the router, even if we don't use them for rendering standard tabs
-            }}
-          />
-          <Tabs.Screen
-            name="search"
-            options={{
-              title: 'Search',
-            }}
-          />
-          <Tabs.Screen
-            name="discover"
-            options={{
-              title: 'Discover',
-            }}
-          />
-          <Tabs.Screen
-            name="library"
-            options={{
-              title: 'Library',
-            }}
-          />
-          <Tabs.Screen
-            name="settings"
-            options={{
-              title: 'Settings',
-            }}
-          />
-        </Tabs>
-      </View>
+        />
+        <Label>Home</Label>
+      </NativeTabs.Trigger>
 
-      {/* Mobile: Bottom Bar */}
-      {!isTablet && <SplitTabBar />}
-    </View>
+      <NativeTabs.Trigger name="search">
+        <Icon
+          sf={{ default: 'magnifyingglass', selected: 'magnifyingglass' }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="search-outline" />,
+            selected: <VectorIcon family={Ionicons} name="search" />,
+          }}
+        />
+        <Label>Search</Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="discover">
+        <Icon
+          sf={{ default: 'safari', selected: 'safari.fill' }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="compass-outline" />,
+            selected: <VectorIcon family={Ionicons} name="compass" />,
+          }}
+        />
+        <Label>Discover</Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="library">
+        <Icon
+          sf={{ default: 'books.vertical', selected: 'books.vertical.fill' }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="library-outline" />,
+            selected: <VectorIcon family={Ionicons} name="library" />,
+          }}
+        />
+        <Label>Library</Label>
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="settings">
+        <Icon
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="settings-outline" />,
+            selected: <VectorIcon family={Ionicons} name="settings" />,
+          }}
+        />
+        <Label>Settings</Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }
-
