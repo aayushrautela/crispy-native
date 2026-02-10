@@ -750,7 +750,13 @@ class PlayerActivity : ReactActivity() {
     stopPlaybackAndFinish()
   }
 
+  fun stopPlaybackAndFinishFromJs(reason: String?) {
+    Log.i(TAG, "stopPlaybackAndFinishFromJs reason=$reason engine=$engine")
+    stopPlaybackAndFinish()
+  }
+
   private fun stopPlaybackAndFinish() {
+    Log.i(TAG, "stopPlaybackAndFinish engine=$engine")
     // Stop playback directly via the bound service first (synchronous)
     try {
       if (engine == ENGINE_VLC) {
@@ -778,6 +784,31 @@ class PlayerActivity : ReactActivity() {
   override fun onDestroy() {
     // Let the background /player route clean up (e.g., destroyStream(sessionId)) once we close.
     emit("onNativePlayerClosed", sessionId)
+
+    // If we are truly closing the player UI, ensure playback is stopped.
+    // (The service is started via startService(), so it can keep running after unbind unless stopped.)
+    if (isFinishing && !isInPictureInPictureMode) {
+      Log.i(TAG, "onDestroy(isFinishing) stopping playback (engine=$engine)")
+      try {
+        if (engine == ENGINE_VLC) {
+          vlcService?.stopPlayback()
+        } else {
+          exoService?.stopPlayback()
+        }
+      } catch (_: Throwable) {
+        // ignore
+      }
+
+      try {
+        if (engine == ENGINE_VLC) {
+          startService(Intent(this, VlcPlaybackService::class.java).setAction(VlcPlaybackService.ACTION_STOP))
+        } else {
+          startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
+        }
+      } catch (_: Throwable) {
+        // ignore
+      }
+    }
 
     try {
       if (engine == ENGINE_VLC) {
@@ -831,10 +862,11 @@ class PlayerActivity : ReactActivity() {
   }
 
   fun setResizeModeFromJs(mode: String?) {
+    Log.i(TAG, "setResizeModeFromJs engine=$engine mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} surface=${surfaceView?.width}x${surfaceView?.height}")
     resizeMode = mode
     applyResizeTransform()
     updatePipParams()
-    // Also apply resize mode to VLC engine for its internal aspect ratio handling
+    // Forward resize mode to VLC engine for its internal scaling.
     if (engine == ENGINE_VLC) {
       vlcService?.setResizeMode(mode)
     }
@@ -910,6 +942,22 @@ class PlayerActivity : ReactActivity() {
 
   private fun applyResizeTransform() {
     val sv = surfaceView ?: return
+
+    // VLC handles fit/fill internally via MediaPlayer.setVideoScale().
+    // Keep the SurfaceView itself full-screen to avoid double-scaling.
+    if (engine == ENGINE_VLC) {
+      val mp = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+      val lp = sv.layoutParams as? FrameLayout.LayoutParams
+      if (lp == null || lp.width != mp || lp.height != mp) {
+        val p = lp ?: FrameLayout.LayoutParams(mp, mp)
+        p.width = mp
+        p.height = mp
+        p.gravity = android.view.Gravity.CENTER
+        sv.layoutParams = p
+        Log.i(TAG, "applyResizeTransform: VLC -> reset SurfaceView to match_parent")
+      }
+      return
+    }
     
     // We resize the SurfaceView layout params directly.
     
@@ -955,6 +1003,7 @@ class PlayerActivity : ReactActivity() {
         params.height = targetH
         params.gravity = android.view.Gravity.CENTER
         sv.layoutParams = params
+        Log.i(TAG, "applyResizeTransform mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} -> ${targetW}x${targetH}")
         // This will trigger surfaceChanged
     }
   }

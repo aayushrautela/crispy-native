@@ -244,12 +244,18 @@ class VlcEngine(
     surfaceWidth = width
     surfaceHeight = height
 
+    try {
+      vout.setOnNewVideoLayoutListener(this)
+    } catch (e: Throwable) {
+      Log.w(TAG, "setOnNewVideoLayoutListener failed: ${e.message}")
+    }
+
     if (!vout.areViewsAttached()) {
       vout.setVideoSurface(surface, null)
       vout.setWindowSize(width, height)
       vout.addCallback(this)
       vout.attachViews()
-      Log.d(TAG, "Surface attached: ${width}x${height}")
+      Log.i(TAG, "Surface attached: ${width}x${height}")
     } else {
       vout.setWindowSize(width, height)
     }
@@ -268,7 +274,16 @@ class VlcEngine(
   }
 
   fun setResizeMode(mode: String) {
-    resizeMode = mode.lowercase()
+    val next = mode.lowercase().let {
+      when (it) {
+        "fill", "crop" -> "cover"
+        else -> it
+      }
+    }
+    if (resizeMode != next) {
+      Log.i(TAG, "Resize mode: $resizeMode -> $next")
+    }
+    resizeMode = next
     applyResizeMode()
   }
 
@@ -284,6 +299,7 @@ class VlcEngine(
       }
 
       mp.setVideoScale(scaleType)
+      Log.i(TAG, "applyResizeMode mode=$resizeMode scaleType=$scaleType surface=${surfaceWidth}x${surfaceHeight}")
       // NOTE: Avoid mixing legacy `scale`/`aspectRatio` with `setVideoScale`.
       // On some libVLC versions/devices, setting those after `setVideoScale` can
       // effectively override the ScaleType and make Fit/Fill appear to do nothing.
@@ -298,7 +314,13 @@ class VlcEngine(
     if (vout.areViewsAttached()) {
       vout.removeCallback(this)
       vout.detachViews()
-      Log.d(TAG, "Surface detached")
+      Log.i(TAG, "Surface detached")
+    }
+
+    try {
+      vout.setOnNewVideoLayoutListener(null)
+    } catch (_: Throwable) {
+      // ignore
     }
   }
 

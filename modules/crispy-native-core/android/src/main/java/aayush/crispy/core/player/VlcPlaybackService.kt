@@ -48,7 +48,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   override fun onCreate() {
     super.onCreate()
     engine = VlcEngine(applicationContext, notificationCallbacks = this, serviceCallbacks = this)
-    Log.d(TAG, "onCreate")
+    Log.i(TAG, "onCreate")
   }
 
   override fun onBind(intent: Intent?): IBinder {
@@ -57,13 +57,14 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_STOP) {
+      Log.i(TAG, "onStartCommand ACTION_STOP")
       onStopRequested()
     }
     return START_NOT_STICKY
   }
 
   override fun onDestroy() {
-    Log.d(TAG, "onDestroy")
+    Log.i(TAG, "onDestroy")
     mainHandler.removeCallbacks(stopRunnable)
     try {
       engine.release()
@@ -155,6 +156,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
 
   fun setResizeMode(mode: String?) {
     if (!mode.isNullOrBlank()) {
+      Log.i(TAG, "setResizeMode mode=$mode clients=$clientCount")
       engine.setResizeMode(mode)
     }
   }
@@ -205,6 +207,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   }
 
   override fun onStopRequested() {
+    Log.i(TAG, "onStopRequested")
     engine.stopPlayback()
 
     if (isForeground) {

@@ -8,7 +8,6 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
     return useQuery({
         queryKey: ['streams', type, id],
         queryFn: async () => {
-            console.log(`[useStreams] Fetching streams for type: ${type}, id: ${id}`);
             const addonUrls = Object.keys(manifests);
 
             const streamAddons = addonUrls.filter(url => {
@@ -35,7 +34,6 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
                 .flatMap(r => r.value.streams || [])
                 .filter(Boolean);
 
-            console.log(`[useStreams] Found ${fetchedStreams.length} streams`);
             return fetchedStreams;
         },
         enabled: enabled && !!id,

@@ -62,11 +62,9 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
 
     useImperativeHandle(ref, () => ({
         seek: (positionSeconds: number) => {
-            console.log('[VlcPlayer] seek called:', positionSeconds);
             nativeRef.current?.seek?.(positionSeconds);
         },
         setAudioTrack: (trackId: number) => {
-            console.log('[VlcPlayer] setAudioTrack called:', trackId);
             nativeRef.current?.setAudioTrack?.(trackId);
         },
         setSubtitleTrack: (trackId: number) => {
@@ -109,7 +107,6 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
     }
 
     const handleLoad = (event: any) => {
-        console.log('[VlcPlayer] Native onLoad event:', event?.nativeEvent);
         props.onLoad?.(event?.nativeEvent);
     };
 
@@ -125,17 +122,14 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
     };
 
     const handleEnd = () => {
-        console.log('[VlcPlayer] Native onEnd event');
         props.onEnd?.();
     };
 
     const handleError = (event: any) => {
-        console.log('[VlcPlayer] Native onError event:', event?.nativeEvent);
         props.onError?.(event?.nativeEvent);
     };
 
     const handleTracksChanged = (event: any) => {
-        console.log('[VlcPlayer] Native onTracksChanged event:', event?.nativeEvent);
         props.onTracksChanged?.(event?.nativeEvent);
     };
 
