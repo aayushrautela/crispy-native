@@ -33,8 +33,8 @@ export function useAiInsights() {
         return false;
     }, []);
 
-    const generateInsights = useCallback(async (meta: any, reviews: any[] = []) => {
-        if (!meta) return;
+    const generateInsights = useCallback(async (meta: any, reviews: any[] = []): Promise<AiInsightsResult | null> => {
+        if (!meta) return null;
 
         setIsLoading(true);
         setError(null);
@@ -45,7 +45,7 @@ export function useAiInsights() {
         if (cached) {
             setInsights(cached);
             setIsLoading(false);
-            return;
+            return cached;
         }
 
         // Determine model
@@ -116,13 +116,17 @@ Return ONLY valid JSON.
                 const data = JSON.parse(jsonString);
                 setInsights(data);
                 StorageService.setUser(cacheKey, data);
+                return data;
             }
         } catch (e) {
             console.error('Failed to generate insights:', e);
             setError(e instanceof Error ? e : new Error('Unknown AI Error'));
+            return null;
         } finally {
             setIsLoading(false);
         }
+
+        return null;
     }, [settings.aiModelType, settings.aiCustomModelName]);
 
     const clearInsights = useCallback(() => {

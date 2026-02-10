@@ -25,6 +25,7 @@ import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -126,6 +127,7 @@ export default function MetaDetailsScreen() {
 
     const [showRatingModal, setShowRatingModal] = useState(false);
     const [showAiStory, setShowAiStory] = useState(false);
+    const [showAiErrorSnackbar, setShowAiErrorSnackbar] = useState(false);
 
     // Computed states
     const isListed = useMemo(() => {
@@ -180,14 +182,25 @@ export default function MetaDetailsScreen() {
     }, [isAuthenticated, isSeries, enriched.imdbId, id, isWatched, removeMovieFromHistory, markMovieAsWatched]);
 
     // AI Hooks
-    const { loadFromCache, generateInsights, insights, isLoading: isAiLoading } = useAiInsights();
+    const { loadFromCache, generateInsights, insights, isLoading: isAiLoading, error: aiError } = useAiInsights();
 
     const handleAiInsightsPress = useCallback(async () => {
-        if (!insights) {
-            await generateInsights(enriched);
+        if (insights) {
+            setShowAiStory(true);
+            return;
         }
-        setShowAiStory(true);
+
+        const generatedInsights = await generateInsights(enriched);
+        if (generatedInsights) {
+            setShowAiStory(true);
+        }
     }, [insights, enriched, generateInsights]);
+
+    useEffect(() => {
+        if (aiError) {
+            setShowAiErrorSnackbar(true);
+        }
+    }, [aiError]);
 
     const mediaPalette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
     const amoled = theme.dark && theme.colors.background === '#000000';
@@ -517,6 +530,19 @@ export default function MetaDetailsScreen() {
                 backgroundColor={effectiveBackground}
                 accentColor={mediaPalette.primary}
             />
+
+            <Snackbar
+                visible={showAiErrorSnackbar}
+                onDismiss={() => setShowAiErrorSnackbar(false)}
+                duration={4200}
+                action={{
+                    label: 'Dismiss',
+                    onPress: () => setShowAiErrorSnackbar(false),
+                }}
+                style={{ marginBottom: insets.bottom + 8 }}
+            >
+                {aiError?.message || 'AI insights are unavailable right now. Please try again.'}
+            </Snackbar>
         </View>
     );
 }
