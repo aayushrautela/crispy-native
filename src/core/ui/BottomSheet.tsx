@@ -11,7 +11,6 @@ import { BackHandler, ViewStyle, View, TextStyle, FlatListProps } from 'react-na
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 
 export interface BottomSheetProps {
@@ -69,7 +68,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
 
     // Sync external ref with internal ref using a callback ref
     const handleRef = useCallback((node: BottomSheetModal | null) => {
-      console.log('[CustomBottomSheet] handleRef', !!node);
       internalRef.current = node;
       if (typeof ref === 'function') {
         ref(node);
@@ -88,21 +86,16 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       return ['50%'];
     }, [snapPoints, enableDynamicSizing]);
 
-    console.log('[CustomBottomSheet] render', { title, index, snapPoints: effectiveSnapPoints });
-
     // Track visibility for BackHandler
     const handleSheetChanges = useCallback((idx: number) => {
-      console.log('[CustomBottomSheet] handleSheetChanges', idx);
       isVisible.current = idx >= 0;
       onChange?.(idx);
     }, [onChange]);
 
     // Handle Hardware Back Press
     React.useEffect(() => {
-      console.log('[CustomBottomSheet] mounting BackHandler');
       const backAction = () => {
         if (isVisible.current && internalRef.current) {
-          console.log('[CustomBottomSheet] backAction: dismissing sheet');
           internalRef.current.dismiss();
           return true; // Prevent default behavior (exit app/go back)
         }
@@ -115,7 +108,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       );
 
       return () => {
-        console.log('[CustomBottomSheet] unmounting BackHandler');
         backHandler.remove();
       };
     }, []);
@@ -199,7 +191,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     };
 
     const handleDismiss = useCallback(() => {
-      console.log('[CustomBottomSheet] onDismiss');
       onDismiss?.();
     }, [onDismiss]);
 

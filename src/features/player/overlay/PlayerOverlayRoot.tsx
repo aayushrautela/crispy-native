@@ -444,7 +444,11 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     setProgress={setProgress}
                     resetControlsTimer={resetControlsTimer}
                     togglePlay={togglePlay}
-                    onClose={() => CrispyNativeCore.closePlayerActivity()}
+                    onClose={() => {
+                        void CrispyNativeCore.closePlayerActivity().then((ok) => {
+                            console.log('[PlayerOverlayRoot] closePlayerActivity', { ok });
+                        });
+                    }}
                     onTabOpen={(tab) => setActiveTab(tab as ActiveTab)}
                     seekAccumulation={seekAccumulation}
                     playPauseAnimatedStyle={playPauseAnimatedStyle}
@@ -480,7 +484,12 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 playbackRate={playbackRate}
                 onSelectSpeed={(r) => { setPlaybackRate(r); CrispyNativeCore.nativePlayerSetRate(r); }}
                 resizeMode={resizeMode}
-                onSelectResizeMode={(m) => { setResizeMode(m); CrispyNativeCore.nativePlayerSetResizeMode(m); }}
+                onSelectResizeMode={(m) => {
+                    setResizeMode(m);
+                    void CrispyNativeCore.nativePlayerSetResizeMode(m).then((ok) => {
+                        console.log('[PlayerOverlayRoot] nativePlayerSetResizeMode', { mode: m, ok });
+                    });
+                }}
                 meta={meta}
                 enriched={enriched}
                 seasonEpisodes={seasonEpisodes}

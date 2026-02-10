@@ -287,7 +287,6 @@ class VlcEngine(
     
     try {
       val scaleType = when (resizeMode) {
-        "cover" -> MediaPlayer.ScaleType.SURFACE_FILL
         "original" -> MediaPlayer.ScaleType.SURFACE_ORIGINAL
         else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
       }

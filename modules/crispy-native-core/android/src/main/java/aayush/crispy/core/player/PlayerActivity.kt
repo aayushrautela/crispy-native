@@ -942,22 +942,6 @@ class PlayerActivity : ReactActivity() {
 
   private fun applyResizeTransform() {
     val sv = surfaceView ?: return
-
-    // VLC handles fit/fill internally via MediaPlayer.setVideoScale().
-    // Keep the SurfaceView itself full-screen to avoid double-scaling.
-    if (engine == ENGINE_VLC) {
-      val mp = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-      val lp = sv.layoutParams as? FrameLayout.LayoutParams
-      if (lp == null || lp.width != mp || lp.height != mp) {
-        val p = lp ?: FrameLayout.LayoutParams(mp, mp)
-        p.width = mp
-        p.height = mp
-        p.gravity = android.view.Gravity.CENTER
-        sv.layoutParams = p
-        Log.i(TAG, "applyResizeTransform: VLC -> reset SurfaceView to match_parent")
-      }
-      return
-    }
     
     // We resize the SurfaceView layout params directly.
     

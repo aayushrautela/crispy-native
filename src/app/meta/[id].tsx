@@ -251,11 +251,9 @@ export default function MetaDetailsScreen() {
 
     // Sub-component Callbacks
     const handleWatchPress = useCallback(() => {
-        console.log('[MetaScreen] handleWatchPress', { isSeries, hasSelectedEpisode: !!selectedEpisode });
         if (isSeries && !selectedEpisode) {
             // Smart Resume: If "Continue" state, use that exact episode
             if (watchState.state === 'continue' && watchState.episode) {
-                console.log('[MetaScreen] Smart Resume: selecting episode', watchState.episode.number);
                 setSelectedEpisode({
                     episode: watchState.episode.number,
                     name: watchState.episode.title || `Episode ${watchState.episode.number}`,
@@ -266,11 +264,9 @@ export default function MetaDetailsScreen() {
             }
 
             // Fallback: Episode 1 of active season
-            console.log('[MetaScreen] Fallback: selecting episode 1');
             setSelectedEpisode({ episode: 1, name: 'Episode 1' });
             setPendingSheetOpen(true);
         } else {
-            console.log('[MetaScreen] Presenting stream bottom sheet');
             setStreamSheetVisible(true);
         }
     }, [isSeries, selectedEpisode, watchState]);
@@ -280,7 +276,6 @@ export default function MetaDetailsScreen() {
     }, [router]);
 
     const handleEpisodePress = useCallback((ep: any) => {
-        console.log('[MetaScreen] handleEpisodePress', ep.episode);
         setSelectedEpisode(ep);
         setPendingSheetOpen(true);
     }, []);
