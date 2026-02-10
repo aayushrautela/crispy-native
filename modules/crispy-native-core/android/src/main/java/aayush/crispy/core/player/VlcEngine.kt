@@ -279,14 +279,16 @@ class VlcEngine(
     try {
       val scaleType = when (resizeMode) {
         "cover" -> MediaPlayer.ScaleType.SURFACE_FILL
+        "original" -> MediaPlayer.ScaleType.SURFACE_ORIGINAL
         else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
       }
 
       mp.setVideoScale(scaleType)
-      mp.scale = 0f
-      mp.aspectRatio = null
+      // NOTE: Avoid mixing legacy `scale`/`aspectRatio` with `setVideoScale`.
+      // On some libVLC versions/devices, setting those after `setVideoScale` can
+      // effectively override the ScaleType and make Fit/Fill appear to do nothing.
     } catch (e: Exception) {
-      Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
+      Log.w(TAG, "Failed to apply video scale: ${e.message}")
     }
   }
 
