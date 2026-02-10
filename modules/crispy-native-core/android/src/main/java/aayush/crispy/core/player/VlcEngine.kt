@@ -244,17 +244,11 @@ class VlcEngine(
     surfaceWidth = width
     surfaceHeight = height
 
-    try {
-      vout.setOnNewVideoLayoutListener(this)
-    } catch (e: Throwable) {
-      Log.w(TAG, "setOnNewVideoLayoutListener failed: ${e.message}")
-    }
-
     if (!vout.areViewsAttached()) {
       vout.setVideoSurface(surface, null)
       vout.setWindowSize(width, height)
       vout.addCallback(this)
-      vout.attachViews()
+      vout.attachViews(this)
       Log.i(TAG, "Surface attached: ${width}x${height}")
     } else {
       vout.setWindowSize(width, height)
@@ -315,12 +309,6 @@ class VlcEngine(
       vout.removeCallback(this)
       vout.detachViews()
       Log.i(TAG, "Surface detached")
-    }
-
-    try {
-      vout.setOnNewVideoLayoutListener(null)
-    } catch (_: Throwable) {
-      // ignore
     }
   }
 
