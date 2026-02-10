@@ -485,27 +485,40 @@ class VlcEngine(
     sarNum: Int,
     sarDen: Int
   ) {
-    Log.d(TAG, "New layout: ${width}x${height}")
-    if (width > 0 && height > 0) {
-      val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
-        (width.toDouble() * sarNum / sarDen).toInt()
-      } else {
-        width
-      }
+    // Prefer *visible* dimensions for aspect ratio, matching VLC's VideoLayout logic.
+    // Some libVLC versions can report the output window size in `width/height`, which
+    // makes cover/contain calculations appear to do nothing.
+    val baseW = if (visibleWidth > 0) visibleWidth else width
+    val baseH = if (visibleHeight > 0) visibleHeight else height
 
-      val sizeChanged = cachedWidth != darWidth || cachedHeight != height
-      cachedWidth = darWidth
-      cachedHeight = height
-
-      applyResizeMode()
-      checkReadyState()
-
-      if (sizeChanged) {
-        dispatch { it.onVideoSizeChanged(cachedWidth, cachedHeight) }
-      }
-
-      PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
+    if (baseW <= 0 || baseH <= 0) {
+      Log.d(TAG, "New layout: ${width}x${height} vis=${visibleWidth}x${visibleHeight} (ignored)")
+      return
     }
+
+    val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
+      (baseW.toDouble() * sarNum / sarDen).toInt().coerceAtLeast(1)
+    } else {
+      baseW
+    }
+    val darHeight = baseH
+
+    val sizeChanged = cachedWidth != darWidth || cachedHeight != darHeight
+    if (sizeChanged) {
+      Log.d(TAG, "New layout: ${width}x${height} vis=${visibleWidth}x${visibleHeight} sar=${sarNum}:${sarDen} -> dar=${darWidth}x${darHeight}")
+    }
+
+    cachedWidth = darWidth
+    cachedHeight = darHeight
+
+    applyResizeMode()
+    checkReadyState()
+
+    if (sizeChanged) {
+      dispatch { it.onVideoSizeChanged(cachedWidth, cachedHeight) }
+    }
+
+    PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
   }
 
   private fun parseAndSendTracks() {
