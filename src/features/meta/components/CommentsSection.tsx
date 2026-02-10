@@ -1,5 +1,4 @@
 import { TraktContentComment } from '@/src/core/services/trakt-types';
-import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { Typography } from '@/src/core/ui/Typography';
@@ -18,7 +17,6 @@ interface CommentsSectionProps {
 }
 
 export const CommentsSection = memo(function CommentsSection({ id, type, season, episode, colors }: CommentsSectionProps) {
-    const { theme } = useTheme();
     const { height: screenHeight } = useWindowDimensions();
     const { comments, isLoading } = useTraktComments({ id, type, season, episode });
     const [selectedComment, setSelectedComment] = useState<TraktContentComment | null>(null);
@@ -62,13 +60,18 @@ export const CommentsSection = memo(function CommentsSection({ id, type, season,
 
             <CustomBottomSheet
                 ref={bottomSheetRef}
-                title={selectedComment ? (selectedComment.user.name || selectedComment.user.username) : 'Review'}
+                // Render title inside scrollable content so dynamic sizing accounts for it.
                 enableDynamicSizing
                 scrollable
+                // Give short reviews enough room (no mandatory scrolling),
+                // while still capping very long reviews.
                 maxHeight={screenHeight * 0.5}
             >
                 {selectedComment && (
                     <View style={styles.modalContent}>
+                        <Typography variant="title-large" weight="bold" style={styles.modalTitle}>
+                            {selectedComment.user.name || selectedComment.user.username || 'Review'}
+                        </Typography>
                         {selectedComment.user_stats?.rating && (
                             <View style={styles.modalRating}>
                                 <Star size={16} color="#FFD700" fill="#FFD700" />
@@ -100,6 +103,11 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         paddingBottom: 0,
+    },
+    modalTitle: {
+        color: 'white',
+        textAlign: 'center',
+        marginBottom: 16,
     },
     modalRating: {
         flexDirection: 'row',

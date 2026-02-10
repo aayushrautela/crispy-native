@@ -24,6 +24,12 @@ export interface BottomSheetProps {
   onDismiss?: () => void;
   onChange?: (index: number) => void;
   /**
+   * Content padding applied to the sheet body (not the title header).
+   * Defaults match the app's existing bottom sheet spacing.
+   */
+  contentPaddingHorizontal?: number;
+  contentPaddingBottom?: number;
+  /**
    * Props for rendering a FlatList inside the bottom sheet.
    * If provided, this takes precedence over `children` and `scrollable`.
    * Use this for long lists to ensure proper virtualization and gesture handling.
@@ -47,20 +53,22 @@ CustomBackdrop.displayName = 'CustomBackdrop';
 
 export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
   (
-    {
-      title,
-      children,
-      snapPoints,
-      index = -1,
-      scrollable = false,
-      enableDynamicSizing = true,
-      maxHeight,
-      onDismiss,
-      onChange,
-      flatListProps,
-    },
-    ref
-  ) => {
+      {
+        title,
+        children,
+        snapPoints,
+        index = -1,
+        scrollable = false,
+        enableDynamicSizing = true,
+        maxHeight,
+        onDismiss,
+        onChange,
+        contentPaddingHorizontal,
+        contentPaddingBottom,
+        flatListProps,
+      },
+      ref
+    ) => {
     // Internal ref to access modal methods if the parent doesn't provide one,
     // and for BackHandler support.
     const internalRef = useRef<BottomSheetModal>(null);
@@ -132,7 +140,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     }), [theme.colors.onSurfaceVariant]);
 
     // Content Styling
-    const paddingBottom = Math.max(bottom, 20) + 32;
+    const resolvedPaddingHorizontal = contentPaddingHorizontal ?? 24;
+    const resolvedPaddingBottom = contentPaddingBottom ?? (Math.max(bottom, 20) + 32);
     
     const headerStyle = useMemo<ViewStyle>(() => ({
       paddingHorizontal: 24,
@@ -156,7 +165,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
           <BottomSheetFlatList
             {...flatListProps}
             contentContainerStyle={[
-              { paddingBottom },
+              { paddingBottom: resolvedPaddingBottom },
               flatListProps.contentContainerStyle,
             ]}
           />
@@ -167,7 +176,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       // We use a regular View instead of BottomSheetView to avoid gesture conflicts with nested lists.
       if (!scrollable && enableDynamicSizing === false) {
         return (
-          <View style={[{ paddingBottom, paddingHorizontal: 24, flex: 1 }]}>
+          <View style={[{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal, flex: 1 }]}>
             {children}
           </View>
         );
@@ -176,7 +185,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       if (scrollable) {
         return (
           <BottomSheetScrollView
-            contentContainerStyle={{ paddingBottom, paddingHorizontal: 24 }}
+            contentContainerStyle={{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal }}
           >
             {children}
           </BottomSheetScrollView>
@@ -184,7 +193,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       }
 
       return (
-        <BottomSheetView style={[{ paddingBottom, paddingHorizontal: 24 }, !enableDynamicSizing && { flex: 1 }]}>
+        <BottomSheetView style={[{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal }, !enableDynamicSizing && { flex: 1 }]}>
           {children}
         </BottomSheetView>
       );

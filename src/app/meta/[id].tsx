@@ -303,6 +303,30 @@ export default function MetaDetailsScreen() {
         return [];
     }, [enriched]);
 
+    const streamMetadata = useMemo(() => {
+        if (!enriched.title && !meta?.name) return undefined;
+
+        const title = selectedEpisode ? (selectedEpisode.name || selectedEpisode.title || `Episode ${selectedEpisode.episode}`) : (enriched.title || meta?.name || '');
+
+        let subtitle = '';
+        if (isSeries && selectedEpisode) {
+            subtitle = `S${activeSeason}E${selectedEpisode.episode}`;
+            if (selectedEpisode.airDate || selectedEpisode.released) {
+                const date = new Date(selectedEpisode.airDate || selectedEpisode.released);
+                subtitle += ` • ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            }
+        } else {
+            subtitle = enriched.year || '';
+        }
+
+        return {
+            title,
+            subtitle,
+            overview: selectedEpisode?.overview || enriched.description || meta?.description,
+            thumbnail: selectedEpisode?.stillPath || selectedEpisode?.still_path || enriched.backdrop || meta?.background || meta?.poster
+        };
+    }, [enriched, meta, selectedEpisode, isSeries, activeSeason]);
+
     if (isLoading) return <MetaDetailsSkeleton />;
 
     if (error) {
@@ -463,10 +487,12 @@ export default function MetaDetailsScreen() {
 
             <CustomBottomSheet
                 ref={streamBottomSheetRef}
-                title={`Select Stream ${selectedEpisode ? `- S${activeSeason}:E${selectedEpisode.episode}` : ''}`}
+                title=""
                 enableDynamicSizing={false}
                 snapPoints={['60%', '90%']}
                 scrollable={false}
+                contentPaddingHorizontal={0}
+                contentPaddingBottom={0}
                 onChange={(index) => {
                     if (index === -1) setStreamSheetVisible(false);
                 }}
@@ -478,6 +504,7 @@ export default function MetaDetailsScreen() {
                     hideHeader
                     onStreamsLoaded={setAvailableStreams}
                     isVisible={isStreamSheetVisible}
+                    metadata={streamMetadata}
                 />
             </CustomBottomSheet>
 
