@@ -277,23 +277,14 @@ class VlcEngine(
     if (surfaceWidth <= 0 || surfaceHeight <= 0) return
     
     try {
-      val videoAspectRatio = if (cachedWidth > 0 && cachedHeight > 0) {
-        "${cachedWidth}:${cachedHeight}"
-      } else {
-        null
+      val scaleType = when (resizeMode) {
+        "cover" -> MediaPlayer.ScaleType.SURFACE_FILL
+        else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
       }
 
-      when (resizeMode) {
-        "stretch" -> {
-          mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
-        }
-        "cover", "contain" -> {
-          mp.aspectRatio = videoAspectRatio
-        }
-        else -> {
-          mp.aspectRatio = videoAspectRatio
-        }
-      }
+      mp.setVideoScale(scaleType)
+      mp.scale = 0f
+      mp.aspectRatio = null
     } catch (e: Exception) {
       Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
     }

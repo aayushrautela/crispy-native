@@ -27,7 +27,7 @@ interface KSPlayerSurfaceProps {
     paused: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
+    resizeMode?: 'contain' | 'cover' | 'original';
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
     onEnd?: () => void;

@@ -146,7 +146,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [pendingEpisode, setPendingEpisode] = useState<any>(null);
     const [showUpNext, setShowUpNext] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
-    const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+    const [resizeMode, setResizeMode] = useState<'contain' | 'cover'>('contain');
     const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
 
     const pendingSeekAfterLoadRef = useRef<number | null>(null);

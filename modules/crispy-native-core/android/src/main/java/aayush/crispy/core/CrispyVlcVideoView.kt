@@ -312,33 +312,28 @@ class CrispyVlcVideoView(
     var targetW = containerW
     var targetH = containerH
 
-    if (mode == "stretch") {
-      targetW = containerW
-      targetH = containerH
-    } else {
-      val videoRatio = videoW.toFloat() / videoH.toFloat()
-      val containerRatio = containerW.toFloat() / containerH.toFloat()
+    val videoRatio = videoW.toFloat() / videoH.toFloat()
+    val containerRatio = containerW.toFloat() / containerH.toFloat()
 
-      if (mode == "contain") {
-        if (containerRatio > videoRatio) {
-          // Container is wider -> fit height, adjust width
-          targetH = containerH
-          targetW = (containerH * videoRatio).toInt()
-        } else {
-          // Container is taller -> fit width, adjust height
-          targetW = containerW
-          targetH = (containerW / videoRatio).toInt()
-        }
-      } else if (mode == "cover") {
-        if (containerRatio > videoRatio) {
-          // Container is wider -> match width, exceed height
-          targetW = containerW
-          targetH = (containerW / videoRatio).toInt()
-        } else {
-          // Container is taller -> match height, exceed width
-          targetH = containerH
-          targetW = (containerH * videoRatio).toInt()
-        }
+    if (mode == "cover") {
+      if (containerRatio > videoRatio) {
+        // Container is wider -> match width, exceed height
+        targetW = containerW
+        targetH = (containerW / videoRatio).toInt()
+      } else {
+        // Container is taller -> match height, exceed width
+        targetH = containerH
+        targetW = (containerH * videoRatio).toInt()
+      }
+    } else {
+      if (containerRatio > videoRatio) {
+        // Container is wider -> fit height, adjust width
+        targetH = containerH
+        targetW = (containerH * videoRatio).toInt()
+      } else {
+        // Container is taller -> fit width, adjust height
+        targetW = containerW
+        targetH = (containerW / videoRatio).toInt()
       }
     }
 

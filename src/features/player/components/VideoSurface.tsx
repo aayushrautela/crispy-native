@@ -57,7 +57,7 @@ interface VideoSurfaceProps {
     paused: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
+    resizeMode?: 'contain' | 'cover' | 'original';
 
     // Track selection - react-native-video format
     selectedAudioTrack?: { type: 'index' | 'disabled', value?: number };
