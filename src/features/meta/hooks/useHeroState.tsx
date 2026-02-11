@@ -1,18 +1,16 @@
 
 import { TMDBMeta } from '@/src/core/services/TMDBService';
 import { TrailerService } from '@/src/core/services/TrailerService';
-import { generateMediaPalette } from '@/src/core/utils/colors';
+import { useTheme } from '@/src/core/ThemeContext';
 import { Play, RotateCcw } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import Animated, { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
+import { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
 
 interface UseHeroStateProps {
     meta: any;
     enriched: Partial<TMDBMeta>;
-    colors: any;
     scrollY: SharedValue<number>;
     heroHeight: number;
-    background: string;
     watchState: {
         state: 'watch' | 'continue' | 'rewatch';
         progress?: number;
@@ -22,7 +20,8 @@ interface UseHeroStateProps {
     };
 }
 
-export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, background, watchState }: UseHeroStateProps) => {
+export const useHeroState = ({ meta, enriched, scrollY, heroHeight, watchState }: UseHeroStateProps) => {
+    const { theme } = useTheme();
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [trailerKey, setTrailerKey] = useState<string | null>(null);
     const [showTrailer, setShowTrailer] = useState(false);
@@ -86,21 +85,15 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
 
 
 
-    const palette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
-
-    const watchButtonColor = useMemo(() => palette.primary, [palette]);
-    const watchButtonTextColor = useMemo(() => palette.secondaryContainer, [palette]);
-
-    const pillColor = useMemo(() => {
-        // Match the secondary container (watchlist bubble)
-        return palette.secondaryContainer;
-    }, [palette]);
+    const watchButtonColor = theme.colors.primary;
+    const watchButtonTextColor = theme.colors.onPrimary;
+    const pillColor = theme.colors.secondaryContainer;
 
     const watchButtonIcon = useMemo(() => (
         state === 'rewatch'
-            ? <RotateCcw size={20} color={palette.primary} />
-            : <Play size={20} color={palette.primary} fill={palette.primary} />
-    ), [state, palette.primary]);
+            ? <RotateCcw size={20} color={theme.colors.onSecondaryContainer} />
+            : <Play size={20} color={theme.colors.onSecondaryContainer} fill={theme.colors.onSecondaryContainer} />
+    ), [state, theme.colors.onSecondaryContainer]);
 
     const watchButtonSubtext = useMemo(() => {
         if (state === 'rewatch') {
@@ -136,6 +129,5 @@ export const useHeroState = ({ meta, enriched, colors, scrollY, heroHeight, back
         watchButtonSubtext,
         pillColor,
         toggleTrailer,
-        palette
     };
 };

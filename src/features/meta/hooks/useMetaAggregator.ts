@@ -1,7 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import ImageColors from 'react-native-image-colors';
 import { TMDBMeta, TMDBService } from '../../../core/services/TMDBService';
-import { StorageService } from '../../../core/storage';
 import { getLuminance } from '../../../core/utils/colors';
 
 export interface MetaPalette {
@@ -12,6 +11,19 @@ export interface MetaPalette {
     lightVibrant: string;
     darkMuted: string;
     lightMuted: string;
+}
+
+export type MetaColorSource = 'backdrop' | 'poster' | 'logo' | 'default';
+
+export interface MetaColorExtraction {
+    source: MetaColorSource;
+    imageUrl?: string;
+    platform?: string;
+    swatches: Record<string, string>;
+    seedKey?: string;
+    seedColor?: string;
+    accepted: boolean;
+    rejectionReason?: string;
 }
 
 const defaultPalette: MetaPalette = {
@@ -29,13 +41,23 @@ interface MetaAggregatorState {
     enriched: Partial<TMDBMeta>;
     seasonEpisodes: any[];
     colors: MetaPalette;
+    colorExtraction: MetaColorExtraction | null;
     isLoading: boolean;
     error: any | null;
 }
 
 type MetaAggregatorAction =
     | { type: 'FETCH_START' }
-    | { type: 'FETCH_SUCCESS'; payload: { meta: any; enriched: Partial<TMDBMeta>; seasonEpisodes: any[]; colors: MetaPalette } }
+    | {
+        type: 'FETCH_SUCCESS';
+        payload: {
+            meta: any;
+            enriched: Partial<TMDBMeta>;
+            seasonEpisodes: any[];
+            colors: MetaPalette;
+            colorExtraction: MetaColorExtraction | null;
+        }
+    }
     | { type: 'FETCH_ERROR'; payload: any }
     | { type: 'UPDATE_SEASON'; payload: any[] };
 
@@ -44,6 +66,7 @@ const initialState: MetaAggregatorState = {
     enriched: {},
     seasonEpisodes: [],
     colors: defaultPalette,
+    colorExtraction: null,
     isLoading: true,
     error: null,
 };
@@ -59,6 +82,7 @@ function reducer(state: MetaAggregatorState, action: MetaAggregatorAction): Meta
                 enriched: action.payload.enriched,
                 seasonEpisodes: action.payload.seasonEpisodes,
                 colors: action.payload.colors,
+                colorExtraction: action.payload.colorExtraction,
                 isLoading: false,
             };
         case 'FETCH_ERROR':
@@ -74,7 +98,7 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
     const [state, dispatch] = useReducer(reducer, initialState);
     const prevActiveSeason = useRef(activeSeason);
     const isMounted = useRef(true);
-    const hasFetched = useRef(false);
+    const lastFetchKey = useRef<string | null>(null);
 
     useEffect(() => {
         isMounted.current = true;
@@ -85,8 +109,47 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
 
     // Main data fetch: TMDB only
     useEffect(() => {
-        if (!id || !type || hasFetched.current) return;
-        hasFetched.current = true;
+        if (!id || !type) return;
+
+        const fetchKey = `${type}:${id}`;
+        if (lastFetchKey.current === fetchKey) return;
+        lastFetchKey.current = fetchKey;
+        prevActiveSeason.current = activeSeason;
+
+        const isValidHex = (value: string | undefined): value is string => {
+            if (!value) return false;
+            return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
+        };
+
+        const isGoodMaterialSeed = (hex: string) => {
+            const luma = getLuminance(hex);
+            // Prefer mid-tone source colors for Material You seeding.
+            // Too-dark seeds tend to produce dull/near-neutral schemes.
+            return isFinite(luma) && luma >= 60 && luma <= 220;
+        };
+
+        const pickSeed = (platform: string | undefined, swatches: Record<string, string>) => {
+            const candidates = platform === 'ios'
+                ? ['primary', 'detail', 'secondary', 'background']
+                : ['dominant', 'vibrant', 'darkVibrant', 'lightVibrant', 'average', 'lightMuted', 'muted', 'darkMuted'];
+
+            for (const key of candidates) {
+                const color = swatches[key];
+                if (isValidHex(color) && isGoodMaterialSeed(color)) {
+                    return { key, color };
+                }
+            }
+
+            // Return the first valid candidate (even if rejected) for debug purposes
+            for (const key of candidates) {
+                const color = swatches[key];
+                if (isValidHex(color)) {
+                    return { key, color };
+                }
+            }
+
+            return null;
+        };
 
         async function aggregate() {
             dispatch({ type: 'FETCH_START' });
@@ -110,7 +173,10 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
 
                 const logoUrl = getLogoSource();
                 const backdropUrl = enrichedData.backdrop;
+                const posterUrl = enrichedData.poster;
                 let palette = defaultPalette;
+
+                let colorExtraction: MetaColorExtraction | null = null;
 
                 const extractFromUrl = async (url: string) => {
                     try {
@@ -120,16 +186,48 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
                             key: url,
                         });
 
-                        if (result.platform === 'android') {
-                            return {
-                                primary: result.darkMuted || result.darkVibrant || '#121212',
-                                secondary: result.average || '#1E1E1E',
-                                vibrant: result.vibrant || result.dominant || '#90CAF9',
-                                dominant: result.dominant || '#121212',
-                                lightVibrant: result.lightVibrant || result.vibrant || '#90CAF9',
-                                darkMuted: result.darkMuted || result.darkVibrant || '#1E1E1E',
-                                lightMuted: result.lightMuted || result.lightVibrant || '#90CAF9',
+                        const platform = result.platform;
+
+                        if (platform === 'android') {
+                            const swatches: Record<string, string> = {};
+                            const keys = ['dominant', 'average', 'vibrant', 'darkVibrant', 'lightVibrant', 'muted', 'darkMuted', 'lightMuted'] as const;
+                            for (const k of keys) {
+                                const v = (result as any)[k];
+                                if (typeof v === 'string' && isValidHex(v)) swatches[k] = v;
+                            }
+
+                            const mapped: MetaPalette = {
+                                primary: (result as any).darkMuted || (result as any).darkVibrant || '#121212',
+                                secondary: (result as any).average || '#1E1E1E',
+                                vibrant: (result as any).vibrant || (result as any).dominant || '#90CAF9',
+                                dominant: (result as any).dominant || '#121212',
+                                lightVibrant: (result as any).lightVibrant || (result as any).vibrant || '#90CAF9',
+                                darkMuted: (result as any).darkMuted || (result as any).darkVibrant || '#1E1E1E',
+                                lightMuted: (result as any).lightMuted || (result as any).lightVibrant || '#90CAF9',
                             };
+
+                            return { platform, swatches, palette: mapped };
+                        }
+
+                        if (platform === 'ios') {
+                            const swatches: Record<string, string> = {};
+                            const keys = ['background', 'primary', 'secondary', 'detail'] as const;
+                            for (const k of keys) {
+                                const v = (result as any)[k];
+                                if (typeof v === 'string' && isValidHex(v)) swatches[k] = v;
+                            }
+
+                            const mapped: MetaPalette = {
+                                primary: (result as any).background || '#121212',
+                                secondary: (result as any).secondary || (result as any).background || '#1E1E1E',
+                                vibrant: (result as any).primary || (result as any).detail || '#90CAF9',
+                                dominant: (result as any).background || '#121212',
+                                lightVibrant: (result as any).primary || (result as any).detail || '#90CAF9',
+                                darkMuted: (result as any).background || '#1E1E1E',
+                                lightMuted: (result as any).secondary || (result as any).detail || '#90CAF9',
+                            };
+
+                            return { platform, swatches, palette: mapped };
                         }
                     } catch (e) {
                         console.warn('[useMetaAggregator] Extraction logic crash for:', url, e);
@@ -137,31 +235,60 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
                     return null;
                 };
 
-                let bestPalette: MetaPalette | null = null;
+                // Material You: pick ONE source image and ONE seed color.
+                // Priority order is artwork-first (backdrop -> poster), with logo as last resort.
+                const sources: { source: MetaColorSource; url: string | null }[] = [
+                    { source: 'backdrop', url: backdropUrl || null },
+                    { source: 'poster', url: posterUrl || null },
+                    { source: 'logo', url: logoUrl || null },
+                ];
 
-                // Priority 1: Logo
-                if (logoUrl) {
-                    const logoPalette = await extractFromUrl(logoUrl);
-                    if (logoPalette) {
-                        const luma = getLuminance(logoPalette.vibrant);
-                        const isNeutral = luma < 25 || luma > 230;
+                for (const src of sources) {
+                    if (!src.url) continue;
 
-                        if (!isNeutral) {
-                            bestPalette = logoPalette;
-                        }
+                    const extracted = await extractFromUrl(src.url);
+                    if (!extracted) continue;
+
+                    const seed = pickSeed(extracted.platform, extracted.swatches);
+                    const attempt: MetaColorExtraction = {
+                        source: src.source,
+                        imageUrl: src.url,
+                        platform: extracted.platform,
+                        swatches: extracted.swatches,
+                        seedKey: seed?.key,
+                        seedColor: seed?.color,
+                        accepted: false,
+                    };
+
+                    // Keep the first successful extraction for debug, even if we later fall back.
+                    if (!colorExtraction) {
+                        colorExtraction = attempt;
                     }
+
+                    if (seed?.color && isGoodMaterialSeed(seed.color)) {
+                        attempt.accepted = true;
+                        colorExtraction = attempt;
+                        palette = extracted.palette;
+                        break;
+                    }
+
+                    attempt.rejectionReason = seed?.color
+                        ? 'seed_rejected_luminance'
+                        : 'no_seed_candidate';
                 }
 
-                // Priority 2: Backdrop (Fallback if logo is missing or too neutral)
-                if (!bestPalette && backdropUrl) {
-                    bestPalette = await extractFromUrl(backdropUrl);
+                if (!colorExtraction) {
+                    colorExtraction = {
+                        source: 'default',
+                        swatches: {},
+                        accepted: false,
+                        rejectionReason: 'no_extraction',
+                    };
                 }
 
-                if (bestPalette) {
-                    palette = bestPalette;
-                    // Cache the final picked palette for this specific content
-                    const colorCacheKey = `palette_${id}_${type}`;
-                    StorageService.setGlobal(colorCacheKey as any, palette);
+                // If we didn't accept a seed, keep the page on the default palette.
+                if (!colorExtraction.accepted) {
+                    palette = defaultPalette;
                 }
 
                 if (isMounted.current) {
@@ -179,6 +306,7 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
                             enriched: enrichedData,
                             seasonEpisodes: episodes,
                             colors: palette,
+                            colorExtraction,
                         },
                     });
                 }
@@ -191,7 +319,7 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
         }
 
         aggregate();
-    }, [id, type]);
+    }, [id, type, activeSeason]);
 
     // Handle season changes separately to avoid refetching everything
     useEffect(() => {

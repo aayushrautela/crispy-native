@@ -8,10 +8,15 @@ import React, { memo, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { MetacriticIcon, RottenTomatoesIcon } from './RatingIcons';
 
-const RatingCard = memo(function RatingCard({ score, label, icon, palette }: { score: string; label: string; icon: React.ReactNode; palette: any }) {
+const RatingCard = memo(function RatingCard({ score, label, icon }: { score: string; label: string; icon: React.ReactNode }) {
     const { theme } = useTheme();
+    const cardBg = (theme.colors as any).surfaceContainerHigh
+        || (theme.colors as any).surfaceContainer
+        || (theme.colors as any).surfaceContainerHighest
+        || theme.colors.surfaceVariant;
+
     return (
-        <View style={[styles.ratingCard, { backgroundColor: palette.secondaryContainer }]}>
+        <View style={[styles.ratingCard, { backgroundColor: cardBg }]}>
             <View style={styles.ratingIconContainer}>
                 {icon}
             </View>
@@ -25,11 +30,9 @@ const RatingCard = memo(function RatingCard({ score, label, icon, palette }: { s
 
 interface RatingsSectionProps {
     enriched: any;
-    colors: any;
-    palette: any;
 }
 
-export const RatingsSection = memo(function RatingsSection({ enriched, colors, palette }: RatingsSectionProps) {
+export const RatingsSection = memo(function RatingsSection({ enriched }: RatingsSectionProps) {
     const { theme } = useTheme();
     const [omdb, setOmdb] = useState<OmdbData | null>(null);
     const [isLoadingOmdb, setIsLoadingOmdb] = useState(false);
@@ -99,14 +102,28 @@ export const RatingsSection = memo(function RatingsSection({ enriched, colors, p
                     key={i}
                     score={r.score}
                     label={r.label}
-                    palette={palette}
                     icon={r.icon}
                 />
             ))}
             {isLoadingOmdb && ratings.length === 0 && (
                 <>
-                    <View style={{ width: 160, height: 64, borderRadius: 32, backgroundColor: '#2a2a2a', marginRight: 16 }} />
-                    <View style={{ width: 160, height: 64, borderRadius: 32, backgroundColor: '#2a2a2a' }} />
+                    <View
+                        style={{
+                            width: 160,
+                            height: 64,
+                            borderRadius: 32,
+                            backgroundColor: (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant,
+                            marginRight: 16,
+                        }}
+                    />
+                    <View
+                        style={{
+                            width: 160,
+                            height: 64,
+                            borderRadius: 32,
+                            backgroundColor: (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant,
+                        }}
+                    />
                 </>
             )}
         </>

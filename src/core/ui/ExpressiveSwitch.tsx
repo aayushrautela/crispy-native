@@ -43,7 +43,9 @@ export function ExpressiveSwitch({
     }, [value]);
 
     const activeTrackColor = trackColor?.true ?? theme.colors.primary;
-    const inactiveTrackColor = trackColor?.false ?? theme.colors.surfaceContainerHighest;
+    const inactiveTrackColor = trackColor?.false
+        ?? theme.colors.surfaceContainerHighest
+        ?? theme.colors.surfaceVariant;
     const activeThumbColor = thumbColor?.true ?? theme.colors.onPrimary;
     const inactiveThumbColor = thumbColor?.false ?? theme.colors.outline;
     const outlineColor = theme.colors.outline;

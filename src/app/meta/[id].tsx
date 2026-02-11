@@ -1,10 +1,10 @@
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useUserStore } from '@/src/core/stores/userStore';
-import { useTheme } from '@/src/core/ThemeContext';
+import { ThemeOverrideProvider, useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
-import { generateMediaPalette } from '@/src/core/utils/colors';
+import { hexToRgba } from '@/src/core/utils/colors';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { AiInsightsStory } from '@/src/features/meta/components/AiInsightsStory';
 import { CastSection } from '@/src/features/meta/components/CastSection';
@@ -20,20 +20,20 @@ import { StreamSelector } from '@/src/features/player/components/StreamSelector'
 import { useStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
+import { createMaterial3Theme } from '@pchmn/expo-material3-theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Dimensions, Pressable, Share, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 // No hardcoded DARK_BASE
 
 export default function MetaDetailsScreen() {
-    const { id, type } = useLocalSearchParams();
-    const { theme } = useTheme();
+    const { id, type, debugColors } = useLocalSearchParams();
+    const { theme, amoledMode } = useTheme();
     const { settings } = useUserStore();
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -47,19 +47,13 @@ export default function MetaDetailsScreen() {
     const [isStreamSheetVisible, setStreamSheetVisible] = useState(false);
 
     // Core Data Aggregator
-    const { meta, enriched, seasonEpisodes, colors, isLoading, error } = useMetaAggregator(id as string, type as string, activeSeason);
+    const { meta, enriched, seasonEpisodes, isLoading, error, colorExtraction } = useMetaAggregator(id as string, type as string, activeSeason);
 
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
     const scrollY = useSharedValue(0);
 
     useEffect(() => {
-        console.log('[MetaScreen] mounted');
-        return () => console.log('[MetaScreen] unmounted');
-    }, []);
-
-    useEffect(() => {
         if (isStreamSheetVisible) {
-            console.log('[MetaScreen] useEffect: presenting stream bottom sheet');
             streamBottomSheetRef.current?.present();
         }
     }, [isStreamSheetVisible]);
@@ -80,15 +74,16 @@ export default function MetaDetailsScreen() {
     );
 
     // 2. Auto-Select Season based on Watch State
+    const continueSeason = isSeries && watchState.state === 'continue'
+        ? watchState.episode?.season
+        : undefined;
+
     useEffect(() => {
-        if (watchState.state === 'continue' && watchState.episode && isSeries) {
-            const epSeason = watchState.episode.season;
-            // Only switch if we are viewing a different season
-            if (epSeason && epSeason !== activeSeason) {
-                setActiveSeason(epSeason);
-            }
+        if (!continueSeason) return;
+        if (continueSeason !== activeSeason) {
+            setActiveSeason(continueSeason);
         }
-    }, [watchState.state, watchState.episode?.season, isSeries]);
+    }, [continueSeason, activeSeason]);
 
     // Stream Pre-fetching
     const preFetchId = useMemo(() => {
@@ -202,9 +197,57 @@ export default function MetaDetailsScreen() {
         }
     }, [aiError]);
 
-    const mediaPalette = useMemo(() => generateMediaPalette(colors.vibrant || '#607d8b'), [colors.vibrant]);
-    const amoled = theme.dark && theme.colors.background === '#000000';
-    const effectiveBackground = amoled ? '#000000' : mediaPalette.surface;
+    const showExtractedColors = __DEV__ || String(debugColors) === '1';
+
+    const materialSeed = useMemo(() => {
+        if (!colorExtraction?.accepted) return null;
+        return colorExtraction.seedColor || null;
+    }, [colorExtraction]);
+
+    const scopedTheme = useMemo(() => {
+        if (!materialSeed) return theme;
+
+        const m3 = createMaterial3Theme(materialSeed);
+        const scheme = m3.dark;
+
+        const mergedColors: any = {
+            ...theme.colors,
+            ...scheme,
+        };
+
+        // Preserve AMOLED overrides from the global theme.
+        if (amoledMode) {
+            mergedColors.background = theme.colors.background;
+            mergedColors.surface = theme.colors.surface;
+            mergedColors.surfaceVariant = theme.colors.surfaceVariant;
+            mergedColors.onSurface = theme.colors.onSurface;
+            mergedColors.elevation = theme.colors.elevation;
+        }
+
+        return {
+            ...theme,
+            colors: mergedColors,
+        };
+    }, [theme, materialSeed, amoledMode]);
+
+    const effectiveBackground = scopedTheme.colors.background;
+    const topButtonBg = useMemo(() => {
+        const bg = (scopedTheme.colors as any).surfaceContainerHigh || scopedTheme.colors.surfaceVariant;
+        return hexToRgba(bg, 0.72);
+    }, [scopedTheme.colors]);
+
+    const colorDebugKeys = useMemo(() => {
+        if (!colorExtraction) return null;
+
+        const swatches = colorExtraction.swatches || {};
+        const baseOrder = colorExtraction.platform === 'ios'
+            ? ['primary', 'detail', 'secondary', 'background']
+            : ['dominant', 'vibrant', 'darkVibrant', 'lightVibrant', 'average', 'lightMuted', 'muted', 'darkMuted'];
+
+        const ordered = baseOrder.filter((k) => !!swatches[k]);
+        const extras = Object.keys(swatches).filter((k) => !baseOrder.includes(k)).sort();
+        return [...ordered, ...extras];
+    }, [colorExtraction]);
 
     useEffect(() => {
         if (!enriched.tmdbId) return;
@@ -214,7 +257,7 @@ export default function MetaDetailsScreen() {
         } else {
             loadFromCache(enriched.tmdbId.toString());
         }
-    }, [enriched.tmdbId, settings.aiInsightsMode]);
+    }, [enriched, settings.aiInsightsMode, generateInsights, loadFromCache]);
 
     const handleStreamSelect = useCallback((stream: any) => {
         streamBottomSheetRef.current?.dismiss();
@@ -296,7 +339,6 @@ export default function MetaDetailsScreen() {
     // Effect to handle sheet opening after state update (fixes race condition)
     useEffect(() => {
         if (pendingSheetOpen && selectedEpisode) {
-            console.log('[MetaScreen] pendingSheetOpen is true, presenting bottom sheet');
             setStreamSheetVisible(true);
             setPendingSheetOpen(false);
         }
@@ -344,90 +386,142 @@ export default function MetaDetailsScreen() {
 
     if (error) {
         return (
-            <View style={[styles.container, { backgroundColor: effectiveBackground, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-                <Typography variant="h3" style={{ textAlign: 'center', marginBottom: 16 }}>
-                    Failed to load content
-                </Typography>
-                <Pressable
-                    onPress={() => router.back()}
-                    style={{
-                        backgroundColor: theme.colors.primary,
-                        paddingHorizontal: 24,
-                        paddingVertical: 12,
-                        borderRadius: 24,
-                    }}
-                >
-                    <Typography variant="label" weight="bold" style={{ color: theme.colors.onPrimary }}>
-                        Go Back
+            <ThemeOverrideProvider theme={scopedTheme}>
+                <View style={[styles.container, { backgroundColor: effectiveBackground, justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+                    <Typography variant="h3" style={{ textAlign: 'center', marginBottom: 16 }}>
+                        Failed to load content
                     </Typography>
-                </Pressable>
-            </View>
+                    <Pressable
+                        onPress={() => router.back()}
+                        style={{
+                            backgroundColor: scopedTheme.colors.primary,
+                            paddingHorizontal: 24,
+                            paddingVertical: 12,
+                            borderRadius: 24,
+                        }}
+                    >
+                        <Typography variant="label" weight="bold" style={{ color: scopedTheme.colors.onPrimary }}>
+                            Go Back
+                        </Typography>
+                    </Pressable>
+                </View>
+            </ThemeOverrideProvider>
         );
     }
 
     return (
-        <View style={[styles.container, { backgroundColor: effectiveBackground }]}>
-            <View style={[styles.topBar, { top: insets.top + 8 }]}>
-                <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
-                    <ArrowLeft color="white" size={24} />
-                </Pressable>
-                <View style={styles.topRightActions}>
-                    <Pressable onPress={() => setIsMuted(!isMuted)} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
-                        {isMuted ? <VolumeX color="white" size={20} /> : <Volume2 color="white" size={20} />}
+        <ThemeOverrideProvider theme={scopedTheme}>
+            <View style={[styles.container, { backgroundColor: effectiveBackground }]}>
+                <View style={[styles.topBar, { top: insets.top + 8 }]}>
+                    <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: topButtonBg }]}>
+                        <ArrowLeft color={scopedTheme.colors.onSurface} size={24} />
                     </Pressable>
-                    <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: 'rgba(0,0,0,0.3)' }]}>
-                        <Share2 color="white" size={20} />
-                    </Pressable>
+                    <View style={styles.topRightActions}>
+                        <Pressable onPress={() => setIsMuted(!isMuted)} style={[styles.backBtn, { backgroundColor: topButtonBg }]}>
+                            {isMuted
+                                ? <VolumeX color={scopedTheme.colors.onSurface} size={20} />
+                                : <Volume2 color={scopedTheme.colors.onSurface} size={20} />}
+                        </Pressable>
+                        <Pressable onPress={handleShare} style={[styles.backBtn, { backgroundColor: topButtonBg }]}>
+                            <Share2 color={scopedTheme.colors.onSurface} size={20} />
+                        </Pressable>
+                    </View>
                 </View>
-            </View>
 
-            <Animated.ScrollView
-                onScroll={onScroll}
-                scrollEventThrottle={16}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 100 }}
-                style={{ zIndex: 1 }}
-            >
-                <HeroSection
-                    meta={meta}
-                    enriched={enriched}
-                    colors={colors}
-                    scrollY={scrollY}
-                    onWatchPress={handleWatchPress}
-                    onAiInsightsPress={handleAiInsightsPress}
-                    isAiLoading={isAiLoading}
-                    isMuted={isMuted}
-                    // Pass Trakt props for split layout
-                    watchState={watchState}
-                    isAuthenticated={isAuthenticated}
-                    isListed={isListed}
-                    isCollected={isCollected}
-                    isWatched={isWatched}
-                    isSeries={isSeries}
-                    userRating={userRating}
-                    onWatchlistToggle={handleWatchlistToggle}
-                    onCollectionToggle={handleCollectionToggle}
-                    onWatchedToggle={handleWatchedToggle}
-                    onRatePress={() => setShowRatingModal(true)}
-                />
+                {showExtractedColors && colorExtraction && colorDebugKeys && colorDebugKeys.length > 0 && (
+                    <View
+                        style={[
+                            styles.colorDebug,
+                            {
+                                top: insets.top + 60,
+                                backgroundColor: (scopedTheme.colors as any).surfaceContainerHigh || scopedTheme.colors.surfaceVariant,
+                                borderColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
+                            },
+                        ]}
+                    >
+                        <View style={styles.colorDebugHeader}>
+                            <Typography variant="label" weight="bold" style={{ color: scopedTheme.colors.onSurface }}>
+                                Extracted: {colorExtraction.source}
+                            </Typography>
+                            <Typography variant="label" style={{ color: scopedTheme.colors.onSurfaceVariant }}>
+                                Seed: {colorExtraction.seedKey ? `${colorExtraction.seedKey} ` : ''}{colorExtraction.seedColor || '-'}
+                                {colorExtraction.accepted ? '' : ' (default theme)'}
+                            </Typography>
+                        </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorDebugRow}>
+                            {colorDebugKeys.map((key) => {
+                                const value = colorExtraction.swatches[key];
+                                if (!value) return null;
+                                const isSeed = key === colorExtraction.seedKey;
+                                return (
+                                    <View key={key} style={styles.colorSwatchItem}>
+                                        <View
+                                            style={[
+                                                styles.colorSwatch,
+                                                {
+                                                    backgroundColor: value,
+                                                    borderColor: isSeed ? scopedTheme.colors.primary : scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
+                                                    borderWidth: isSeed ? 2 : 1,
+                                                },
+                                            ]}
+                                        />
+                                        <Typography variant="label" style={{ color: scopedTheme.colors.onSurfaceVariant, fontSize: 10 }}>
+                                            {key}
+                                        </Typography>
+                                        <Typography variant="label" style={{ color: scopedTheme.colors.onSurfaceVariant, fontSize: 10, opacity: 0.8 }}>
+                                            {value.toUpperCase()}
+                                        </Typography>
+                                    </View>
+                                );
+                            })}
+                        </ScrollView>
+                    </View>
+                )}
 
-                <View style={[styles.body, { backgroundColor: effectiveBackground, paddingHorizontal: 20 }]}>
-                    {!(isTablet && isLandscape) && (
-                        <MetaActionRow
-                            isAuthenticated={isAuthenticated}
-                            isListed={isListed}
-                            isCollected={isCollected}
-                            isWatched={isWatched}
-                            isSeries={isSeries}
-                            userRating={userRating}
-                            onWatchlistToggle={handleWatchlistToggle}
-                            onCollectionToggle={handleCollectionToggle}
-                            onWatchedToggle={handleWatchedToggle}
-                            onRatePress={() => setShowRatingModal(true)}
-                            palette={mediaPalette}
-                            style={{ marginTop: 24 }}
-                        />
-                    )}
+                <Animated.ScrollView
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    style={{ zIndex: 1 }}
+                >
+                    <HeroSection
+                        meta={meta}
+                        enriched={enriched}
+                        scrollY={scrollY}
+                        onWatchPress={handleWatchPress}
+                        onAiInsightsPress={handleAiInsightsPress}
+                        isAiLoading={isAiLoading}
+                        isMuted={isMuted}
+                        watchState={watchState}
+                        isAuthenticated={isAuthenticated}
+                        isListed={isListed}
+                        isCollected={isCollected}
+                        isWatched={isWatched}
+                        isSeries={isSeries}
+                        userRating={userRating}
+                        onWatchlistToggle={handleWatchlistToggle}
+                        onCollectionToggle={handleCollectionToggle}
+                        onWatchedToggle={handleWatchedToggle}
+                        onRatePress={() => setShowRatingModal(true)}
+                    />
+
+                    <View style={[styles.body, { backgroundColor: effectiveBackground, paddingHorizontal: 20 }]}>
+                        {!(isTablet && isLandscape) && (
+                            <MetaActionRow
+                                isAuthenticated={isAuthenticated}
+                                isListed={isListed}
+                                isCollected={isCollected}
+                                isWatched={isWatched}
+                                isSeries={isSeries}
+                                userRating={userRating}
+                                onWatchlistToggle={handleWatchlistToggle}
+                                onCollectionToggle={handleCollectionToggle}
+                                onWatchedToggle={handleWatchedToggle}
+                                onRatePress={() => setShowRatingModal(true)}
+                                style={{ marginTop: 24 }}
+                            />
+                        )}
 
                     <RatingModal
                         visible={showRatingModal}
@@ -446,57 +540,54 @@ export default function MetaDetailsScreen() {
                         }}
                     />
 
-                    <View style={{ marginHorizontal: -20 }}>
-                        <RatingsSection enriched={enriched} colors={colors} palette={mediaPalette} />
-                    </View>
-
-                    {enriched.director && (
-                        <View style={{ marginTop: 16 }}>
-                            <Typography variant="label" weight="black" style={styles.subLabel}>DIRECTOR:</Typography>
-                            <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface, marginTop: 2 }}>{enriched.director}</Typography>
-                        </View>
-                    )}
-
-                    <View style={{ marginHorizontal: -20 }}>
-                        <CastSection cast={enriched.cast || []} theme={theme} colors={colors} palette={mediaPalette} onPersonPress={handlePersonPress} />
-                    </View>
-
-                    <View style={{ marginHorizontal: -20 }}>
-                        <CommentsSection
-                            id={(enriched.imdbId || id) as string}
-                            type={isSeries ? 'show' : 'movie'}
-                            colors={colors}
-                        />
-                    </View>
-
-                    {isSeries && seasons.length > 0 && (
                         <View style={{ marginHorizontal: -20 }}>
-                            <EpisodesSection
-                                seasons={seasons}
-                                activeSeason={activeSeason}
-                                setActiveSeason={setActiveSeason}
-                                seasonEpisodes={seasonEpisodes}
-                                colors={colors}
-                                theme={theme}
-                                enrichedSeasons={enriched.seasons}
-                                isWatched={handleIsEpisodeWatched}
-                                onEpisodePress={handleEpisodePress}
+                            <RatingsSection enriched={enriched} />
+                        </View>
+
+                        {enriched.director && (
+                            <View style={{ marginTop: 16 }}>
+                                <Typography variant="label" weight="black" style={[styles.subLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>DIRECTOR:</Typography>
+                                <Typography variant="label" weight="bold" style={{ color: scopedTheme.colors.onSurface, marginTop: 2 }}>{enriched.director}</Typography>
+                            </View>
+                        )}
+
+                        <View style={{ marginHorizontal: -20 }}>
+                            <CastSection cast={enriched.cast || []} onPersonPress={handlePersonPress} />
+                        </View>
+
+                        <View style={{ marginHorizontal: -20 }}>
+                            <CommentsSection
+                                id={(enriched.imdbId || id) as string}
+                                type={isSeries ? 'show' : 'movie'}
                             />
                         </View>
-                    )}
 
-                    {enriched.collection?.parts && enriched.collection.parts.length > 0 && (
-                        <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                            <CatalogRow title={enriched.collection.name} items={enriched.collection.parts} textColor="white" />
-                        </View>
-                    )}
-                    {enriched.similar && enriched.similar.length > 0 && (
-                        <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                            <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor="white" />
-                        </View>
-                    )}
-                </View>
-            </Animated.ScrollView>
+                        {isSeries && seasons.length > 0 && (
+                            <View style={{ marginHorizontal: -20 }}>
+                                <EpisodesSection
+                                    seasons={seasons}
+                                    activeSeason={activeSeason}
+                                    setActiveSeason={setActiveSeason}
+                                    seasonEpisodes={seasonEpisodes}
+                                    enrichedSeasons={enriched.seasons}
+                                    isWatched={handleIsEpisodeWatched}
+                                    onEpisodePress={handleEpisodePress}
+                                />
+                            </View>
+                        )}
+
+                        {enriched.collection?.parts && enriched.collection.parts.length > 0 && (
+                            <View style={{ marginTop: 24, marginHorizontal: -20 }}>
+                                <CatalogRow title={enriched.collection.name} items={enriched.collection.parts} textColor={scopedTheme.colors.onSurface} />
+                            </View>
+                        )}
+                        {enriched.similar && enriched.similar.length > 0 && (
+                            <View style={{ marginTop: 24, marginHorizontal: -20 }}>
+                                <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor={scopedTheme.colors.onSurface} />
+                            </View>
+                        )}
+                    </View>
+                </Animated.ScrollView>
 
             <CustomBottomSheet
                 ref={streamBottomSheetRef}
@@ -521,29 +612,28 @@ export default function MetaDetailsScreen() {
                 />
             </CustomBottomSheet>
 
-            <AiInsightsStory
-                visible={showAiStory}
-                onClose={() => setShowAiStory(false)}
-                insights={insights?.insights || []}
-                trivia={insights?.trivia}
-                meta={enriched}
-                backgroundColor={effectiveBackground}
-                accentColor={mediaPalette.primary}
-            />
+                <AiInsightsStory
+                    visible={showAiStory}
+                    onClose={() => setShowAiStory(false)}
+                    insights={insights?.insights || []}
+                    trivia={insights?.trivia}
+                    meta={enriched}
+                />
 
-            <Snackbar
-                visible={showAiErrorSnackbar}
-                onDismiss={() => setShowAiErrorSnackbar(false)}
-                duration={4200}
-                action={{
-                    label: 'Dismiss',
-                    onPress: () => setShowAiErrorSnackbar(false),
-                }}
-                style={{ marginBottom: insets.bottom + 8 }}
-            >
-                {aiError?.message || 'AI insights are unavailable right now. Please try again.'}
-            </Snackbar>
-        </View>
+                <Snackbar
+                    visible={showAiErrorSnackbar}
+                    onDismiss={() => setShowAiErrorSnackbar(false)}
+                    duration={4200}
+                    action={{
+                        label: 'Dismiss',
+                        onPress: () => setShowAiErrorSnackbar(false),
+                    }}
+                    style={{ marginBottom: insets.bottom + 8 }}
+                >
+                    {aiError?.message || 'AI insights are unavailable right now. Please try again.'}
+                </Snackbar>
+            </View>
+        </ThemeOverrideProvider>
     );
 }
 
@@ -552,7 +642,12 @@ const styles = StyleSheet.create({
     topBar: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 1000 },
     topRightActions: { flexDirection: 'row', gap: 12 },
     backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    colorDebug: { position: 'absolute', left: 16, right: 16, padding: 10, borderRadius: 16, borderWidth: 1, zIndex: 999 },
+    colorDebugHeader: { gap: 2, marginBottom: 10 },
+    colorDebugRow: { gap: 12 },
+    colorSwatchItem: { width: 90 },
+    colorSwatch: { width: 56, height: 28, borderRadius: 8, marginBottom: 6 },
     body: { flex: 1 },
-    subLabel: { color: 'white', opacity: 0.4, fontSize: 10 },
+    subLabel: { opacity: 0.7, fontSize: 10 },
     sectionTitle: { color: 'white', marginBottom: 16 },
 });

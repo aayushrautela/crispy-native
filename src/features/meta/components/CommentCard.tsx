@@ -1,7 +1,6 @@
 import { TraktContentComment } from '@/src/core/services/trakt-types';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
-import { hexToRgba } from '@/src/core/utils/colors';
 import { MessageSquare, Star, ThumbsUp } from 'lucide-react-native';
 import React, { memo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -11,12 +10,16 @@ const CARD_WIDTH = 280;
 interface CommentCardProps {
     comment: TraktContentComment;
     onPress: () => void;
-    palette: any;
 }
 
-export const CommentCard = memo(function CommentCard({ comment, onPress, palette }: CommentCardProps) {
+export const CommentCard = memo(function CommentCard({ comment, onPress }: CommentCardProps) {
     const { theme } = useTheme();
     const [isSpoilerRevealed, setIsSpoilerRevealed] = useState(false);
+
+    const cardBg = (theme.colors as any).surfaceContainerHigh
+        || (theme.colors as any).surfaceContainer
+        || (theme.colors as any).surfaceContainerHighest
+        || theme.colors.surfaceVariant;
 
     const user = comment.user;
     const username = user.name || user.username || 'Anonymous';
@@ -25,7 +28,7 @@ export const CommentCard = memo(function CommentCard({ comment, onPress, palette
         if (comment.spoiler && !isSpoilerRevealed) {
             return (
                 <Pressable onPress={() => setIsSpoilerRevealed(true)} style={styles.spoilerPlaceholder}>
-                    <Typography variant="label" style={{ color: '#FF5252', fontWeight: 'bold', fontSize: 11 }}>
+                    <Typography variant="label" style={{ color: theme.colors.error, fontWeight: 'bold', fontSize: 11 }}>
                         ⚠️ Contains spoilers. Tap to reveal.
                     </Typography>
                 </Pressable>
@@ -36,7 +39,7 @@ export const CommentCard = memo(function CommentCard({ comment, onPress, palette
         text = text.replace(/\[spoiler\]/gi, '').replace(/\[\/spoiler\]/gi, '');
 
         return (
-            <Typography variant="label" numberOfLines={4} style={styles.commentText}>
+            <Typography variant="label" numberOfLines={4} style={[styles.commentText, { color: theme.colors.onSurfaceVariant }]}>
                 {text}
             </Typography>
         );
@@ -44,22 +47,22 @@ export const CommentCard = memo(function CommentCard({ comment, onPress, palette
 
     return (
         <Pressable onPress={onPress}>
-            <View style={[styles.card, { backgroundColor: hexToRgba(palette.vibrant, 0.16) }]}>
+            <View style={[styles.card, { backgroundColor: cardBg }]}>
                 <View style={styles.header}>
                     <View style={styles.userInfo}>
-                        <Typography variant="label" weight="bold" style={styles.username}>
+                        <Typography variant="label" weight="bold" style={[styles.username, { color: theme.colors.onSurface }]}>
                             {username}
                         </Typography>
                         {user.vip && (
-                            <View style={[styles.vipBadge, { backgroundColor: palette.lightVibrant }]}>
-                                <Typography variant="label" style={styles.vipText}>VIP</Typography>
+                            <View style={[styles.vipBadge, { backgroundColor: theme.colors.tertiaryContainer }]}>
+                                <Typography variant="label" style={[styles.vipText, { color: theme.colors.onTertiaryContainer }]}>VIP</Typography>
                             </View>
                         )}
                     </View>
                     {comment.user_stats?.rating && (
                         <View style={styles.rating}>
                             <Star size={10} color="#FFD700" fill="#FFD700" />
-                            <Typography variant="label" weight="black" style={styles.ratingText}>
+                            <Typography variant="label" weight="black" style={[styles.ratingText, { color: theme.colors.onSurface }]}>
                                 {comment.user_stats.rating}/10
                             </Typography>
                         </View>
@@ -71,20 +74,20 @@ export const CommentCard = memo(function CommentCard({ comment, onPress, palette
                 </View>
 
                 <View style={styles.footer}>
-                    <Typography variant="label" style={styles.timeText}>
+                    <Typography variant="label" style={[styles.timeText, { color: theme.colors.onSurfaceVariant }]}>
                         {new Date(comment.created_at).toLocaleDateString()}
                     </Typography>
                     <View style={styles.stats}>
                         {comment.likes > 0 && (
                             <View style={styles.statItem}>
-                                <ThumbsUp size={10} color="white" style={{ opacity: 0.6 }} />
-                                <Typography variant="label" style={styles.statText}>{comment.likes}</Typography>
+                                <ThumbsUp size={10} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.8 }} />
+                                <Typography variant="label" style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>{comment.likes}</Typography>
                             </View>
                         )}
                         {comment.replies > 0 && (
                             <View style={styles.statItem}>
-                                <MessageSquare size={10} color="white" style={{ opacity: 0.6 }} />
-                                <Typography variant="label" style={styles.statText}>{comment.replies}</Typography>
+                                <MessageSquare size={10} color={theme.colors.onSurfaceVariant} style={{ opacity: 0.8 }} />
+                                <Typography variant="label" style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>{comment.replies}</Typography>
                             </View>
                         )}
                     </View>
@@ -140,8 +143,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     commentText: {
-        color: 'white',
-        opacity: 0.7,
+        opacity: 0.8,
         fontSize: 11,
         lineHeight: 16,
     },
@@ -149,7 +151,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 82, 82, 0.05)',
+        backgroundColor: 'rgba(255, 82, 82, 0.08)',
         borderRadius: 8,
     },
     footer: {
@@ -159,7 +161,6 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     timeText: {
-        color: 'white',
         opacity: 0.4,
         fontSize: 10,
     },
@@ -173,7 +174,6 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     statText: {
-        color: 'white',
         opacity: 0.6,
         fontSize: 10,
     },

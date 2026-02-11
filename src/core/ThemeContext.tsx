@@ -1,13 +1,27 @@
 import { useMaterial3Theme } from '@pchmn/expo-material3-theme';
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
-import { useColorScheme } from 'react-native';
-import { MD3DarkTheme, MD3Theme, Provider as PaperProvider } from 'react-native-paper';
+import { MD3DarkTheme, Provider as PaperProvider } from 'react-native-paper';
+import type { MD3Theme } from 'react-native-paper';
 import { useUserStore } from './stores/userStore';
 
+type PaperMD3Colors = MD3Theme['colors'];
+
+export type AppMD3Colors = PaperMD3Colors & {
+    // Material 3 surface container roles (present in Material You schemes)
+    surfaceContainer?: string;
+    surfaceContainerLowest?: string;
+    surfaceContainerLow?: string;
+    surfaceContainerHigh?: string;
+    surfaceContainerHighest?: string;
+};
+
+export type AppMD3Theme = Omit<MD3Theme, 'colors'> & { colors: AppMD3Colors };
+
 interface ThemeContextType {
-    theme: MD3Theme;
+    theme: AppMD3Theme;
     isDark: boolean;
     amoledMode: boolean;
+    useMaterialYou: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -28,8 +42,6 @@ const getAccentHex = (colorName: string): string => {
 };
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    console.log('[CRISPY-BOOT] ThemeProvider rendering');
-    const colorScheme = useColorScheme();
     const { settings } = useUserStore();
     const { amoledMode, accentColor, useMaterialYou } = settings;
     const isFirstMount = useRef(true);
@@ -64,11 +76,11 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
     const isDark = true; // App is dark mode only as per user request
 
-    const paperTheme = useMemo(() => {
+    const paperTheme = useMemo((): AppMD3Theme => {
         const baseTheme = MD3DarkTheme;
         const m3Colors = theme.dark;
 
-        const finalTheme = {
+        const finalTheme: AppMD3Theme = {
             ...baseTheme,
             colors: {
                 ...baseTheme.colors,
@@ -92,7 +104,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
                     background: m3Colors.background,
                     surface: m3Colors.surface,
                 }),
-            },
+            } as AppMD3Colors,
         };
 
         return finalTheme;
@@ -107,7 +119,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
     return (
         <ThemeContext.Provider value={contextValue}>
-            <PaperProvider theme={paperTheme}>
+            <PaperProvider theme={paperTheme as MD3Theme}>
                 {children}
             </PaperProvider>
         </ThemeContext.Provider>
@@ -120,4 +132,30 @@ export const useTheme = () => {
         throw new Error('useTheme must be used within a ThemeProvider');
     }
     return context;
+};
+
+export const ThemeOverrideProvider = ({
+    theme,
+    children,
+}: {
+    theme: AppMD3Theme;
+    children: React.ReactNode;
+}) => {
+    const parent = useContext(ThemeContext);
+    if (!parent) {
+        throw new Error('ThemeOverrideProvider must be used within a ThemeProvider');
+    }
+
+    const value = useMemo(() => ({
+        ...parent,
+        theme,
+    }), [parent, theme]);
+
+    return (
+        <ThemeContext.Provider value={value}>
+            <PaperProvider theme={theme as MD3Theme}>
+                {children}
+            </PaperProvider>
+        </ThemeContext.Provider>
+    );
 };
