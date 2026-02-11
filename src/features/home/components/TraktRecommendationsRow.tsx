@@ -28,7 +28,6 @@ export const TraktRecommendationsRow = () => {
         <View style={styles.container}>
             <SectionHeader
                 title="Trakt Top Picks"
-                onAction={() => router.push('/trakt/recommendations' as any)}
                 style={styles.header}
             />
             <View style={{ minHeight: CARD_WIDTH * 1.5 }}>

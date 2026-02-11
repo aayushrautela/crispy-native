@@ -23,6 +23,7 @@ interface CatalogRowProps {
     addonUrl?: string;
     textColor?: string;
     fetchEnabled?: boolean;
+    hideAction?: boolean;
 }
 
 export const CatalogRow = ({
@@ -35,7 +36,8 @@ export const CatalogRow = ({
     extra,
     addonUrl,
     textColor,
-    fetchEnabled = true
+    fetchEnabled = true,
+    hideAction = false
 }: CatalogRowProps) => {
     const { theme } = useTheme();
     const router = useRouter();
@@ -116,7 +118,7 @@ export const CatalogRow = ({
             <SectionHeader
                 title={title}
                 textColor={textColor}
-                onAction={handleSeeAll}
+                onAction={hideAction ? undefined : handleSeeAll}
                 style={styles.headerPadding}
             />
 

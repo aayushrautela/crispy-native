@@ -24,9 +24,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
     ArrowLeft,
+    ClosedCaption,
     Headphones,
     Info,
-    Languages,
     Layers,
     Pause,
     Play,
@@ -1005,7 +1005,7 @@ export default function PlayerScreen() {
                                 <View style={styles.actionsPill}>
                                     {[
                                         { icon: Headphones, key: 'audio' },
-                                        { icon: Languages, key: 'subtitles' },
+                                        { icon: ClosedCaption, key: 'subtitles' },
                                         { icon: Layers, key: 'streams' },
                                         { icon: Settings, key: 'settings' },
                                         { icon: Info, key: 'info' }
