@@ -100,7 +100,7 @@ const HeroSlideComponent = ({
                         <View style={styles.content}>
                             {/* Branding Section */}
                             <View style={styles.brandingSection}>
-                                <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
+                                <Typography variant="display-large" weight="black" style={{ color: 'white', fontSize: 72, lineHeight: 72 }}>
                                     {item.name}
                                 </Typography>
                                 {isUpcoming && (
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
         maxWidth: 600, 
     },
     brandingSection: {
-        marginBottom: 8,
+        marginBottom: 16,
         alignItems: 'flex-start',
         width: '100%',
     },
