@@ -70,22 +70,32 @@ internal class PlayerSurfaceResizer(
     var changed = false
     val params = (videoView.layoutParams as? FrameLayout.LayoutParams)
       ?: FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    if (params.width != targetW || params.height != targetH) {
+    if (params.width != targetW || params.height != targetH || params.gravity != android.view.Gravity.CENTER) {
       params.width = targetW
       params.height = targetH
       params.gravity = android.view.Gravity.CENTER
       videoView.layoutParams = params
+      changed = true
+    } else if (videoView.width != targetW || videoView.height != targetH) {
+      // After PiP transitions Android can report stale measured bounds even when layout params
+      // are already correct. Force a layout pass so SurfaceView resizes back to the target.
+      videoView.requestLayout()
+      videoView.invalidate()
       changed = true
     }
 
     if (subtitleView != null) {
       val subParams = (subtitleView.layoutParams as? FrameLayout.LayoutParams)
         ?: FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-      if (subParams.width != targetW || subParams.height != targetH) {
+      if (subParams.width != targetW || subParams.height != targetH || subParams.gravity != android.view.Gravity.CENTER) {
         subParams.width = targetW
         subParams.height = targetH
         subParams.gravity = android.view.Gravity.CENTER
         subtitleView.layoutParams = subParams
+        changed = true
+      } else if (subtitleView.width != targetW || subtitleView.height != targetH) {
+        subtitleView.requestLayout()
+        subtitleView.invalidate()
         changed = true
       }
     }

@@ -120,6 +120,11 @@ class PlayerActivity : ReactActivity() {
   private var surfaceAttachRetryCount: Int = 0
   private var surfaceAttachRetryScheduled: Boolean = false
   private var surfaceAttachRetryReason: String = ""
+  private var awaitingExitPipRelayout: Boolean = false
+  private var exitPipContainerW: Int = 0
+  private var exitPipContainerH: Int = 0
+  private var lastAppliedVlcSurfaceW: Int = -1
+  private var lastAppliedVlcSurfaceH: Int = -1
   private val surfaceAttachRetryRunnable = Runnable {
     surfaceAttachRetryScheduled = false
     surfaceAttachRetryCount += 1
@@ -250,6 +255,13 @@ class PlayerActivity : ReactActivity() {
 
           applyResizeTransform()
           updatePipParams()
+
+          if (awaitingExitPipRelayout && !isInPictureInPictureMode) {
+            if (newW != exitPipContainerW || newH != exitPipContainerH) {
+              awaitingExitPipRelayout = false
+              ensureSurfaceAttached("exitPiP-layoutChanged")
+            }
+          }
         }
 
         override fun onVideoSurfaceCreated() {
@@ -279,9 +291,6 @@ class PlayerActivity : ReactActivity() {
             )
           )
 
-          if (engine == ENGINE_VLC) {
-            vlcService?.setSurfaceSize(width, height)
-          }
           if (width <= 0 || height <= 0) {
             scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
             emitVlcDebugEvent("surfaceChanged-invalid-size")
@@ -324,9 +333,6 @@ class PlayerActivity : ReactActivity() {
             )
           )
 
-          if (engine == ENGINE_VLC) {
-            vlcService?.setSurfaceSize(width, height)
-          }
           if (width <= 0 || height <= 0) {
             scheduleSurfaceAttachRetry("subtitleSurfaceChanged-invalid-size")
             emitVlcDebugEvent("subtitleSurfaceChanged-invalid-size")
@@ -403,6 +409,8 @@ class PlayerActivity : ReactActivity() {
         vlcService = binder.getService()
         vlcService?.registerClient()
         vlcService?.addListener(vlcListener)
+        lastAppliedVlcSurfaceW = -1
+        lastAppliedVlcSurfaceH = -1
         emitVlcDebugEvent("vlcServiceConnected")
         ensureSurfaceAttached("vlcServiceConnected")
 
@@ -425,6 +433,8 @@ class PlayerActivity : ReactActivity() {
       emitVlcDebugEvent("serviceDisconnected")
       vlcService = null
       exoService = null
+      lastAppliedVlcSurfaceW = -1
+      lastAppliedVlcSurfaceH = -1
     }
   }
 
@@ -665,24 +675,27 @@ class PlayerActivity : ReactActivity() {
       if (subtitleSurface == null || !subtitleSurface.isValid) return false
 
       val frame = holder.surfaceFrame
-      val w = when {
-        frame.width() > 0 -> frame.width()
-        sv.width > 0 -> sv.width
-        else -> 1920
-      }
-      val h = when {
-        frame.height() > 0 -> frame.height()
-        sv.height > 0 -> sv.height
-        else -> 1080
-      }
+      val layoutParams = sv.layoutParams
+      val layoutW = layoutParams?.width ?: 0
+      val layoutH = layoutParams?.height ?: 0
+      val frameW = frame.width()
+      val frameH = frame.height()
+      val w = maxOf(layoutW, sv.width, frameW).takeIf { it > 0 } ?: 1920
+      val h = maxOf(layoutH, sv.height, frameH).takeIf { it > 0 } ?: 1080
 
       return try {
         svc.attachSurfaces(holder, subtitleHolder, w, h)
+        lastAppliedVlcSurfaceW = -1
+        lastAppliedVlcSurfaceH = -1
         emitVlcDebugEvent(
           "attachSurfacesIfReady:$reason",
           mapOf(
             "attachWidth" to w,
             "attachHeight" to h,
+            "attachLayoutWidth" to layoutW,
+            "attachLayoutHeight" to layoutH,
+            "attachFrameWidth" to frameW,
+            "attachFrameHeight" to frameH,
             "subtitleAttached" to true
           )
         )
@@ -694,6 +707,10 @@ class PlayerActivity : ReactActivity() {
           mapOf(
             "attachWidth" to w,
             "attachHeight" to h,
+            "attachLayoutWidth" to layoutW,
+            "attachLayoutHeight" to layoutH,
+            "attachFrameWidth" to frameW,
+            "attachFrameHeight" to frameH,
             "subtitleAttached" to true,
             "error" to (t.message ?: "unknown")
           )
@@ -722,6 +739,8 @@ class PlayerActivity : ReactActivity() {
       bestEffort("vlcService.detachSurface") {
         vlcService?.detachSurface()
       }
+      lastAppliedVlcSurfaceW = -1
+      lastAppliedVlcSurfaceH = -1
       return
     }
 
@@ -741,9 +760,6 @@ class PlayerActivity : ReactActivity() {
     if (attachSurfaceIfReady(reason)) {
       cancelSurfaceAttachRetry()
 
-      // After PiP transitions, Android can keep the SurfaceView buffer at the old (PiP) size until
-      // we explicitly re-apply our layout transform. Do it after successful attach so the next
-      // surfaceChanged reflects the correct full-screen target size.
       val content = findViewById<ViewGroup>(android.R.id.content)
       if (content != null) {
         containerW = content.width
@@ -841,6 +857,9 @@ class PlayerActivity : ReactActivity() {
   override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode)
 
+    val previousContainerW = containerW
+    val previousContainerH = containerH
+
     emit("onPipModeChanged", isInPictureInPictureMode)
 
     setReactOverlayVisible(!isInPictureInPictureMode, "onPictureInPictureModeChanged")
@@ -864,9 +883,24 @@ class PlayerActivity : ReactActivity() {
       return
     }
 
+    if (isInPictureInPictureMode) {
+      awaitingExitPipRelayout = false
+    }
+
     if (!isInPictureInPictureMode && was) {
       ensureSurfaceAttached("exitPiP")
-      surfaceView?.postDelayed({ ensureSurfaceAttached("exitPiP-post") }, 120L)
+
+      val containerChanged =
+        containerW > 0 && containerH > 0 &&
+          (containerW != previousContainerW || containerH != previousContainerH)
+
+      if (containerChanged) {
+        awaitingExitPipRelayout = false
+      } else {
+        awaitingExitPipRelayout = true
+        exitPipContainerW = containerW
+        exitPipContainerH = containerH
+      }
     }
   }
 
@@ -1030,6 +1064,10 @@ class PlayerActivity : ReactActivity() {
       resizeMode
     )
 
+    if (result.status != PlayerSurfaceResizer.Status.SKIPPED_NOT_READY) {
+      syncVlcSurfaceSizeIfNeeded(result.targetW, result.targetH)
+    }
+
     when (result.status) {
       PlayerSurfaceResizer.Status.SKIPPED_NOT_READY -> {
         emitVlcDebugEvent("applyResizeTransform:skipped-not-ready")
@@ -1061,6 +1099,20 @@ class PlayerActivity : ReactActivity() {
         )
       }
     }
+  }
+
+  private fun syncVlcSurfaceSizeIfNeeded(width: Int, height: Int) {
+    if (engine != ENGINE_VLC) return
+    if (width <= 0 || height <= 0) return
+    val svc = vlcService ?: return
+
+    if (lastAppliedVlcSurfaceW == width && lastAppliedVlcSurfaceH == height) {
+      return
+    }
+
+    svc.setSurfaceSize(width, height)
+    lastAppliedVlcSurfaceW = width
+    lastAppliedVlcSurfaceH = height
   }
 
   private fun emitVlcDebugEvent(reason: String, extras: Map<String, Any> = emptyMap()) {
