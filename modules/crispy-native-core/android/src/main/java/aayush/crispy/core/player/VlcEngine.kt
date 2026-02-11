@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import android.view.SurfaceHolder
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -75,12 +76,15 @@ class VlcEngine(
   private var isPaused: Boolean = true
   private var hasSentLoadEvent: Boolean = false
   private var firstFrameEmitted: Boolean = false
+  private var hasStartedPlaybackForCurrentSource: Boolean = false
 
   private var cachedDuration: Long = 0L
   private var cachedWidth: Int = 0
   private var cachedHeight: Int = 0
   private var surfaceWidth: Int = 0
   private var surfaceHeight: Int = 0
+  private var hasVideoSurface: Boolean = false
+  private var hasSubtitleSurface: Boolean = false
   private var resizeMode: String = "contain"
   private var lastAppliedScaleType: String = "uninitialized"
 
@@ -152,6 +156,7 @@ class VlcEngine(
       val args = ArrayList<String>()
       args.add("--no-stats")
       args.add("--network-caching=2000")
+      args.add("--vout=android-display")
       args.add("--no-osd")
       args.add("--no-drop-late-frames")
       args.add("--no-skip-frames")
@@ -166,6 +171,16 @@ class VlcEngine(
             dispatchIsPlayingChanged(true)
             dispatchBufferingChanged(false)
             checkReadyState()
+
+            if (isPaused) {
+              try {
+                // If caller requested paused-on-load, we still start playback once so LibVLC can
+                // initialize vout and report video layout/track metadata, then immediately pause.
+                mediaPlayer?.pause()
+              } catch (_: Throwable) {
+                // ignore
+              }
+            }
           }
           MediaPlayer.Event.Paused -> {
             currentState = PlayerState.PAUSED
@@ -239,29 +254,106 @@ class VlcEngine(
     }
   }
 
-  fun attachSurface(surface: Surface, width: Int, height: Int) {
+  fun attachSurfaces(videoHolder: SurfaceHolder, subtitleHolder: SurfaceHolder?, width: Int, height: Int) {
     val mp = mediaPlayer ?: return
     val vout = mp.vlcVout
+
+    val videoSurface = try {
+      videoHolder.surface
+    } catch (_: Throwable) {
+      null
+    }
+    val subtitleSurface = try {
+      subtitleHolder?.surface
+    } catch (_: Throwable) {
+      null
+    }
+
+    val videoValid = videoSurface?.isValid == true
+    val subtitleValid = subtitleSurface?.isValid == true
+
     surfaceWidth = width
     surfaceHeight = height
+    hasVideoSurface = videoValid
+    hasSubtitleSurface = subtitleValid
+
+    if (!videoValid) {
+      Log.i(TAG, "attachSurfaces skipped: invalid video surface size=${width}x${height} subtitleValid=$subtitleValid")
+      return
+    }
 
     if (!vout.areViewsAttached()) {
-      vout.setVideoSurface(surface, null)
-      vout.setWindowSize(width, height)
-      vout.addCallback(this)
-      vout.attachViews(this)
+      try {
+        vout.setVideoSurface(videoSurface, videoHolder)
+        if (subtitleValid && subtitleHolder != null) {
+          vout.setSubtitlesSurface(subtitleSurface!!, subtitleHolder)
+        }
+        vout.setWindowSize(width, height)
+        vout.addCallback(this)
+        vout.attachViews(this)
+      } catch (t: Throwable) {
+        Log.w(TAG, "Failed to attach VLC surfaces", t)
+        return
+      }
       Log.i(
         TAG,
-        "Surface attached: ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState"
+        "Surfaces attached: ${width}x${height} subtitle=$subtitleValid mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState paused=$isPaused"
       )
     } else {
       vout.setWindowSize(width, height)
       Log.i(
         TAG,
-        "Surface re-sized while attached: ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState"
+        "Surfaces re-sized while attached: ${width}x${height} subtitle=$subtitleValid mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState paused=$isPaused"
       )
     }
     applyResizeMode()
+
+    // Ensure the *first* play happens only after views are attached.
+    maybeStartPlayback("attachSurfaces")
+  }
+
+  private fun maybeStartPlayback(reason: String) {
+    val mp = mediaPlayer ?: return
+    val vout = mp.vlcVout
+
+    if (!vout.areViewsAttached()) {
+      Log.i(TAG, "maybeStartPlayback deferred ($reason): views not attached")
+      return
+    }
+    if (mp.media == null) {
+      Log.i(TAG, "maybeStartPlayback deferred ($reason): no media")
+      return
+    }
+
+    // If user requested play, always start/resume.
+    // If user requested paused, we still start once per source so VLC can emit layout/track metadata.
+    val shouldStart = !isPaused || !hasStartedPlaybackForCurrentSource
+    if (!shouldStart) return
+
+    try {
+      if (!mp.isPlaying) {
+        mp.play()
+        hasStartedPlaybackForCurrentSource = true
+        Log.i(TAG, "maybeStartPlayback start ($reason) paused=$isPaused state=$currentState")
+
+        if (isPaused) {
+          // Pause as soon as we've kicked off playback, so we still get vout initialization
+          // (video layout + track metadata) while honoring a paused-on-load request.
+          try {
+            mp.pause()
+          } catch (_: Throwable) {
+            // ignore
+          }
+        }
+      }
+
+      mainHandler.removeCallbacks(readyPollRunnable)
+      if (currentState == PlayerState.PREPARING) {
+        mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "maybeStartPlayback failed ($reason)", t)
+    }
   }
 
   fun setSurfaceSize(width: Int, height: Int) {
@@ -337,6 +429,11 @@ class VlcEngine(
       vout.detachViews()
       Log.i(TAG, "Surface detached")
     }
+
+    surfaceWidth = 0
+    surfaceHeight = 0
+    hasVideoSurface = false
+    hasSubtitleSurface = false
   }
 
   fun addListener(listener: Listener) {
@@ -367,6 +464,7 @@ class VlcEngine(
     currentState = PlayerState.PREPARING
     hasSentLoadEvent = false
     firstFrameEmitted = false
+    hasStartedPlaybackForCurrentSource = false
     cachedDuration = 0
     cachedWidth = 0
     cachedHeight = 0
@@ -380,6 +478,7 @@ class VlcEngine(
     val encodedUrl = encodeUrlForVlc(url)
 
     try {
+      mainHandler.removeCallbacks(readyPollRunnable)
       mp.stop()
       val media = Media(lib, Uri.parse(encodedUrl))
 
@@ -394,12 +493,9 @@ class VlcEngine(
       media.setHWDecoderEnabled(true, false)
       mp.media = media
       media.release()
-      
-      mp.play()
-      isPaused = false
-      
-      mainHandler.removeCallbacks(readyPollRunnable)
-      mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
+
+      // Do not call mp.play() until vout views are attached (IVLCVout contract).
+      maybeStartPlayback("setSource")
     } catch (e: Exception) {
       currentState = PlayerState.ERROR
       dispatch { it.onError(e.message ?: "Failed to load media") }
@@ -413,10 +509,8 @@ class VlcEngine(
       if (paused) {
         if (mp.isPlaying) mp.pause()
       } else {
-        if (!mp.isPlaying) mp.play()
+        maybeStartPlayback("setPaused")
       }
-      mediaSessionHandler?.updatePlaybackState(!paused)
-      PipController.updateIsPlayingFromNative(!paused)
     } catch (e: Exception) {
       Log.w(TAG, "Failed to apply play/pause", e)
     }
@@ -426,11 +520,14 @@ class VlcEngine(
 
   fun stopPlayback() {
     isPaused = true
+    hasStartedPlaybackForCurrentSource = false
     currentState = PlayerState.IDLE
     hasSentLoadEvent = false
     try {
       mediaPlayer?.stop()
     } catch (_: Throwable) {}
+
+    mainHandler.removeCallbacks(readyPollRunnable)
     
     mediaSessionHandler?.updatePlaybackState(false)
     PipController.updateIsPlayingFromNative(false)
@@ -636,12 +733,21 @@ class VlcEngine(
   }
 
   fun getDebugSnapshot(): Map<String, Any> {
+    val viewsAttached = try {
+      mediaPlayer?.vlcVout?.areViewsAttached() ?: false
+    } catch (_: Throwable) {
+      false
+    }
     return mapOf(
       "state" to currentState.name,
       "isPaused" to isPaused,
       "isSeekable" to isSeekable,
       "hasSentLoadEvent" to hasSentLoadEvent,
       "firstFrameEmitted" to firstFrameEmitted,
+      "viewsAttached" to viewsAttached,
+      "hasVideoSurface" to hasVideoSurface,
+      "hasSubtitleSurface" to hasSubtitleSurface,
+      "hasStartedPlaybackForCurrentSource" to hasStartedPlaybackForCurrentSource,
       "resizeMode" to resizeMode,
       "lastAppliedScaleType" to lastAppliedScaleType,
       "surfaceWidth" to surfaceWidth,

@@ -11,7 +11,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
-import android.view.Surface
+import android.view.SurfaceHolder
 import aayush.crispy.core.MediaSessionHandler
 
 /**
@@ -89,8 +89,8 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   }
   
   // Surface Management for VLC
-  fun attachSurface(surface: Surface, width: Int, height: Int) {
-      engine.attachSurface(surface, width, height)
+  fun attachSurfaces(videoHolder: SurfaceHolder, subtitleHolder: SurfaceHolder?, width: Int, height: Int) {
+    engine.attachSurfaces(videoHolder, subtitleHolder, width, height)
   }
   
   fun detachSurface() {

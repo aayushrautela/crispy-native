@@ -82,6 +82,7 @@ class PlayerActivity : ReactActivity() {
   private var artworkUrl: String? = null
 
   private var surfaceView: SurfaceView? = null
+  private var subtitleSurfaceView: SurfaceView? = null
   private var containerW: Int = 0
   private var containerH: Int = 0
 
@@ -268,6 +269,29 @@ class PlayerActivity : ReactActivity() {
     sv.holder.addCallback(surfaceCallback)
     surfaceView = sv
     content.addView(sv, 0)
+
+    val subtitleSv = SurfaceView(this)
+    subtitleSv.setZOrderOnTop(false)
+    subtitleSv.setZOrderMediaOverlay(true)
+    try {
+      subtitleSv.holder.setFormat(PixelFormat.TRANSLUCENT)
+    } catch (_: Throwable) {
+      // ignore
+    }
+    try {
+      subtitleSv.setBackgroundColor(Color.TRANSPARENT)
+    } catch (_: Throwable) {
+      // ignore
+    }
+    subtitleSv.layoutParams = FrameLayout.LayoutParams(
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      ViewGroup.LayoutParams.MATCH_PARENT,
+      android.view.Gravity.CENTER
+    )
+    subtitleSv.holder.addCallback(subtitleSurfaceCallback)
+    subtitleSurfaceView = subtitleSv
+    // Add above video surface, below React root.
+    content.addView(subtitleSv, 1)
     
     // Capture initial container size
     content.post {
@@ -321,6 +345,40 @@ class PlayerActivity : ReactActivity() {
     }
   }
 
+  private val subtitleSurfaceCallback = object : SurfaceHolder.Callback {
+    override fun surfaceCreated(holder: SurfaceHolder) {
+      ensureSurfaceAttached("subtitleSurfaceCreated")
+      emitVlcDebugEvent("subtitleSurfaceCreated")
+    }
+
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+      emitVlcDebugEvent(
+        "subtitleSurfaceChanged",
+        mapOf(
+          "subtitleSurfaceChangedWidth" to width,
+          "subtitleSurfaceChangedHeight" to height,
+          "subtitleSurfaceChangedFormat" to format
+        )
+      )
+
+      if (engine == ENGINE_VLC) {
+        vlcService?.setSurfaceSize(width, height)
+      }
+      if (width <= 0 || height <= 0) {
+        scheduleSurfaceAttachRetry("subtitleSurfaceChanged-invalid-size")
+        emitVlcDebugEvent("subtitleSurfaceChanged-invalid-size")
+        return
+      }
+      ensureSurfaceAttached("subtitleSurfaceChanged")
+    }
+
+    override fun surfaceDestroyed(holder: SurfaceHolder) {
+      cancelSurfaceAttachRetry()
+      detachSurface()
+      emitVlcDebugEvent("subtitleSurfaceDestroyed")
+    }
+  }
+
   private fun bindPlaybackService() {
     if (bound) return
 
@@ -352,9 +410,9 @@ class PlayerActivity : ReactActivity() {
         vlcService?.registerClient()
         vlcService?.addListener(vlcListener)
         emitVlcDebugEvent("vlcServiceConnected")
+        ensureSurfaceAttached("vlcServiceConnected")
 
         applyPendingLoadIfReady()
-        ensureSurfaceAttached("vlcServiceConnected")
         updatePipParams()
         return
       }
@@ -599,12 +657,18 @@ class PlayerActivity : ReactActivity() {
   private fun attachSurfaceIfReady(reason: String): Boolean {
     val sv = surfaceView ?: return false
     val holder = sv.holder
+    val subtitleHolder = subtitleSurfaceView?.holder
     if (holder.isCreating) return false
+    if (subtitleHolder == null) return false
+    if (subtitleHolder.isCreating) return false
 
     if (engine == ENGINE_VLC) {
       val svc = vlcService ?: return false
       val surface = holder.surface
       if (surface == null || !surface.isValid) return false
+
+      val subtitleSurface = subtitleHolder.surface
+      if (subtitleSurface == null || !subtitleSurface.isValid) return false
 
       val frame = holder.surfaceFrame
       val w = when {
@@ -619,22 +683,24 @@ class PlayerActivity : ReactActivity() {
       }
 
       return try {
-        svc.attachSurface(surface, w, h)
+        svc.attachSurfaces(holder, subtitleHolder, w, h)
         emitVlcDebugEvent(
-          "attachSurfaceIfReady:$reason",
+          "attachSurfacesIfReady:$reason",
           mapOf(
             "attachWidth" to w,
-            "attachHeight" to h
+            "attachHeight" to h,
+            "subtitleAttached" to true
           )
         )
         true
       } catch (t: Throwable) {
-        Log.w(TAG, "Failed to attach VLC surface reason=$reason", t)
+        Log.w(TAG, "Failed to attach VLC surfaces reason=$reason", t)
         emitVlcDebugEvent(
-          "attachSurfaceFailed:$reason",
+          "attachSurfacesFailed:$reason",
           mapOf(
             "attachWidth" to w,
             "attachHeight" to h,
+            "subtitleAttached" to true,
             "error" to (t.message ?: "unknown")
           )
         )
@@ -981,6 +1047,7 @@ class PlayerActivity : ReactActivity() {
 
   private fun applyResizeTransform() {
     val sv = surfaceView ?: return
+    val subtitleSv = subtitleSurfaceView
     
     // We resize the SurfaceView layout params directly.
     
@@ -1021,35 +1088,52 @@ class PlayerActivity : ReactActivity() {
     }
     
     // Apply changes if needed
+    var changed = false
+
     val params = sv.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(targetW, targetH)
     if (params.width != targetW || params.height != targetH) {
-        params.width = targetW
-        params.height = targetH
-        params.gravity = android.view.Gravity.CENTER
-        sv.layoutParams = params
-        Log.i(TAG, "applyResizeTransform mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} -> ${targetW}x${targetH}")
-        emitVlcDebugEvent(
-          "applyResizeTransform:applied",
-          mapOf(
-            "targetWidth" to targetW,
-            "targetHeight" to targetH,
-            "videoRatio" to videoRatio.toDouble(),
-            "containerRatio" to containerRatio.toDouble(),
-            "changed" to true
-          )
+      params.width = targetW
+      params.height = targetH
+      params.gravity = android.view.Gravity.CENTER
+      sv.layoutParams = params
+      changed = true
+    }
+
+    if (subtitleSv != null) {
+      val subParams = subtitleSv.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(targetW, targetH)
+      if (subParams.width != targetW || subParams.height != targetH) {
+        subParams.width = targetW
+        subParams.height = targetH
+        subParams.gravity = android.view.Gravity.CENTER
+        subtitleSv.layoutParams = subParams
+        changed = true
+      }
+    }
+
+    if (changed) {
+      Log.i(TAG, "applyResizeTransform mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} -> ${targetW}x${targetH}")
+      emitVlcDebugEvent(
+        "applyResizeTransform:applied",
+        mapOf(
+          "targetWidth" to targetW,
+          "targetHeight" to targetH,
+          "videoRatio" to videoRatio.toDouble(),
+          "containerRatio" to containerRatio.toDouble(),
+          "changed" to true
         )
-        // This will trigger surfaceChanged
+      )
+      // This will trigger surfaceChanged
     } else {
-        emitVlcDebugEvent(
-          "applyResizeTransform:no-op",
-          mapOf(
-            "targetWidth" to targetW,
-            "targetHeight" to targetH,
-            "videoRatio" to videoRatio.toDouble(),
-            "containerRatio" to containerRatio.toDouble(),
-            "changed" to false
-          )
+      emitVlcDebugEvent(
+        "applyResizeTransform:no-op",
+        mapOf(
+          "targetWidth" to targetW,
+          "targetHeight" to targetH,
+          "videoRatio" to videoRatio.toDouble(),
+          "containerRatio" to containerRatio.toDouble(),
+          "changed" to false
         )
+      )
     }
   }
 
@@ -1059,6 +1143,11 @@ class PlayerActivity : ReactActivity() {
     val sv = surfaceView
     val holder = sv?.holder
     val surfaceFrame = holder?.surfaceFrame
+
+    val subtitleSv = subtitleSurfaceView
+    val subtitleHolder = subtitleSv?.holder
+    val subtitleSurfaceFrame = subtitleHolder?.surfaceFrame
+
     val snapshot = HashMap<String, Any>()
     snapshot["reason"] = reason
     snapshot["resizeMode"] = (resizeMode ?: "contain").lowercase()
@@ -1070,8 +1159,17 @@ class PlayerActivity : ReactActivity() {
     snapshot["surfaceViewHeight"] = sv?.height ?: 0
     snapshot["holderFrameWidth"] = surfaceFrame?.width() ?: 0
     snapshot["holderFrameHeight"] = surfaceFrame?.height() ?: 0
+    snapshot["subtitleSurfaceViewWidth"] = subtitleSv?.width ?: 0
+    snapshot["subtitleSurfaceViewHeight"] = subtitleSv?.height ?: 0
+    snapshot["subtitleHolderFrameWidth"] = subtitleSurfaceFrame?.width() ?: 0
+    snapshot["subtitleHolderFrameHeight"] = subtitleSurfaceFrame?.height() ?: 0
     snapshot["surfaceValid"] = try {
       holder?.surface?.isValid ?: false
+    } catch (_: Throwable) {
+      false
+    }
+    snapshot["subtitleSurfaceValid"] = try {
+      subtitleHolder?.surface?.isValid ?: false
     } catch (_: Throwable) {
       false
     }
