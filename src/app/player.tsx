@@ -24,9 +24,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
     ArrowLeft,
+    ClosedCaption,
     Headphones,
     Info,
-    Languages,
     Layers,
     Pause,
     Play,
@@ -125,6 +125,7 @@ export default function PlayerScreen() {
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
     const [stableDuration, setStableDuration] = useState(0); // Prevent duration flicker
     const [isSeeking, setIsSeeking] = useState(false);
+    const [progressTrackWidth, setProgressTrackWidth] = useState(0);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     // const [error, setError] = useState<string | null>(null); // Replaced by machine
     const [isPipMode, setIsPipMode] = useState(false);
@@ -894,22 +895,29 @@ export default function PlayerScreen() {
                             {/* Material 3 Expressive Slider */}
                             <View
                                 style={styles.progressContainer}
+                                onLayout={(e) => setProgressTrackWidth(e.nativeEvent.layout.width)}
                                 onStartShouldSetResponder={() => true}
                                 onMoveShouldSetResponder={() => true}
                                 onResponderGrant={(e) => {
+                                    const { locationX } = e.nativeEvent;
+                                    const duration = stableDuration || progress.duration || 0;
+                                    const trackW = progressTrackWidth || 0;
+                                    if (!duration || !trackW) return;
                                     setIsSeeking(true);
-                                    const { pageX } = e.nativeEvent;
-                                    const percentage = Math.max(0, Math.min(1, pageX / width));
-                                    const targetPos = (stableDuration || progress.duration) * percentage;
+                                    const percentage = Math.max(0, Math.min(1, locationX / trackW));
+                                    const targetPos = duration * percentage;
                                     // Seek expects seconds
                                     videoRef.current?.seek(targetPos);
                                     resetControlsTimer();
                                     setProgress(p => ({ ...p, position: targetPos }));
                                 }}
                                 onResponderMove={(e) => {
-                                    const { pageX } = e.nativeEvent;
-                                    const percentage = Math.max(0, Math.min(1, pageX / width));
-                                    const targetPos = (stableDuration || progress.duration) * percentage;
+                                    const { locationX } = e.nativeEvent;
+                                    const duration = stableDuration || progress.duration || 0;
+                                    const trackW = progressTrackWidth || 0;
+                                    if (!duration || !trackW) return;
+                                    const percentage = Math.max(0, Math.min(1, locationX / trackW));
+                                    const targetPos = duration * percentage;
                                     // Seek expects seconds
                                     videoRef.current?.seek(targetPos);
                                     resetControlsTimer();
@@ -920,49 +928,62 @@ export default function PlayerScreen() {
                                     setTimeout(() => setIsSeeking(false), 500);
                                 }}
                             >
-                                {(() => {
-                                    // Pre-compute safe percentage values
-                                    const duration = stableDuration || progress.duration || 1;
-                                    const rawPercent = (progress.position / duration) * 100;
-                                    const percent = Math.max(0, Math.min(100, rawPercent));
-                                    const fillWidth = Math.max(0, percent - 0.8);
-                                    const inactiveLeft = Math.min(100, percent + 0.8);
+                                  {(() => {
+                                     const duration = stableDuration || progress.duration || 1;
+                                     const trackW = progressTrackWidth || 1;
+                                     const safePos = Math.max(0, Math.min(duration, progress.position));
 
-                                    return (
-                                        <View style={styles.progressBackground}>
-                                            {/* Active Track with Gap */}
-                                            <View
-                                                style={[
-                                                    styles.progressFill,
-                                                    {
-                                                        backgroundColor: theme.colors.primary,
-                                                        width: `${fillWidth}%`
-                                                    }
-                                                ]}
-                                            />
-                                            {/* Inactive Track with Gap */}
-                                            <View
-                                                style={[
-                                                    styles.progressInactive,
-                                                    {
-                                                        left: `${inactiveLeft}%`,
-                                                        right: 0
-                                                    }
-                                                ]}
-                                            />
-                                            {/* Expressive Thumb (Vertical Handle) */}
-                                            <View
-                                                style={[
-                                                    styles.progressThumb,
-                                                    {
-                                                        left: `${percent}%`,
-                                                        backgroundColor: theme.colors.primary
-                                                    }
-                                                ]}
-                                            />
-                                        </View>
-                                    );
-                                })()}
+                                     // Pixel-based layout so the gap stays consistent across widths.
+                                     const thumbX = (safePos / duration) * trackW;
+                                     const halfThumb = PROGRESS_THUMB_WIDTH / 2;
+                                     const fillW = Math.max(0, thumbX - halfThumb - PROGRESS_TRACK_GAP_PX);
+                                     const inactiveX = Math.min(trackW, thumbX + halfThumb + PROGRESS_TRACK_GAP_PX);
+
+                                     const hasFill = fillW > 0.5;
+                                     const hasInactive = inactiveX < trackW - 0.5;
+
+                                     const fillRightRadius = hasInactive ? PROGRESS_TRACK_INNER_RADIUS : PROGRESS_TRACK_OUTER_RADIUS;
+                                     const inactiveLeftRadius = hasFill ? PROGRESS_TRACK_INNER_RADIUS : PROGRESS_TRACK_OUTER_RADIUS;
+
+                                     return (
+                                         <View style={styles.progressBackground}>
+                                             {/* Active Track with Gap */}
+                                             <View
+                                                 style={[
+                                                     styles.progressFill,
+                                                     {
+                                                         backgroundColor: theme.colors.primary,
+                                                         width: fillW,
+                                                         borderTopRightRadius: fillRightRadius,
+                                                         borderBottomRightRadius: fillRightRadius,
+                                                      }
+                                                  ]}
+                                              />
+                                              {/* Inactive Track with Gap */}
+                                              <View
+                                                  style={[
+                                                      styles.progressInactive,
+                                                      {
+                                                          left: inactiveX,
+                                                          right: 0,
+                                                          borderTopLeftRadius: inactiveLeftRadius,
+                                                          borderBottomLeftRadius: inactiveLeftRadius,
+                                                      }
+                                                  ]}
+                                              />
+                                              {/* Expressive Thumb (Vertical Handle) */}
+                                              <View
+                                                 style={[
+                                                     styles.progressThumb,
+                                                     {
+                                                         left: thumbX,
+                                                         backgroundColor: theme.colors.primary
+                                                     }
+                                                 ]}
+                                             />
+                                         </View>
+                                     );
+                                 })()}
                             </View>
 
                             {/* Control Pills Row */}
@@ -984,7 +1005,7 @@ export default function PlayerScreen() {
                                 <View style={styles.actionsPill}>
                                     {[
                                         { icon: Headphones, key: 'audio' },
-                                        { icon: Languages, key: 'subtitles' },
+                                        { icon: ClosedCaption, key: 'subtitles' },
                                         { icon: Layers, key: 'streams' },
                                         { icon: Settings, key: 'settings' },
                                         { icon: Info, key: 'info' }
@@ -1147,6 +1168,16 @@ export default function PlayerScreen() {
     );
 }
 
+// Material-3-ish expressive track/handle, but kept slimmer.
+const PROGRESS_TRACK_HEIGHT = 10;
+const PROGRESS_TRACK_GAP_PX = 3;
+const PROGRESS_TRACK_OUTER_RADIUS = PROGRESS_TRACK_HEIGHT / 2;
+const PROGRESS_TRACK_INNER_RADIUS = 1;
+
+const PROGRESS_THUMB_HEIGHT = 26;
+const PROGRESS_THUMB_WIDTH = 6;
+const PROGRESS_THUMB_TOP = -((PROGRESS_THUMB_HEIGHT - PROGRESS_TRACK_HEIGHT) / 2);
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -1282,8 +1313,8 @@ const styles = StyleSheet.create({
         // No negative margins - keep within the overlay padding
     },
     progressBackground: {
-        height: 10, // Thicker expressive track
-        borderRadius: 5,
+        height: PROGRESS_TRACK_HEIGHT,
+        borderRadius: PROGRESS_TRACK_OUTER_RADIUS,
         position: 'relative',
         width: '100%',
     },
@@ -1292,28 +1323,28 @@ const styles = StyleSheet.create({
         top: 0,
         bottom: 0,
         left: 0,
-        borderTopLeftRadius: 5,
-        borderBottomLeftRadius: 5,
-        borderTopRightRadius: 2, // Less rounded next to handle
-        borderBottomRightRadius: 2, // Less rounded next to handle
+        borderTopLeftRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderBottomLeftRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderTopRightRadius: PROGRESS_TRACK_INNER_RADIUS, // Less rounded next to handle
+        borderBottomRightRadius: PROGRESS_TRACK_INNER_RADIUS, // Less rounded next to handle
     },
     progressInactive: {
         position: 'absolute',
         top: 0,
         bottom: 0,
         backgroundColor: 'rgba(255,255,255,0.25)',
-        borderTopLeftRadius: 2, // Less rounded next to handle
-        borderBottomLeftRadius: 2, // Less rounded next to handle
-        borderTopRightRadius: 5,
-        borderBottomRightRadius: 5,
+        borderTopLeftRadius: PROGRESS_TRACK_INNER_RADIUS, // Less rounded next to handle
+        borderBottomLeftRadius: PROGRESS_TRACK_INNER_RADIUS, // Less rounded next to handle
+        borderTopRightRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderBottomRightRadius: PROGRESS_TRACK_OUTER_RADIUS,
     },
     progressThumb: {
         position: 'absolute',
-        top: -4, // Center 18px handle on 10px track
-        height: 18,
-        width: 2,
-        borderRadius: 1,
-        marginLeft: -1,
+        top: PROGRESS_THUMB_TOP,
+        height: PROGRESS_THUMB_HEIGHT,
+        width: PROGRESS_THUMB_WIDTH,
+        borderRadius: PROGRESS_THUMB_WIDTH / 2,
+        marginLeft: -(PROGRESS_THUMB_WIDTH / 2),
         zIndex: 2,
     },
     controlsRow: {

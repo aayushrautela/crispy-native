@@ -583,7 +583,7 @@ export default function MetaDetailsScreen() {
                         )}
                         {enriched.similar && enriched.similar.length > 0 && (
                             <View style={{ marginTop: 24, marginHorizontal: -20 }}>
-                                <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor={scopedTheme.colors.onSurface} />
+                                <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor={scopedTheme.colors.onSurface} hideAction={true} />
                             </View>
                         )}
                     </View>

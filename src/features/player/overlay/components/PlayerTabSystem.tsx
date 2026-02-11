@@ -107,12 +107,12 @@ export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
                         delay={subtitleDelay}
                         fontSize={subtitleSize}
                         offset={subtitleOffset}
-                        onSelectEmbedded={(id) => {
+                        onSelectEmbedded={(id: number) => {
                             setSelectedSubtitleId(id);
                             setSelectedExternalSubtitleUrl(null);
                             void CrispyNativeCore.nativePlayerSetSubtitleTrack(id);
                         }}
-                        onSelectExternal={(url) => {
+                        onSelectExternal={(url: string) => {
                             setSelectedExternalSubtitleUrl(url);
                             setSelectedSubtitleId(-1);
                             void CrispyNativeCore.nativePlayerSetSubtitleTrack(-1);
@@ -122,7 +122,7 @@ export const PlayerTabSystem: React.FC<PlayerTabSystemProps> = ({
                             setSelectedExternalSubtitleUrl(null);
                             void CrispyNativeCore.nativePlayerSetSubtitleTrack(-1);
                         }}
-                        onUpdateDelay={(d) => {
+                        onUpdateDelay={(d: number) => {
                             setSubtitleDelay(d);
                             void CrispyNativeCore.nativePlayerSetSubtitleDelay(d);
                         }}
