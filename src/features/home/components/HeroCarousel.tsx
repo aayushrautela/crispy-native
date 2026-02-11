@@ -82,7 +82,7 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
             <View style={[styles.skeletonContainer, { height: heroHeight }]}>
                 <View style={{ height: heroHeight, width: slideWidth, backgroundColor: '#2a2a2a' }} />
                 <View style={styles.skeletonContent}>
-                    <View style={{ width: '60%', height: 40, borderRadius: 8, backgroundColor: '#2a2a2a', marginBottom: 12 }} />
+                    <View style={{ width: '70%', height: 80, borderRadius: 8, backgroundColor: '#2a2a2a', marginBottom: 12 }} />
                     <View style={{ width: '40%', height: 20, borderRadius: 4, backgroundColor: '#2a2a2a', marginBottom: 24 }} />
                     <View style={{ flexDirection: 'row', gap: 12 }}>
                         <View style={{ width: 120, height: 48, borderRadius: 24, backgroundColor: '#2a2a2a' }} />
