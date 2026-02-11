@@ -93,7 +93,7 @@ const formatDebugSize = (width: any, height: any) => {
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { theme } = useTheme();
     const settings = useUserStore((s) => s.settings);
-    const manifests = useUserStore((s) => s.manifests);
+    const addons = useUserStore((s) => s.addons);
     const getStreams = useProviderStore((s) => s.getStreams);
 
     const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
@@ -350,9 +350,32 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     // --- Subtitle logic ---
     useEffect(() => {
         if (!contentId) return;
-        const addonUrls = Object.keys(manifests || {});
-        AddonService.fetchAllSubtitles(addonUrls, contentType, contentId).then(setExternalSubtitles).catch(() => setExternalSubtitles([]));
-    }, [contentId, contentType, manifests]);
+        const addonUrls = (addons || [])
+            .filter((a: any) => a && a.enabled !== false)
+            .map((a: any) => String(a.url))
+            .filter(Boolean);
+
+        let cancelled = false;
+        setExternalSubtitlesLoading(true);
+
+        AddonService.fetchAllSubtitles(addonUrls, contentType, contentId)
+            .then((subs) => {
+                if (cancelled) return;
+                setExternalSubtitles(subs || []);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setExternalSubtitles([]);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setExternalSubtitlesLoading(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [contentId, contentType, addons]);
 
     useEffect(() => {
         if (!selectedExternalSubtitleUrl) { setSubtitleCues([]); setCurrentSubtitleText(''); return; }
