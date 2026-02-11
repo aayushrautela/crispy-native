@@ -35,8 +35,11 @@ const OPACITIES = [
 
 export default function SubtitlesScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { subtitleSize, subtitleColor, subtitleBackColor, subtitlePosition } = settings;
+    const subtitleSize = useUserStore((state) => state.settings.subtitleSize);
+    const subtitleColor = useUserStore((state) => state.settings.subtitleColor);
+    const subtitleBackColor = useUserStore((state) => state.settings.subtitleBackColor);
+    const subtitlePosition = useUserStore((state) => state.settings.subtitlePosition);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     return (
         <SettingsSubpage title="Subtitles">

@@ -3,15 +3,13 @@ import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useUserStore } from '@/src/core/stores/userStore';
-import { useTheme } from '@/src/core/ThemeContext';
 import { History, Search, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { View } from 'react-native';
 
 export default function SearchScreen() {
-    const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { addonSearchEnabled } = settings;
+    const addonSearchEnabled = useUserStore((state) => state.settings.addonSearchEnabled);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     return (
         <SettingsSubpage title="Search">

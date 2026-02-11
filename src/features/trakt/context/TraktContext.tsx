@@ -59,7 +59,7 @@ interface TraktContextProps {
 const TraktContext = createContext<TraktContextProps | undefined>(undefined);
 
 export function TraktProvider({ children }: { children: ReactNode }) {
-    const { traktAuth } = useUserStore();
+    const traktAuth = useUserStore((state) => state.traktAuth);
     const isAuthenticated = !!traktAuth.accessToken;
     const [userProfile, setUserProfile] = useState<TraktUser | null>(null);
 
@@ -70,6 +70,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         collection,
         continueWatching,
         ratedContent,
+        watchedShowsRaw,
+        watchedHistory,
         isLoading,
         setIsLoading,
         setWatchlist,
@@ -81,14 +83,10 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         recommendations,
         setRecommendations,
         hydrate,
-        watchlistIds,
-        collectionIds,
-        watchedIds,
         isInWatchlist: storeIsInWatchlist,
         isInCollection: storeIsInCollection,
         isWatched: storeIsWatched,
-        isEpisodeWatched: storeIsEpisodeWatched,
-        watchedHistory
+        isEpisodeWatched: storeIsEpisodeWatched
     } = store;
 
     // Derived Lists for specific Types (matching webui interface)
@@ -99,8 +97,8 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const collectionShows = useMemo(() => collection.filter(i => i.type === 'episode' || i.show).map(i => ({ ...i, show: i.show, type: 'show' } as any)), [collection]);
 
     // Compatibility for legacy types
-    const watchedMovies: TraktWatchedMovie[] = [];
-    const watchedShows: TraktWatchedShow[] = [];
+    const watchedMovies = watchedHistory as TraktWatchedMovie[];
+    const watchedShows = watchedShowsRaw as TraktWatchedShow[];
 
     const checkAuthStatus = useCallback(async () => {
         // user profile fetching could be added to TraktService if needed
@@ -138,7 +136,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         } finally {
             setIsLoading(false);
         }
-    }, [isAuthenticated, setIsLoading, setWatchlist, setCollection, setContinueWatching, setRatedContent, setWatchedShowsRaw, setWatchedHistory]);
+    }, [isAuthenticated, setIsLoading, setWatchlist, setCollection, setContinueWatching, setRatedContent, setWatchedShowsRaw, setWatchedHistory, setRecommendations]);
 
     // Initial Load & Hydration
     useEffect(() => {
@@ -146,7 +144,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         if (isAuthenticated) {
             loadAllCollections();
         }
-    }, [isAuthenticated, hydrate]);
+    }, [isAuthenticated, hydrate, loadAllCollections]);
 
     // Debounced Sync
     const debouncedSync = useMemo(
@@ -170,7 +168,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             return storeIsWatched(`tmdb:${idStr}`) || storeIsWatched(`trakt:${idStr}`);
         }
         return false;
-    }, [storeIsWatched, watchedIds]);
+    }, [storeIsWatched]);
 
     const isEpisodeWatched = useCallback((imdbId: string, season: number, episode: number) => {
         return storeIsEpisodeWatched(imdbId, season, episode);
@@ -194,7 +192,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         // 4. Default Fallback
         return storeIsInWatchlist(`${type}:${idStr}`);
-    }, [storeIsInWatchlist, watchlistIds]);
+    }, [storeIsInWatchlist]);
 
     const isInCollection = useCallback((id: string | number, type: 'movie' | 'series') => {
         const idStr = String(id);
@@ -214,7 +212,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         // 4. Default Fallback
         return storeIsInCollection(`${type}:${idStr}`);
-    }, [storeIsInCollection, collectionIds]);
+    }, [storeIsInCollection]);
 
     const getUserRating = useCallback((id: string | number, type: 'movie' | 'series'): number | null => {
         const idStr = String(id);
@@ -490,45 +488,18 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             watched_at: new Date().toISOString()
         };
 
-        // Note: For history, we are appending to the list used for 'isWatched' checks
-        // The store logic 'setWatchedHistory' triggers 'watchedIds' update
-        setWatchedHistory([...store.watchedIds, optimisticItem]); // This is tricky, store.watchedIds is a Set<string> but setWatchedHistory expects items. 
-        // ACTUALLY: We need to access the raw history list or force the derived state? 
-        // The store 'watchedIds' is derived from 'watchedHistory' (persisted).
-        // Let's reload entire history from store to append safely? 
-        // Inspecting store structure: setWatchedHistory(items) updates watchedIds. 
-        // But we don't have access to the raw 'watchedHistory' array in the context props exposed destuctured...
-        // Wait, context has `watchedMovies` but that's derived.
-        // We need to use `store.hydrate` or just assume we can fetch it?
-        // Better: Just fetch current history from store state directly if available?
-        // The context destructuring `const { setWatchedHistory ... } = store` suggests we don't have the raw list variable `watchedHistory` exposed constantly?
-        // Actually line 124: `setWatchedHistory(h || [])`.
-        // We should fix the destructuring in the provider to include `watchedHistory`?
-        // Let's look at lines 65-85: `watchedHistory` IS NOT destructured.
-
-        // TEMPORARY FIX: We can't easily optimistic update history without the raw list.
-        // HOWEVER, `isMovieWatched` uses `storeIsWatched` which uses `watchedIds` (Set).
-        // WE CAN MANUALLY UPDATE THE SET? No, store API is `setWatchedHistory(items)`.
-
-        // Let's just rely on debouncedSync for history for now to avoid breaking it, OR add correct optimistic support if critical.
-        // User asked for "button work... see visually". "Watched" is a key button.
-        // I will implement a "Fake" optimistic update by mocking the sync call behavior? No.
-        // I will skip optimistic update for HISTORY for this specifc turn to avoid breaking types, 
-        // OR better: I will add `watchedShowsRaw` is there, but `watchedHistory` (movies) is missing from destructure.
-
-        // Changing approach: Just call API and Sync. 
-        // Re-reading user request: "watchlist, collection, watched buttons".
-        // I must allow optimistic update.
-        // I'll skip this specific function modification for a moment to check store exposure.
+        const previousHistory = watchedHistory;
+        setWatchedHistory([...previousHistory, optimisticItem]);
 
         const success = await TraktService.addToHistory(id, 'movie');
         if (success) {
             debouncedSync();
             return true;
-        } else {
-            return false;
         }
-    }, [isAuthenticated, debouncedSync]);
+
+        setWatchedHistory(previousHistory);
+        return false;
+    }, [isAuthenticated, debouncedSync, setWatchedHistory, watchedHistory]);
 
     const removeMovieFromHistory = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;

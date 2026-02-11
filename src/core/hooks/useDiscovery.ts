@@ -5,11 +5,10 @@ import { useUserStore } from '../stores/userStore';
 import { AddonManifest } from '../types/addon-types';
 
 export const useCatalog = (type: string, id: string, extra?: Record<string, any>, addonUrl?: string) => {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
 
     // Determine which addon(s) to fetch from
     const targetUrls = useMemo(() => {
-        console.log('[useCatalog] manifests:', manifests);
         if (!manifests || typeof manifests !== 'object') return [];
         const safeManifests = manifests as Record<string, AddonManifest>;
 
@@ -18,7 +17,6 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
         const filtered = Object.keys(safeManifests).filter(url =>
             safeManifests[url]?.catalogs?.some(c => c.type === type && c.id === id)
         );
-        // console.log('[useCatalog] targetUrls:', filtered, 'type:', type, 'id:', id);
         return filtered;
     }, [manifests, type, id, addonUrl]);
 
@@ -52,7 +50,7 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
 };
 
 export const useMeta = (type: string, id: string) => {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
     const addonUrls = Object.keys(manifests);
 
     return useQuery({

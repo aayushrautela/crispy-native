@@ -42,8 +42,9 @@ const getAccentHex = (colorName: string): string => {
 };
 
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
-    const { settings } = useUserStore();
-    const { amoledMode, accentColor, useMaterialYou } = settings;
+    const amoledMode = useUserStore((state) => state.settings.amoledMode);
+    const accentColor = useUserStore((state) => state.settings.accentColor);
+    const useMaterialYou = useUserStore((state) => state.settings.useMaterialYou);
     const isFirstMount = useRef(true);
     const prevAccentColor = useRef(accentColor);
     const prevUseMaterialYou = useRef(useMaterialYou);
@@ -72,7 +73,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
             prevAccentColor.current = accentColor;
             prevUseMaterialYou.current = useMaterialYou;
         }
-    }, [accentColor, useMaterialYou]);
+    }, [accentColor, useMaterialYou, resetTheme, updateTheme]);
 
     const isDark = true; // App is dark mode only as per user request
 
@@ -108,7 +109,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
         };
 
         return finalTheme;
-    }, [theme, amoledMode, accentColor, useMaterialYou]);
+    }, [theme, amoledMode]);
 
     const contextValue = useMemo(() => ({
         theme: paperTheme,

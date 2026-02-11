@@ -12,7 +12,8 @@ export function getCatalogKey(catalog: { addonUrl: string; type: string; id: str
 }
 
 export function useCatalogPreferences() {
-    const { catalogPrefs, updateCatalogPrefs } = useUserStore();
+    const catalogPrefs = useUserStore((state) => state.catalogPrefs);
+    const updateCatalogPrefs = useUserStore((state) => state.updateCatalogPrefs);
 
     const disabledSet = useMemo(() => new Set(catalogPrefs.disabled), [catalogPrefs.disabled]);
     const heroSet = useMemo(() => new Set(catalogPrefs.hero), [catalogPrefs.hero]);

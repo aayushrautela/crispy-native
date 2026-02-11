@@ -9,8 +9,9 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 export default function MetadataScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { tmdbKey, omdbKey } = settings;
+    const tmdbKey = useUserStore((state) => state.settings.tmdbKey);
+    const omdbKey = useUserStore((state) => state.settings.omdbKey);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     return (
         <SettingsSubpage title="Metadata">

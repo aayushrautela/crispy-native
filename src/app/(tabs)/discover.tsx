@@ -41,7 +41,7 @@ const RATING_OPTIONS = [
 
 
 export default function DiscoverScreen() {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
     const { theme } = useTheme();
     const { width: windowWidth } = useWindowDimensions();
     const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();

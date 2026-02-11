@@ -36,13 +36,47 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-function RootLayoutNav() {
-  const { theme, isDark } = useTheme();
+function AuthRouteGuard({ loaded }: { loaded: boolean }) {
   const { loading, mode, hasKnownAccounts } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const params = useGlobalSearchParams<{ mode?: string | string[] }>();
   const routeMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+
+  useEffect(() => {
+    if (loading || !loaded) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const authSegment = String(segments[1] ?? '');
+    const inLoginScreen = inAuthGroup && authSegment === 'login';
+    const inProfilesScreen = inAuthGroup && authSegment === 'profiles';
+    const isAddAccountFlow = inLoginScreen && routeMode === 'add-account';
+    const isAuthenticated = mode === 'account' || mode === 'guest';
+
+    if (isAuthenticated) {
+      if (inAuthGroup && !isAddAccountFlow && !inProfilesScreen) {
+        router.replace('/(tabs)');
+      }
+      return;
+    }
+
+    if (hasKnownAccounts) {
+      if (!inProfilesScreen && !isAddAccountFlow) {
+        router.replace('/(auth)/profiles' as never);
+      }
+      return;
+    }
+
+    if (!inAuthGroup) {
+      router.replace('/(auth)/login');
+    }
+  }, [mode, hasKnownAccounts, loading, loaded, routeMode, segments, router]);
+
+  return null;
+}
+
+function RootLayoutNav() {
+  const { theme, isDark } = useTheme();
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -83,35 +117,6 @@ function RootLayoutNav() {
   }, [loaded, error]);
 
   useEffect(() => {
-    if (loading || !loaded) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-    const authSegment = String(segments[1] ?? '');
-    const inLoginScreen = inAuthGroup && authSegment === 'login';
-    const inProfilesScreen = inAuthGroup && authSegment === 'profiles';
-    const isAddAccountFlow = inLoginScreen && routeMode === 'add-account';
-    const isAuthenticated = mode === 'account' || mode === 'guest';
-
-    if (isAuthenticated) {
-      if (inAuthGroup && !isAddAccountFlow && !inProfilesScreen) {
-        router.replace('/(tabs)');
-      }
-      return;
-    }
-
-    if (hasKnownAccounts) {
-      if (!inProfilesScreen && !isAddAccountFlow) {
-        router.replace('/(auth)/profiles' as never);
-      }
-      return;
-    }
-
-    if (!inAuthGroup) {
-      router.replace('/(auth)/login');
-    }
-  }, [mode, hasKnownAccounts, loading, loaded, routeMode, segments, router]);
-
-  useEffect(() => {
     let hasBootstrapped = false;
 
     const unsub = SessionManager.subscribe(() => {
@@ -129,6 +134,7 @@ function RootLayoutNav() {
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
+      <AuthRouteGuard loaded={loaded} />
       <BottomSheetModalProvider>
         <CatalogActionsProvider>
           <Stack>

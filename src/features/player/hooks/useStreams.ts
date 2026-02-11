@@ -3,7 +3,7 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { useQuery } from '@tanstack/react-query';
 
 export const useStreams = (type: string, id: string, enabled: boolean = true) => {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
 
     return useQuery({
         queryKey: ['streams', type, id],

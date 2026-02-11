@@ -22,8 +22,10 @@ const SKIP_MODES = [
 
 export default function PlaybackScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { videoPlayerEngine, autoplayEnabled, introSkipMode } = settings;
+    const videoPlayerEngine = useUserStore((state) => state.settings.videoPlayerEngine);
+    const autoplayEnabled = useUserStore((state) => state.settings.autoplayEnabled);
+    const introSkipMode = useUserStore((state) => state.settings.introSkipMode);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 

@@ -11,7 +11,7 @@ import { CatalogCard } from '@/src/features/catalog/components/CatalogCard';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { useQuery } from '@tanstack/react-query';
 import { Film, Info, LayoutGrid, Search as SearchIcon, Tv, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
@@ -23,7 +23,7 @@ export default function SearchScreen() {
     const { theme } = useTheme();
     const [query, setQuery] = useState('');
     const [type, setType] = useState<SearchType>('all');
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
     const { width } = useWindowDimensions();
 
     const numColumns = width > 768 ? 5 : 3;
@@ -100,9 +100,7 @@ export default function SearchScreen() {
         { id: 'series', label: 'TV Shows', icon: Tv },
     ];
 
-    const activeIndex = useMemo(() => {
-        return categoryButtons.findIndex(opt => opt.id === type);
-    }, [type]);
+    const activeIndex = categoryButtons.findIndex(opt => opt.id === type);
 
     const renderHeader = () => (
         <Animated.View style={[styles.header, headerStyle]} pointerEvents="box-none">

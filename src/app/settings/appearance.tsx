@@ -22,8 +22,10 @@ const ACCENT_COLORS = [
 
 export default function AppearanceScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { amoledMode, accentColor, useMaterialYou } = settings;
+    const amoledMode = useUserStore((state) => state.settings.amoledMode);
+    const accentColor = useUserStore((state) => state.settings.accentColor);
+    const useMaterialYou = useUserStore((state) => state.settings.useMaterialYou);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     return (
         <SettingsSubpage title="Appearance">
