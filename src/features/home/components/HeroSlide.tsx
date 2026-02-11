@@ -100,20 +100,9 @@ const HeroSlideComponent = ({
                         <View style={styles.content}>
                             {/* Branding Section */}
                             <View style={styles.brandingSection}>
-                                {item.logo ? (
-                                    <ExpoImage
-                                        source={{ uri: item.logo }}
-                                        style={styles.logo}
-                                        contentFit="contain"
-                                        transition={Platform.OS === 'android' ? 0 : 200}
-                                        cachePolicy="memory-disk"
-                                        priority={isFocused ? 'high' : 'low'}
-                                    />
-                                ) : (
-                                    <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
-                                        {item.name}
-                                    </Typography>
-                                )}
+                                <Typography variant="headline-large" weight="black" style={{ color: 'white' }}>
+                                    {item.name}
+                                </Typography>
                                 {isUpcoming && (
                                     <View style={styles.newTag}>
                                         <Typography variant="label-large" weight="black" style={{ color: themeColors.primary }}>#UPCOMING</Typography>
@@ -209,12 +198,6 @@ const styles = StyleSheet.create({
         marginBottom: 8,
         alignItems: 'flex-start',
         width: '100%',
-    },
-    logo: {
-        width: 300,
-        height: 120,
-        marginBottom: 8,
-        alignSelf: 'flex-start',
     },
     newTag: {
         marginTop: -4,

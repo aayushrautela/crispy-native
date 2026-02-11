@@ -21,7 +21,7 @@ export const usePaginatedCatalog = (
     addonUrl?: string,
     enabled = true
 ): PaginatedCatalogResult => {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
 
     // Determine target URLs
     const targetUrls = useMemo(() => {

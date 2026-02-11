@@ -47,8 +47,10 @@ const LANGUAGES = [
 
 export default function LanguageScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { language, audioLanguage, subtitleLanguage } = settings;
+    const language = useUserStore((state) => state.settings.language);
+    const audioLanguage = useUserStore((state) => state.settings.audioLanguage);
+    const subtitleLanguage = useUserStore((state) => state.settings.subtitleLanguage);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     const [activeKey, setActiveKey] = useState<'language' | 'audioLanguage' | 'subtitleLanguage' | null>(null);
     const bottomSheetRef = useRef<BottomSheetRef>(null);
@@ -115,7 +117,14 @@ export default function LanguageScreen() {
                     keyExtractor: (item: { label: string; value: string }) => item.value,
                     contentContainerStyle: styles.sheetContent,
                     renderItem: ({ item: lang }: { item: { label: string; value: string } }) => {
-                        const currentValue = activeKey ? settings[activeKey] : null;
+                        const currentValue =
+                            activeKey === 'language'
+                                ? language
+                                : activeKey === 'audioLanguage'
+                                    ? audioLanguage
+                                    : activeKey === 'subtitleLanguage'
+                                        ? subtitleLanguage
+                                        : null;
                         const isSelected = currentValue === lang.value;
                         return (
                             <ExpressiveSurface

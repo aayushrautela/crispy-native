@@ -20,7 +20,7 @@ const HEADER_HEIGHT = 96;
 
 export default function HomeScreen() {
   const { theme } = useTheme();
-  const { manifests } = useUserStore();
+  const manifests = useUserStore((state) => state.manifests);
   const { preferences, sortCatalogsByPreferences } = useCatalogPreferences();
   const router = useRouter();
 

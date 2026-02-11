@@ -44,7 +44,10 @@ const CatalogListItem = ({ item: catalog, isDisabled, isHero, onToggle, onToggle
 
 function HomeScreenContent() {
     const { theme } = useTheme();
-    const { manifests, settings, updateSettings, traktAuth } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
+    const settings = useUserStore((state) => state.settings);
+    const updateSettings = useUserStore((state) => state.updateSettings);
+    const traktAuth = useUserStore((state) => state.traktAuth);
     const {
         preferences,
         toggleCatalog,

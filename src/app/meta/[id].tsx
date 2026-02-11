@@ -34,7 +34,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function MetaDetailsScreen() {
     const { id, type, debugColors } = useLocalSearchParams();
     const { theme, amoledMode } = useTheme();
-    const { settings } = useUserStore();
+    const settings = useUserStore((state) => state.settings);
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const { isTablet, isLandscape } = useResponsive();

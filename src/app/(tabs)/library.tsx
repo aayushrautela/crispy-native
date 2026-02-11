@@ -50,7 +50,7 @@ const SORT_OPTIONS = [
 
 export default function LibraryScreen() {
     const { theme } = useTheme();
-    const { traktAuth } = useUserStore();
+    const traktAuth = useUserStore((state) => state.traktAuth);
     const { width: windowWidth, height } = useWindowDimensions();
     const { width: measuredWidth, onLayout: onContainerLayout } = useMeasuredWidth();
 

@@ -2,12 +2,10 @@ import { Meta } from '@/src/core/hooks/useHeroItems';
 import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { HeroSlide, HeroThemeColors } from './HeroSlide';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface HeroCarouselProps {
     items?: Meta[];
@@ -18,6 +16,9 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
     const { theme } = useTheme();
     const { heroHeight } = useResponsive();
     const router = useRouter();
+    const { width: windowWidth } = useWindowDimensions();
+    const listRef = useRef<FlatList<Meta> | null>(null);
+    const slideWidth = windowWidth;
     const items = propItems || [];
     const scrollX = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
@@ -49,24 +50,29 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
 
     // Key optimization: Fixed layout means we don't need to measure items
     const getItemLayout = useCallback((_: any, index: number) => ({
-        length: SCREEN_WIDTH,
-        offset: SCREEN_WIDTH * index,
+        length: slideWidth,
+        offset: slideWidth * index,
         index,
-    }), []);
+    }), [slideWidth]);
+
+    // Keep current slide in view when width changes (e.g., tablet rotation)
+    useEffect(() => {
+        listRef.current?.scrollToOffset({ offset: activeIndex * slideWidth, animated: false });
+    }, [activeIndex, slideWidth]);
 
     const renderItem = useCallback(({ item, index }: { item: Meta; index: number }) => (
         <HeroSlide
             item={item}
             index={index}
             scrollX={scrollX}
-            width={SCREEN_WIDTH}
+            width={slideWidth}
             height={heroHeight}
             themeColors={themeColors}
             isFocused={index === activeIndex} // Only the active slide gets high priority
             onWatch={handleWatch}
             onInfo={handleInfo}
         />
-    ), [scrollX, heroHeight, themeColors, activeIndex, handleWatch, handleInfo]);
+    ), [scrollX, heroHeight, themeColors, activeIndex, handleWatch, handleInfo, slideWidth]);
 
     // Stable key extractor
     const keyExtractor = useCallback((item: Meta) => item.id, []);
@@ -74,7 +80,7 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
     if (isLoading || !items || items.length === 0) {
         return (
             <View style={[styles.skeletonContainer, { height: heroHeight }]}>
-                <View style={{ height: heroHeight, width: SCREEN_WIDTH, backgroundColor: '#2a2a2a' }} />
+                <View style={{ height: heroHeight, width: slideWidth, backgroundColor: '#2a2a2a' }} />
                 <View style={styles.skeletonContent}>
                     <View style={{ width: '60%', height: 40, borderRadius: 8, backgroundColor: '#2a2a2a', marginBottom: 12 }} />
                     <View style={{ width: '40%', height: 20, borderRadius: 4, backgroundColor: '#2a2a2a', marginBottom: 24 }} />
@@ -90,17 +96,19 @@ export const HeroCarousel = ({ items: propItems, isLoading = false }: HeroCarous
     return (
         <View style={styles.container}>
             <Animated.FlatList
+                ref={listRef}
                 data={items}
                 renderItem={renderItem}
                 horizontal
-                pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}
                 keyExtractor={keyExtractor}
-                snapToInterval={SCREEN_WIDTH}
+                snapToInterval={slideWidth}
+                snapToAlignment="start"
                 decelerationRate="fast"
-                onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH))}
+                disableIntervalMomentum
+                onMomentumScrollEnd={(e) => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / slideWidth))}
                 
                 // Performance Optimizations
                 getItemLayout={getItemLayout}
@@ -136,7 +144,6 @@ const styles = StyleSheet.create({
         marginBottom: 0,
     },
     skeletonContainer: {
-        width: SCREEN_WIDTH,
         overflow: 'hidden',
     },
     skeletonContent: {

@@ -18,7 +18,7 @@ export interface AiInsightsResult {
 const CACHE_PREFIX = 'ai_ins_';
 
 export function useAiInsights() {
-    const { settings } = useUserStore();
+    const settings = useUserStore((state) => state.settings);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
     const [insights, setInsights] = useState<AiInsightsResult | null>(null);

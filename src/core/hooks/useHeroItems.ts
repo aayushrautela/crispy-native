@@ -15,7 +15,7 @@ export interface Meta extends MetaPreview {
 }
 
 export const useHeroItems = (enabled: boolean = true) => {
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
 
     // 1. Identify "hero" catalogs across all installed addons
     const heroCatalogs = useMemo(() => {

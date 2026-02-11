@@ -435,7 +435,7 @@ export default function PlayerScreen() {
         };
     }, [getStreams, id, type, pendingEpisode]);
 
-    const { manifests } = useUserStore();
+    const manifests = useUserStore((state) => state.manifests);
 
     // Session ID MOVED UP
     // const sessionId = useMemo(() => Math.random().toString(36).substring(7), []);

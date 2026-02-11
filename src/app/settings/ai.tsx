@@ -22,8 +22,11 @@ const MODELS = [
 
 export default function AiScreen() {
     const { theme } = useTheme();
-    const { settings, updateSettings } = useUserStore();
-    const { aiInsightsMode, openRouterKey, aiModelType, aiCustomModelName } = settings;
+    const aiInsightsMode = useUserStore((state) => state.settings.aiInsightsMode);
+    const openRouterKey = useUserStore((state) => state.settings.openRouterKey);
+    const aiModelType = useUserStore((state) => state.settings.aiModelType);
+    const aiCustomModelName = useUserStore((state) => state.settings.aiCustomModelName);
+    const updateSettings = useUserStore((state) => state.updateSettings);
 
     return (
         <SettingsSubpage title="AI Insights">

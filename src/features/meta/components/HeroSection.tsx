@@ -315,7 +315,7 @@ export const HeroSection = memo(function HeroSection({
 }: HeroSectionProps) {
     const { width, isTablet, isLandscape } = useResponsive();
     const { theme } = useTheme();
-    const { settings } = useUserStore();
+    const settings = useUserStore((state) => state.settings);
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,

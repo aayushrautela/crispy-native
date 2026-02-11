@@ -11,7 +11,10 @@ import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
 export default function AddonsScreen() {
     const { theme } = useTheme();
-    const { addons, manifests, addAddon, removeAddon } = useUserStore();
+    const addons = useUserStore((state) => state.addons);
+    const manifests = useUserStore((state) => state.manifests);
+    const addAddon = useUserStore((state) => state.addAddon);
+    const removeAddon = useUserStore((state) => state.removeAddon);
     const [newAddonUrl, setNewAddonUrl] = useState('');
 
     const handleAddAddon = async () => {
@@ -20,7 +23,7 @@ export default function AddonsScreen() {
             await addAddon(newAddonUrl);
             setNewAddonUrl('');
             Alert.alert('Success', 'Addon added successfully!');
-        } catch (e) {
+        } catch {
             Alert.alert('Error', 'Failed to add addon. Make sure the URL is valid.');
         }
     };

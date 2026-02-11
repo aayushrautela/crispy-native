@@ -12,7 +12,8 @@ export function SyncService() {
     const userRef = useRef<User | null>(null);
     userRef.current = user;
 
-    const { hydrate, reset } = useUserStore();
+    const hydrate = useUserStore((state) => state.hydrate);
+    const reset = useUserStore((state) => state.reset);
     const initialLoadDone = useRef<string | null>(null);
     const lastSynced = useRef<Pick<UserState, 'settings' | 'addons' | 'catalogPrefs' | 'traktAuth'> | null>(null);
     const lastCloudUpdatedAt = useRef<string | null>(null);
