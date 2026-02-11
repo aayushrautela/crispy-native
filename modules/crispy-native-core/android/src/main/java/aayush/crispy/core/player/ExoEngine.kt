@@ -54,6 +54,7 @@ class ExoEngine(
 
   private val listeners = CopyOnWriteArraySet<Listener>()
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val warnLog = PlayerThrottledLogger(TAG)
 
   private val trackSelector = DefaultTrackSelector(appContext)
   private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -96,7 +97,7 @@ class ExoEngine(
         listeners.forEach { it.onProgress(posSec, durSec) }
         mediaSessionHandler?.updatePosition(posSec)
         mediaSessionHandler?.updateDuration(durSec)
-      } catch (e: Throwable) {
+      } catch (e: Exception) {
         Log.w(TAG, "Error in progressRunnable", e)
       } finally {
         mainHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
@@ -178,8 +179,8 @@ class ExoEngine(
       val posSec = player.currentPosition.toDouble() / 1000.0
       val durSec = (player.duration.takeIf { it > 0 } ?: 0).toDouble() / 1000.0
       listener.onProgress(posSec, durSec)
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("addListener.progressSnapshot", "Failed to emit initial progress snapshot", e)
     }
   }
 
@@ -223,8 +224,8 @@ class ExoEngine(
     try {
       player.stop()
       player.clearMediaItems()
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("stopPlayback", "Failed to stop Exo playback", e)
     }
     mediaSessionHandler?.updatePlaybackState(false)
     PipController.updateIsPlayingFromNative(false)
@@ -243,8 +244,8 @@ class ExoEngine(
   fun seek(positionSec: Double) {
     try {
       player.seekTo((positionSec * 1000.0).toLong())
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("seek", "Failed to seek (sec=$positionSec)", e)
     }
   }
 
@@ -406,9 +407,9 @@ class ExoEngine(
 
   fun release() {
     listeners.clear()
-    try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Throwable) {}
-    try { player.release() } catch (_: Throwable) {}
-    try { mediaSessionHandler?.release() } catch (_: Throwable) {}
+    try { mainHandler.removeCallbacksAndMessages(null) } catch (_: Exception) {}
+    try { player.release() } catch (_: Exception) {}
+    try { mediaSessionHandler?.release() } catch (_: Exception) {}
     mediaSessionHandler = null
     latestMetadata = null
   }

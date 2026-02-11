@@ -38,6 +38,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   }
 
   private lateinit var engine: VlcEngine
+  private val warnLog = PlayerThrottledLogger(TAG)
   private var isForeground = false
   private var clientCount = 0
 
@@ -68,14 +69,14 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
     mainHandler.removeCallbacks(stopRunnable)
     try {
       engine.release()
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("onDestroy.engine.release", "Failed to release VLC engine", e)
     }
 
     try {
       stopForegroundCompat(true)
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("onDestroy.stopForegroundCompat", "Failed to stopForeground", e)
     }
     super.onDestroy()
   }
@@ -187,28 +188,28 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
             startForeground(MediaSessionHandler.NOTIFICATION_ID, notification)
           }
           isForeground = true
-        } catch (t: Throwable) {
+        } catch (t: Exception) {
           Log.w(TAG, "startForeground failed", t)
-          try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+          try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
         }
       } else {
-        try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+        try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
       }
       return
     }
 
     if (isForeground) {
-      try { stopForegroundCompat(false) } catch (_: Throwable) {}
+      try { stopForegroundCompat(false) } catch (_: Exception) {}
       isForeground = false
     }
-    try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+    try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
     scheduleStopIfIdle()
   }
 
   override fun onNotificationCancelled() {
-    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Throwable) {}
+    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Exception) {}
     if (isForeground) {
-      try { stopForegroundCompat(true) } catch (_: Throwable) {}
+      try { stopForegroundCompat(true) } catch (_: Exception) {}
       isForeground = false
     }
   }
@@ -218,10 +219,10 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
     engine.stopPlayback()
 
     if (isForeground) {
-      try { stopForegroundCompat(true) } catch (_: Throwable) {}
+      try { stopForegroundCompat(true) } catch (_: Exception) {}
       isForeground = false
     }
-    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Throwable) {}
+    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Exception) {}
 
     scheduleStopIfIdle(250)
   }

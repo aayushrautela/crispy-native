@@ -66,6 +66,7 @@ class VlcEngine(
 
   private val listeners = CopyOnWriteArraySet<Listener>()
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val warnLog = PlayerThrottledLogger(TAG)
 
   private var libVLC: LibVLC? = null
   private var mediaPlayer: MediaPlayer? = null
@@ -127,7 +128,7 @@ class VlcEngine(
             mediaSessionHandler?.updatePosition(posSec)
             mediaSessionHandler?.updateDuration(durSec)
           }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
           Log.w(TAG, "Error in progressRunnable", e)
         }
       }
@@ -177,8 +178,8 @@ class VlcEngine(
                 // If caller requested paused-on-load, we still start playback once so LibVLC can
                 // initialize vout and report video layout/track metadata, then immediately pause.
                 mediaPlayer?.pause()
-              } catch (_: Throwable) {
-                // ignore
+              } catch (e: Exception) {
+                warnLog.w("pauseOnPlaying", "Failed to pause immediately after Playing (paused-on-load)", e)
               }
             }
           }
@@ -260,12 +261,12 @@ class VlcEngine(
 
     val videoSurface = try {
       videoHolder.surface
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
       null
     }
     val subtitleSurface = try {
       subtitleHolder?.surface
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
       null
     }
 
@@ -291,7 +292,7 @@ class VlcEngine(
         vout.setWindowSize(width, height)
         vout.addCallback(this)
         vout.attachViews(this)
-      } catch (t: Throwable) {
+      } catch (t: Exception) {
         Log.w(TAG, "Failed to attach VLC surfaces", t)
         return
       }
@@ -341,8 +342,8 @@ class VlcEngine(
           // (video layout + track metadata) while honoring a paused-on-load request.
           try {
             mp.pause()
-          } catch (_: Throwable) {
-            // ignore
+          } catch (e: Exception) {
+            warnLog.w("pauseAfterPlay", "Failed to pause immediately after play() (paused-on-load)", e)
           }
         }
       }
@@ -351,7 +352,7 @@ class VlcEngine(
       if (currentState == PlayerState.PREPARING) {
         mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
       }
-    } catch (t: Throwable) {
+    } catch (t: Exception) {
       Log.w(TAG, "maybeStartPlayback failed ($reason)", t)
     }
   }
@@ -525,7 +526,7 @@ class VlcEngine(
     hasSentLoadEvent = false
     try {
       mediaPlayer?.stop()
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
 
     mainHandler.removeCallbacks(readyPollRunnable)
     
@@ -537,7 +538,7 @@ class VlcEngine(
     val mp = mediaPlayer ?: return
     
     if (positionSec <= 0.5) {
-      try { mp.time = (positionSec * 1000.0).toLong() } catch (_: Throwable) {}
+      try { mp.time = (positionSec * 1000.0).toLong() } catch (_: Exception) {}
       return
     }
     
@@ -559,7 +560,7 @@ class VlcEngine(
       lastSeekRequestTime = System.currentTimeMillis()
       seekTargetTime = targetTime
       Log.d(TAG, "Seek applied to ${positionSec}s")
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
   }
 
   private fun applyPendingSeekIfReady() {
@@ -571,11 +572,11 @@ class VlcEngine(
   }
 
   fun setRate(rate: Double) {
-    try { mediaPlayer?.rate = rate.toFloat() } catch (_: Throwable) {}
+    try { mediaPlayer?.rate = rate.toFloat() } catch (_: Exception) {}
   }
 
   fun setVolume(volume: Double) {
-    try { mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100) } catch (_: Throwable) {}
+    try { mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100) } catch (_: Exception) {}
   }
 
   private fun applyMetadataIfReady() {
@@ -726,7 +727,7 @@ class VlcEngine(
       mediaPlayer?.release()
       libVLC?.release()
       mediaSessionHandler?.release()
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
     mediaSessionHandler = null
     mediaPlayer = null
     libVLC = null
@@ -735,7 +736,7 @@ class VlcEngine(
   fun getDebugSnapshot(): Map<String, Any> {
     val viewsAttached = try {
       mediaPlayer?.vlcVout?.areViewsAttached() ?: false
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
       false
     }
     return mapOf(
@@ -773,7 +774,7 @@ class VlcEngine(
       val encodedPath = if (path.isNotEmpty()) {
         path.split("/").joinToString("/") { segment ->
           if (segment.isEmpty()) segment else {
-            val decoded = try { URLDecoder.decode(segment, "UTF-8") } catch (_: Throwable) { segment }
+            val decoded = try { URLDecoder.decode(segment, "UTF-8") } catch (_: Exception) { segment }
             URLEncoder.encode(decoded, "UTF-8").replace("+", "%20")
           }
         }
@@ -786,7 +787,7 @@ class VlcEngine(
         if (!query.isNullOrEmpty()) append("?").append(query)
         if (!fragment.isNullOrEmpty()) append("#").append(fragment)
       }
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
       url.replace(" ", "%20")
     }
   }
