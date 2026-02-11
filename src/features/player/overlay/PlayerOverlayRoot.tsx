@@ -498,7 +498,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 bottomOffset={(showControls ? 110 : 40) + subtitleOffset}
             />
 
-            {playbackEngine === 'vlc' && !isPipMode && (
+            {false && playbackEngine === 'vlc' && !isPipMode && (
                 <View pointerEvents="none" style={styles.vlcDebugOverlay}>
                     <View style={styles.vlcDebugCard}>
                         <Text style={styles.vlcDebugTitle}>VLC Debug</Text>

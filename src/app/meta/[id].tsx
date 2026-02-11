@@ -428,7 +428,7 @@ export default function MetaDetailsScreen() {
                     </View>
                 </View>
 
-                {showExtractedColors && colorExtraction && colorDebugKeys && colorDebugKeys.length > 0 && (
+                {false && showExtractedColors && colorExtraction && colorDebugKeys && colorDebugKeys.length > 0 && (
                     <View
                         style={[
                             styles.colorDebug,

@@ -1168,13 +1168,12 @@ export default function PlayerScreen() {
     );
 }
 
-// Material-3-ish expressive track/handle, but kept slimmer.
-const PROGRESS_TRACK_HEIGHT = 10;
-const PROGRESS_TRACK_GAP_PX = 3;
+const PROGRESS_TRACK_HEIGHT = 8;
+const PROGRESS_TRACK_GAP_PX = 4;
 const PROGRESS_TRACK_OUTER_RADIUS = PROGRESS_TRACK_HEIGHT / 2;
 const PROGRESS_TRACK_INNER_RADIUS = 1;
 
-const PROGRESS_THUMB_HEIGHT = 26;
+const PROGRESS_THUMB_HEIGHT = 34;
 const PROGRESS_THUMB_WIDTH = 6;
 const PROGRESS_THUMB_TOP = -((PROGRESS_THUMB_HEIGHT - PROGRESS_TRACK_HEIGHT) / 2);
 

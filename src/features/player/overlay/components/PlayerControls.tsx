@@ -29,6 +29,14 @@ interface PlayerControlsProps {
     isLoading?: boolean;
 }
 
+const PROGRESS_TRACK_HEIGHT = 8;
+const PROGRESS_TRACK_GAP_PX = 4;
+const PROGRESS_TRACK_OUTER_RADIUS = PROGRESS_TRACK_HEIGHT / 2;
+const PROGRESS_TRACK_INNER_RADIUS = 1;
+const PROGRESS_THUMB_HEIGHT = 34;
+const PROGRESS_THUMB_WIDTH = 6;
+const PROGRESS_THUMB_TOP = -((PROGRESS_THUMB_HEIGHT - PROGRESS_TRACK_HEIGHT) / 2);
+
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
     visible,
     paused,
@@ -153,15 +161,47 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     }}
                 >
                     {(() => {
-                        const percent = Math.max(0, Math.min(100, (progress.position / seekableDuration) * 100));
-                        const fillWidth = Math.max(0, percent - 0.8);
-                        const inactiveLeft = Math.min(100, percent + 0.8);
+                        const paddingL = Math.max(20, insets.left);
+                        const paddingR = Math.max(20, insets.right);
+                        const trackW = Math.max(1, width - paddingL - paddingR);
+                        const safePos = Math.max(0, Math.min(seekableDuration, progress.position));
+                        const thumbX = (safePos / seekableDuration) * trackW;
+                        const halfThumb = PROGRESS_THUMB_WIDTH / 2;
+
+                        const fillW = Math.max(0, thumbX - halfThumb - PROGRESS_TRACK_GAP_PX);
+                        const inactiveX = Math.min(trackW, thumbX + halfThumb + PROGRESS_TRACK_GAP_PX);
+
+                        const hasFill = fillW > 0.5;
+                        const hasInactive = inactiveX < trackW - 0.5;
+
+                        const fillRightRadius = hasInactive ? PROGRESS_TRACK_INNER_RADIUS : PROGRESS_TRACK_OUTER_RADIUS;
+                        const inactiveLeftRadius = hasFill ? PROGRESS_TRACK_INNER_RADIUS : PROGRESS_TRACK_OUTER_RADIUS;
 
                         return (
                             <View style={styles.progressBackground}>
-                                <View style={[styles.progressFill, { backgroundColor: theme.colors.primary, width: `${fillWidth}%` }]} />
-                                <View style={[styles.progressInactive, { left: `${inactiveLeft}%`, right: 0 }]} />
-                                <View style={[styles.progressThumb, { left: `${percent}%`, backgroundColor: theme.colors.primary }]} />
+                                <View
+                                    style={[
+                                        styles.progressFill,
+                                        {
+                                            backgroundColor: theme.colors.primary,
+                                            width: fillW,
+                                            borderTopRightRadius: fillRightRadius,
+                                            borderBottomRightRadius: fillRightRadius,
+                                        },
+                                    ]}
+                                />
+                                <View
+                                    style={[
+                                        styles.progressInactive,
+                                        {
+                                            left: inactiveX,
+                                            right: 0,
+                                            borderTopLeftRadius: inactiveLeftRadius,
+                                            borderBottomLeftRadius: inactiveLeftRadius,
+                                        },
+                                    ]}
+                                />
+                                <View style={[styles.progressThumb, { left: thumbX, backgroundColor: theme.colors.primary }]} />
                             </View>
                         );
                     })()}
@@ -273,31 +313,44 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     progressContainer: {
-        height: 40,
+        height: 48,
         justifyContent: 'center',
         paddingHorizontal: 20,
     },
     progressBackground: {
-        height: 4,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 2,
-        flexDirection: 'row',
-        alignItems: 'center',
+        height: PROGRESS_TRACK_HEIGHT,
+        borderRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        position: 'relative',
+        width: '100%',
+        overflow: 'visible',
     },
     progressFill: {
-        height: '100%',
-        borderRadius: 2,
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        borderTopLeftRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderBottomLeftRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderTopRightRadius: PROGRESS_TRACK_INNER_RADIUS,
+        borderBottomRightRadius: PROGRESS_TRACK_INNER_RADIUS,
     },
     progressInactive: {
-        height: '100%',
-        backgroundColor: 'transparent',
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        borderTopLeftRadius: PROGRESS_TRACK_INNER_RADIUS,
+        borderBottomLeftRadius: PROGRESS_TRACK_INNER_RADIUS,
+        borderTopRightRadius: PROGRESS_TRACK_OUTER_RADIUS,
+        borderBottomRightRadius: PROGRESS_TRACK_OUTER_RADIUS,
     },
     progressThumb: {
-        width: 2,
-        height: 14,
-        borderRadius: 1,
         position: 'absolute',
-        marginLeft: -1,
+        top: PROGRESS_THUMB_TOP,
+        height: PROGRESS_THUMB_HEIGHT,
+        width: PROGRESS_THUMB_WIDTH,
+        borderRadius: PROGRESS_THUMB_WIDTH / 2,
+        marginLeft: -(PROGRESS_THUMB_WIDTH / 2),
         zIndex: 2,
     },
     controlsRow: {
