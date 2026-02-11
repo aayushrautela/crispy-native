@@ -100,7 +100,7 @@ const HeroSlideComponent = ({
                         <View style={styles.content}>
                             {/* Branding Section */}
                             <View style={styles.brandingSection}>
-                                <Typography variant="display-large" weight="black" style={{ color: 'white', fontSize: 72, lineHeight: 72 }}>
+                                <Typography variant="display-large" weight="black" style={{ color: 'white', fontSize: 32, lineHeight: 36 }}>
                                     {item.name}
                                 </Typography>
                                 {isUpcoming && (
