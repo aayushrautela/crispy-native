@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/src/core/ThemeContext';
+import { hexToRgba } from '@/src/core/utils/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InsightCard } from '../hooks/useAiInsights';
 import { ExpressiveImage } from './ExpressiveImage';
@@ -20,8 +21,6 @@ interface AiInsightsStoryProps {
     trivia?: string;
     onClose: () => void;
     meta?: Partial<TMDBMeta>;
-    backgroundColor?: string;
-    accentColor?: string;
 }
 
 const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
@@ -39,7 +38,7 @@ const getIconForType = (type: string): keyof typeof Ionicons.glyphMap => {
     }
 };
 
-export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta, backgroundColor, accentColor }) => {
+export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insights, trivia, onClose, meta }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
@@ -47,8 +46,13 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
 
     const isSplitLayout = isTablet && isLandscape;
 
-    const effectiveBg = backgroundColor || (theme.dark ? '#000' : '#fff');
-    const effectiveAccent = accentColor || '#FFD700';
+    const effectiveBg = theme.colors.background;
+    const badgeBg = theme.colors.secondaryContainer;
+    const badgeFg = theme.colors.onSecondaryContainer;
+    const titleColor = theme.colors.onSurface;
+    const bodyColor = theme.colors.onSurfaceVariant;
+    const indicatorBg = hexToRgba(theme.colors.onSurface, 0.24);
+    const indicatorFill = theme.colors.onSurface;
 
     const allInsights = React.useMemo(() => {
         const base = [...insights];
@@ -65,15 +69,12 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
 
     const storyImage = React.useMemo(() => {
         if (!meta || !meta.backdrops || meta.backdrops.length === 0) {
-            console.log(`[AiInsightsStory] No backdrops available, using poster: ${meta?.poster ? 'YES' : 'NO'}`);
             return meta?.poster;
         }
         // Use the index to cycle through backdrops for each slide
         // We skip index 0 (main backdrop) if possible, starting from index 1
         const galleryIndex = (currentIndex + 1) % meta.backdrops.length;
         const selected = meta.backdrops[galleryIndex];
-        console.log(`[AiInsightsStory] Slide ${currentIndex}, Gallery index: ${galleryIndex}, Total backdrops: ${meta.backdrops.length}`);
-        console.log(`[AiInsightsStory] Selected backdrop: ${selected.substring(0, 60)}...`);
         return selected;
     }, [meta, currentIndex]);
 
@@ -124,16 +125,16 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                     isSplitLayout && styles.splitContent
                 ]}>
                     <View style={styles.header}>
-                        <View style={styles.typeBadge}>
+                        <View style={[styles.typeBadge, { backgroundColor: badgeBg }]}>
                             <Ionicons 
                                 name={getIconForType(currentInsight.type)} 
                                 size={16} 
-                                color={effectiveAccent} 
+                                color={badgeFg} 
                             />
-                            <Text style={[styles.typeText, { color: effectiveAccent }]}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
+                            <Text style={[styles.typeText, { color: badgeFg }]}>{(currentInsight.category || currentInsight.type).toUpperCase()}</Text>
                         </View>
                         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                            <Ionicons name="close" size={28} color="white" />
+                            <Ionicons name="close" size={28} color={theme.colors.onSurface} />
                         </TouchableOpacity>
                     </View>
 
@@ -154,12 +155,12 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                                 <Text style={[
                                     styles.title,
                                     currentInsight.type === 'trivia' && styles.triviaTitle,
-                                    { fontSize: 44, lineHeight: 52 }
+                                    { fontSize: 44, lineHeight: 52, color: titleColor }
                                 ]}>{currentInsight.title}</Text>
                                 <Text style={[
                                     styles.bodyText,
                                     currentInsight.type === 'trivia' && styles.triviaBodyText,
-                                    { fontSize: 24, lineHeight: 36 }
+                                    { fontSize: 24, lineHeight: 36, color: bodyColor }
                                 ]}>{currentInsight.content}</Text>
                             </View>
                         </View>
@@ -167,7 +168,8 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                         <>
                             <Text style={[
                                 styles.title,
-                                currentInsight.type === 'trivia' && styles.triviaTitle
+                                currentInsight.type === 'trivia' && styles.triviaTitle,
+                                { color: titleColor }
                             ]}>{currentInsight.title}</Text>
                             {storyImage && currentIndex < allInsights.length - 1 && (
                                 <View style={styles.imageContainer}>
@@ -180,23 +182,24 @@ export const AiInsightsStory: React.FC<AiInsightsStoryProps> = ({ visible, insig
                             )}
                             <Text style={[
                                 styles.bodyText,
-                                currentInsight.type === 'trivia' && styles.triviaBodyText
+                                currentInsight.type === 'trivia' && styles.triviaBodyText,
+                                { color: bodyColor }
                             ]}>{currentInsight.content}</Text>
                         </>
                     )}
                     
-                    <Text style={styles.aiFooter}>Generative AI can make mistakes</Text>
+                    <Text style={[styles.aiFooter, { color: theme.colors.onSurfaceVariant }]}>Generative AI can make mistakes</Text>
                 </View>
             </Pressable>
 
             {/* Indicators */}
             <View style={[styles.indicatorContainer, { top: insets.top + 20 }]}>
                 {allInsights.map((_, i) => (
-                    <View key={i} style={styles.indicatorBackground}>
+                    <View key={i} style={[styles.indicatorBackground, { backgroundColor: indicatorBg }]}>
                         <View 
                             style={[
                                 styles.indicatorFill,
-                                { width: i <= currentIndex ? '100%' : '0%' }
+                                { width: i <= currentIndex ? '100%' : '0%', backgroundColor: indicatorFill }
                             ]} 
                         />
                     </View>
@@ -229,14 +232,12 @@ const styles = StyleSheet.create({
     indicatorBackground: {
         flex: 1,
         height: 2,
-        backgroundColor: 'rgba(255,255,255,0.3)',
         marginHorizontal: 2,
         borderRadius: 1,
         overflow: 'hidden',
     },
     indicatorFill: {
         height: '100%',
-        backgroundColor: 'white',
     },
     content: {
         flex: 1,
@@ -251,14 +252,12 @@ const styles = StyleSheet.create({
     typeBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 12,
         gap: 6,
     },
     typeText: {
-        color: '#FFD700',
         fontSize: 12,
         fontWeight: 'bold',
         letterSpacing: 1,
@@ -267,14 +266,12 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     title: {
-        color: 'white',
         fontSize: 32,
         fontWeight: 'bold',
         marginBottom: 20,
         lineHeight: 40,
     },
     bodyText: {
-        color: 'rgba(255,255,255,0.9)',
         fontSize: 18,
         lineHeight: 28,
     },
@@ -294,7 +291,6 @@ const styles = StyleSheet.create({
         marginVertical: 40,
     },
     aiFooter: {
-        color: 'rgba(255,255,255,0.5)',
         fontSize: 12,
         textAlign: 'center',
         marginTop: 'auto',
@@ -319,4 +315,3 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
 });
-

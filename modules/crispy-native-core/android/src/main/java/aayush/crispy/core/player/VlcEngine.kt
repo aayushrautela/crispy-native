@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Surface
+import android.view.SurfaceHolder
 import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -53,6 +54,7 @@ class VlcEngine(
 
   interface Listener {
     fun onLoad(duration: Double, width: Int, height: Int)
+    fun onVideoSizeChanged(width: Int, height: Int) {}
     fun onProgress(currentTime: Double, duration: Double)
     fun onEnd()
     fun onError(error: String)
@@ -64,6 +66,7 @@ class VlcEngine(
 
   private val listeners = CopyOnWriteArraySet<Listener>()
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val warnLog = PlayerThrottledLogger(TAG)
 
   private var libVLC: LibVLC? = null
   private var mediaPlayer: MediaPlayer? = null
@@ -74,13 +77,17 @@ class VlcEngine(
   private var isPaused: Boolean = true
   private var hasSentLoadEvent: Boolean = false
   private var firstFrameEmitted: Boolean = false
+  private var hasStartedPlaybackForCurrentSource: Boolean = false
 
   private var cachedDuration: Long = 0L
   private var cachedWidth: Int = 0
   private var cachedHeight: Int = 0
   private var surfaceWidth: Int = 0
   private var surfaceHeight: Int = 0
+  private var hasVideoSurface: Boolean = false
+  private var hasSubtitleSurface: Boolean = false
   private var resizeMode: String = "contain"
+  private var lastAppliedScaleType: String = "uninitialized"
 
   private var pendingSeekPositionSec: Double? = null
   private var isSeekable: Boolean = false
@@ -121,7 +128,7 @@ class VlcEngine(
             mediaSessionHandler?.updatePosition(posSec)
             mediaSessionHandler?.updateDuration(durSec)
           }
-        } catch (e: Throwable) {
+        } catch (e: Exception) {
           Log.w(TAG, "Error in progressRunnable", e)
         }
       }
@@ -150,6 +157,7 @@ class VlcEngine(
       val args = ArrayList<String>()
       args.add("--no-stats")
       args.add("--network-caching=2000")
+      args.add("--vout=android-display")
       args.add("--no-osd")
       args.add("--no-drop-late-frames")
       args.add("--no-skip-frames")
@@ -164,6 +172,16 @@ class VlcEngine(
             dispatchIsPlayingChanged(true)
             dispatchBufferingChanged(false)
             checkReadyState()
+
+            if (isPaused) {
+              try {
+                // If caller requested paused-on-load, we still start playback once so LibVLC can
+                // initialize vout and report video layout/track metadata, then immediately pause.
+                mediaPlayer?.pause()
+              } catch (e: Exception) {
+                warnLog.w("pauseOnPlaying", "Failed to pause immediately after Playing (paused-on-load)", e)
+              }
+            }
           }
           MediaPlayer.Event.Paused -> {
             currentState = PlayerState.PAUSED
@@ -237,22 +255,106 @@ class VlcEngine(
     }
   }
 
-  fun attachSurface(surface: Surface, width: Int, height: Int) {
+  fun attachSurfaces(videoHolder: SurfaceHolder, subtitleHolder: SurfaceHolder?, width: Int, height: Int) {
     val mp = mediaPlayer ?: return
     val vout = mp.vlcVout
+
+    val videoSurface = try {
+      videoHolder.surface
+    } catch (_: Exception) {
+      null
+    }
+    val subtitleSurface = try {
+      subtitleHolder?.surface
+    } catch (_: Exception) {
+      null
+    }
+
+    val videoValid = videoSurface?.isValid == true
+    val subtitleValid = subtitleSurface?.isValid == true
+
     surfaceWidth = width
     surfaceHeight = height
+    hasVideoSurface = videoValid
+    hasSubtitleSurface = subtitleValid
+
+    if (!videoValid) {
+      Log.i(TAG, "attachSurfaces skipped: invalid video surface size=${width}x${height} subtitleValid=$subtitleValid")
+      return
+    }
 
     if (!vout.areViewsAttached()) {
-      vout.setVideoSurface(surface, null)
-      vout.setWindowSize(width, height)
-      vout.addCallback(this)
-      vout.attachViews()
-      Log.d(TAG, "Surface attached: ${width}x${height}")
+      try {
+        vout.setVideoSurface(videoSurface, videoHolder)
+        if (subtitleValid && subtitleHolder != null) {
+          vout.setSubtitlesSurface(subtitleSurface!!, subtitleHolder)
+        }
+        vout.setWindowSize(width, height)
+        vout.addCallback(this)
+        vout.attachViews(this)
+      } catch (t: Exception) {
+        Log.w(TAG, "Failed to attach VLC surfaces", t)
+        return
+      }
+      Log.i(
+        TAG,
+        "Surfaces attached: ${width}x${height} subtitle=$subtitleValid mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState paused=$isPaused"
+      )
     } else {
       vout.setWindowSize(width, height)
+      Log.i(
+        TAG,
+        "Surfaces re-sized while attached: ${width}x${height} subtitle=$subtitleValid mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState paused=$isPaused"
+      )
     }
     applyResizeMode()
+
+    // Ensure the *first* play happens only after views are attached.
+    maybeStartPlayback("attachSurfaces")
+  }
+
+  private fun maybeStartPlayback(reason: String) {
+    val mp = mediaPlayer ?: return
+    val vout = mp.vlcVout
+
+    if (!vout.areViewsAttached()) {
+      Log.i(TAG, "maybeStartPlayback deferred ($reason): views not attached")
+      return
+    }
+    if (mp.media == null) {
+      Log.i(TAG, "maybeStartPlayback deferred ($reason): no media")
+      return
+    }
+
+    // If user requested play, always start/resume.
+    // If user requested paused, we still start once per source so VLC can emit layout/track metadata.
+    val shouldStart = !isPaused || !hasStartedPlaybackForCurrentSource
+    if (!shouldStart) return
+
+    try {
+      if (!mp.isPlaying) {
+        mp.play()
+        hasStartedPlaybackForCurrentSource = true
+        Log.i(TAG, "maybeStartPlayback start ($reason) paused=$isPaused state=$currentState")
+
+        if (isPaused) {
+          // Pause as soon as we've kicked off playback, so we still get vout initialization
+          // (video layout + track metadata) while honoring a paused-on-load request.
+          try {
+            mp.pause()
+          } catch (e: Exception) {
+            warnLog.w("pauseAfterPlay", "Failed to pause immediately after play() (paused-on-load)", e)
+          }
+        }
+      }
+
+      mainHandler.removeCallbacks(readyPollRunnable)
+      if (currentState == PlayerState.PREPARING) {
+        mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
+      }
+    } catch (t: Exception) {
+      Log.w(TAG, "maybeStartPlayback failed ($reason)", t)
+    }
   }
 
   fun setSurfaceSize(width: Int, height: Int) {
@@ -261,35 +363,62 @@ class VlcEngine(
     if (vout.areViewsAttached()) {
       vout.setWindowSize(width, height)
     }
+    val previousW = surfaceWidth
+    val previousH = surfaceHeight
     surfaceWidth = width
     surfaceHeight = height
+    if (previousW != width || previousH != height) {
+      Log.i(
+        TAG,
+        "setSurfaceSize ${previousW}x${previousH} -> ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight}"
+      )
+    }
     applyResizeMode()
   }
 
   fun setResizeMode(mode: String) {
-    resizeMode = mode.lowercase()
+    val next = mode.lowercase().let {
+      when (it) {
+        "fill", "crop" -> "cover"
+        else -> it
+      }
+    }
+    if (resizeMode != next) {
+      Log.i(TAG, "Resize mode: $resizeMode -> $next")
+    } else {
+      Log.i(TAG, "Resize mode unchanged: $next")
+    }
+    resizeMode = next
     applyResizeMode()
   }
 
   private fun applyResizeMode() {
     val mp = mediaPlayer ?: return
-    if (surfaceWidth <= 0 || surfaceHeight <= 0) return
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+      Log.i(
+        TAG,
+        "applyResizeMode skipped mode=$resizeMode surface=${surfaceWidth}x${surfaceHeight} video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
+      return
+    }
     
     try {
-      when (resizeMode) {
-        "stretch", "cover" -> {
-          mp.aspectRatio = "${surfaceWidth}:${surfaceHeight}"
-        }
-        else -> {
-          if (cachedWidth > 0 && cachedHeight > 0) {
-            mp.aspectRatio = "${cachedWidth}:${cachedHeight}"
-          } else {
-            mp.aspectRatio = null // Reset to default
-          }
-        }
+      val scaleType = when (resizeMode) {
+        "original" -> MediaPlayer.ScaleType.SURFACE_ORIGINAL
+        else -> MediaPlayer.ScaleType.SURFACE_BEST_FIT
       }
+
+      mp.setVideoScale(scaleType)
+      lastAppliedScaleType = scaleType.toString()
+      Log.i(
+        TAG,
+        "applyResizeMode mode=$resizeMode scaleType=$scaleType surface=${surfaceWidth}x${surfaceHeight} video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
+      // NOTE: Avoid mixing legacy `scale`/`aspectRatio` with `setVideoScale`.
+      // On some libVLC versions/devices, setting those after `setVideoScale` can
+      // effectively override the ScaleType and make Fit/Fill appear to do nothing.
     } catch (e: Exception) {
-      Log.w(TAG, "Failed to apply aspect ratio: ${e.message}")
+      Log.w(TAG, "Failed to apply video scale: ${e.message}")
     }
   }
 
@@ -299,8 +428,13 @@ class VlcEngine(
     if (vout.areViewsAttached()) {
       vout.removeCallback(this)
       vout.detachViews()
-      Log.d(TAG, "Surface detached")
+      Log.i(TAG, "Surface detached")
     }
+
+    surfaceWidth = 0
+    surfaceHeight = 0
+    hasVideoSurface = false
+    hasSubtitleSurface = false
   }
 
   fun addListener(listener: Listener) {
@@ -308,6 +442,9 @@ class VlcEngine(
     if (hasSentLoadEvent) {
       val durSec = if (cachedDuration > 0) cachedDuration.toDouble() / 1000.0 else 0.0
       listener.onLoad(durSec, cachedWidth, cachedHeight)
+    }
+    if (cachedWidth > 0 && cachedHeight > 0) {
+      listener.onVideoSizeChanged(cachedWidth, cachedHeight)
     }
     if (audioTrackMap.isNotEmpty() || spuTrackMap.isNotEmpty()) {
       parseAndSendTracks()
@@ -328,6 +465,7 @@ class VlcEngine(
     currentState = PlayerState.PREPARING
     hasSentLoadEvent = false
     firstFrameEmitted = false
+    hasStartedPlaybackForCurrentSource = false
     cachedDuration = 0
     cachedWidth = 0
     cachedHeight = 0
@@ -341,6 +479,7 @@ class VlcEngine(
     val encodedUrl = encodeUrlForVlc(url)
 
     try {
+      mainHandler.removeCallbacks(readyPollRunnable)
       mp.stop()
       val media = Media(lib, Uri.parse(encodedUrl))
 
@@ -355,12 +494,9 @@ class VlcEngine(
       media.setHWDecoderEnabled(true, false)
       mp.media = media
       media.release()
-      
-      mp.play()
-      isPaused = false
-      
-      mainHandler.removeCallbacks(readyPollRunnable)
-      mainHandler.postDelayed(readyPollRunnable, READY_POLL_INTERVAL_MS)
+
+      // Do not call mp.play() until vout views are attached (IVLCVout contract).
+      maybeStartPlayback("setSource")
     } catch (e: Exception) {
       currentState = PlayerState.ERROR
       dispatch { it.onError(e.message ?: "Failed to load media") }
@@ -374,10 +510,8 @@ class VlcEngine(
       if (paused) {
         if (mp.isPlaying) mp.pause()
       } else {
-        if (!mp.isPlaying) mp.play()
+        maybeStartPlayback("setPaused")
       }
-      mediaSessionHandler?.updatePlaybackState(!paused)
-      PipController.updateIsPlayingFromNative(!paused)
     } catch (e: Exception) {
       Log.w(TAG, "Failed to apply play/pause", e)
     }
@@ -387,11 +521,14 @@ class VlcEngine(
 
   fun stopPlayback() {
     isPaused = true
+    hasStartedPlaybackForCurrentSource = false
     currentState = PlayerState.IDLE
     hasSentLoadEvent = false
     try {
       mediaPlayer?.stop()
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
+
+    mainHandler.removeCallbacks(readyPollRunnable)
     
     mediaSessionHandler?.updatePlaybackState(false)
     PipController.updateIsPlayingFromNative(false)
@@ -401,7 +538,7 @@ class VlcEngine(
     val mp = mediaPlayer ?: return
     
     if (positionSec <= 0.5) {
-      try { mp.time = (positionSec * 1000.0).toLong() } catch (_: Throwable) {}
+      try { mp.time = (positionSec * 1000.0).toLong() } catch (_: Exception) {}
       return
     }
     
@@ -423,7 +560,7 @@ class VlcEngine(
       lastSeekRequestTime = System.currentTimeMillis()
       seekTargetTime = targetTime
       Log.d(TAG, "Seek applied to ${positionSec}s")
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
   }
 
   private fun applyPendingSeekIfReady() {
@@ -435,11 +572,11 @@ class VlcEngine(
   }
 
   fun setRate(rate: Double) {
-    try { mediaPlayer?.rate = rate.toFloat() } catch (_: Throwable) {}
+    try { mediaPlayer?.rate = rate.toFloat() } catch (_: Exception) {}
   }
 
   fun setVolume(volume: Double) {
-    try { mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100) } catch (_: Throwable) {}
+    try { mediaPlayer?.volume = (volume * 100).toInt().coerceIn(0, 100) } catch (_: Exception) {}
   }
 
   private fun applyMetadataIfReady() {
@@ -474,19 +611,41 @@ class VlcEngine(
     sarNum: Int,
     sarDen: Int
   ) {
-    Log.d(TAG, "New layout: ${width}x${height}")
-    if (width > 0 && height > 0) {
-      val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
-        (width.toDouble() * sarNum / sarDen).toInt()
-      } else {
-        width
-      }
-      cachedWidth = darWidth
-      cachedHeight = height
-      applyResizeMode()
-      checkReadyState()
-      PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
+    // Prefer *visible* dimensions for aspect ratio, matching VLC's VideoLayout logic.
+    // Some libVLC versions can report the output window size in `width/height`, which
+    // makes cover/contain calculations appear to do nothing.
+    val baseW = if (visibleWidth > 0) visibleWidth else width
+    val baseH = if (visibleHeight > 0) visibleHeight else height
+
+    if (baseW <= 0 || baseH <= 0) {
+      Log.d(TAG, "New layout: ${width}x${height} vis=${visibleWidth}x${visibleHeight} (ignored)")
+      return
     }
+
+    val darWidth = if (sarNum > 0 && sarDen > 0 && sarNum != sarDen) {
+      (baseW.toDouble() * sarNum / sarDen).toInt().coerceAtLeast(1)
+    } else {
+      baseW
+    }
+    val darHeight = baseH
+
+    val sizeChanged = cachedWidth != darWidth || cachedHeight != darHeight
+    Log.i(
+      TAG,
+      "onNewVideoLayout raw=${width}x${height} vis=${visibleWidth}x${visibleHeight} sar=${sarNum}:${sarDen} dar=${darWidth}x${darHeight} mode=$resizeMode surface=${surfaceWidth}x${surfaceHeight} changed=$sizeChanged"
+    )
+
+    cachedWidth = darWidth
+    cachedHeight = darHeight
+
+    applyResizeMode()
+    checkReadyState()
+
+    if (sizeChanged) {
+      dispatch { it.onVideoSizeChanged(cachedWidth, cachedHeight) }
+    }
+
+    PipController.updateVideoSizeFromNative(cachedWidth, cachedHeight)
   }
 
   private fun parseAndSendTracks() {
@@ -568,10 +727,37 @@ class VlcEngine(
       mediaPlayer?.release()
       libVLC?.release()
       mediaSessionHandler?.release()
-    } catch (_: Throwable) {}
+    } catch (_: Exception) {}
     mediaSessionHandler = null
     mediaPlayer = null
     libVLC = null
+  }
+
+  fun getDebugSnapshot(): Map<String, Any> {
+    val viewsAttached = try {
+      mediaPlayer?.vlcVout?.areViewsAttached() ?: false
+    } catch (_: Exception) {
+      false
+    }
+    return mapOf(
+      "state" to currentState.name,
+      "isPaused" to isPaused,
+      "isSeekable" to isSeekable,
+      "hasSentLoadEvent" to hasSentLoadEvent,
+      "firstFrameEmitted" to firstFrameEmitted,
+      "viewsAttached" to viewsAttached,
+      "hasVideoSurface" to hasVideoSurface,
+      "hasSubtitleSurface" to hasSubtitleSurface,
+      "hasStartedPlaybackForCurrentSource" to hasStartedPlaybackForCurrentSource,
+      "resizeMode" to resizeMode,
+      "lastAppliedScaleType" to lastAppliedScaleType,
+      "surfaceWidth" to surfaceWidth,
+      "surfaceHeight" to surfaceHeight,
+      "videoWidth" to cachedWidth,
+      "videoHeight" to cachedHeight,
+      "durationMs" to cachedDuration,
+      "listenerCount" to listeners.size
+    )
   }
 
   private fun encodeUrlForVlc(url: String): String {
@@ -588,7 +774,7 @@ class VlcEngine(
       val encodedPath = if (path.isNotEmpty()) {
         path.split("/").joinToString("/") { segment ->
           if (segment.isEmpty()) segment else {
-            val decoded = try { URLDecoder.decode(segment, "UTF-8") } catch (_: Throwable) { segment }
+            val decoded = try { URLDecoder.decode(segment, "UTF-8") } catch (_: Exception) { segment }
             URLEncoder.encode(decoded, "UTF-8").replace("+", "%20")
           }
         }
@@ -601,7 +787,7 @@ class VlcEngine(
         if (!query.isNullOrEmpty()) append("?").append(query)
         if (!fragment.isNullOrEmpty()) append("#").append(fragment)
       }
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
       url.replace(" ", "%20")
     }
   }

@@ -6,15 +6,14 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 interface SettingsTabProps {
     playbackSpeed?: number;
     onSelectSpeed?: (speed: number) => void;
-    resizeMode?: 'contain' | 'cover' | 'stretch';
-    onSelectResizeMode?: (mode: 'contain' | 'cover' | 'stretch') => void;
+    resizeMode?: 'contain' | 'cover';
+    onSelectResizeMode?: (mode: 'contain' | 'cover') => void;
 }
 
 const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 const RESIZE_MODES = [
     { label: 'Fit', value: 'contain' as const },
     { label: 'Fill', value: 'cover' as const },
-    { label: 'Stretch', value: 'stretch' as const },
 ];
 
 export function SettingsTab({

@@ -130,7 +130,7 @@ export default function PlayerScreen() {
     const [isPipMode, setIsPipMode] = useState(false);
 
     const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
-    const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+    const [resizeMode, setResizeMode] = useState<'contain' | 'cover'>('contain');
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('onPipModeChanged', (payload: any) => {

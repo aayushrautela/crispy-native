@@ -8,7 +8,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Star } from 'lucide-react-native';
 import React, { useCallback } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { PixelRatio, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 function formatBadgeRating(value: unknown): string | null {
     const n = typeof value === 'number' ? value : Number(value);
@@ -35,10 +35,30 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
 
     const aspectRatio = displayItem.posterShape === 'landscape' ? 16 / 9 : displayItem.posterShape === 'square' ? 1 : 2 / 3;
     const height = width / aspectRatio;
+    const shouldConstrainDecode = displayItem.posterShape === 'landscape';
+    const pixelRatio = PixelRatio.get();
+    const decodeWidth = shouldConstrainDecode
+        ? Math.max(1, Math.round(Math.min(width * pixelRatio, 960)))
+        : undefined;
+    const decodeHeight = shouldConstrainDecode && decodeWidth
+        ? Math.max(1, Math.round(decodeWidth / aspectRatio))
+        : undefined;
+    const logoDecodeWidth = shouldConstrainDecode && decodeWidth
+        ? Math.max(1, Math.round(Math.min(decodeWidth * 0.7, 420)))
+        : undefined;
+    const logoDecodeHeight = shouldConstrainDecode && decodeHeight
+        ? Math.max(1, Math.round(Math.min(decodeHeight * 0.5, 240)))
+        : undefined;
 
     const imageSrc = displayItem.posterShape === 'landscape'
         ? (displayItem.backdrop || displayItem.poster)
         : (displayItem.poster);
+    const imageSource = shouldConstrainDecode && decodeWidth && decodeHeight
+        ? { uri: imageSrc, width: decodeWidth, height: decodeHeight }
+        : { uri: imageSrc };
+    const logoSource = shouldConstrainDecode && logoDecodeWidth && logoDecodeHeight
+        ? { uri: displayItem.logo, width: logoDecodeWidth, height: logoDecodeHeight }
+        : { uri: displayItem.logo };
 
     const handlePress = useCallback(() => {
         router.push({
@@ -71,7 +91,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                     {imageSrc ? (
                         <ExpoImage
                             recyclingKey={String(displayItem.id)}
-                            source={{ uri: imageSrc }}
+                            source={imageSource}
                             style={styles.image}
                             contentFit="cover"
                             transition={Platform.OS === 'android' ? 0 : 150}
@@ -84,7 +104,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
                         <View style={styles.logoOverlay}>
                             <ExpoImage
                                 recyclingKey={`${displayItem.id}-logo`}
-                                source={{ uri: displayItem.logo }}
+                                source={logoSource}
                                 style={styles.logo}
                                 contentFit="contain"
                                 transition={Platform.OS === 'android' ? 0 : 150}

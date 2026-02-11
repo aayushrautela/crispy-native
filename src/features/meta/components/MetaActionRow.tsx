@@ -15,7 +15,6 @@ interface MetaActionRowProps {
     onCollectionToggle: () => void;
     onWatchedToggle: () => void;
     onRatePress: () => void;
-    palette: any;
     style?: ViewStyle;
 }
 
@@ -30,12 +29,11 @@ export const MetaActionRow = memo(function MetaActionRow({
     onCollectionToggle,
     onWatchedToggle,
     onRatePress,
-    palette,
     style
 }: MetaActionRowProps) {
     const { theme } = useTheme();
-    const iconColor = theme.colors.onSurface;
-    const itemBg = palette.secondaryContainer;
+    const itemBg = theme.colors.secondaryContainer;
+    const iconColor = theme.colors.onSecondaryContainer;
 
     return (
         <View style={[styles.iconActionRow, style]} >

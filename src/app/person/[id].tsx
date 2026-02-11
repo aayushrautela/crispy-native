@@ -10,17 +10,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, ChevronDown, ChevronUp, Instagram, Twitter } from 'lucide-react-native';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { Dimensions, Linking, Pressable, StyleSheet, View } from 'react-native';
-import Animated, {
-    Extrapolation,
-    interpolate,
-    useAnimatedScrollHandler,
-    useAnimatedStyle,
-    useSharedValue
-} from 'react-native-reanimated';
+import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const HERO_HEIGHT = 450;
 
 export default function PersonDetailsScreen() {
@@ -32,23 +24,6 @@ export default function PersonDetailsScreen() {
     const [person, setPerson] = useState<TMDBPerson | null>(null);
     const [loading, setLoading] = useState(true);
     const [bioExpanded, setBioExpanded] = useState(false);
-
-    const scrollY = useSharedValue(0);
-
-    const onScroll = useAnimatedScrollHandler({
-        onScroll: (event) => {
-            scrollY.value = event.contentOffset.y;
-        },
-    });
-
-    const backdropStyle = useAnimatedStyle(() => {
-        return {
-            transform: [
-                { translateY: interpolate(scrollY.value, [0, HERO_HEIGHT], [0, -HERO_HEIGHT * 0.4], Extrapolation.CLAMP) },
-                { scale: interpolate(scrollY.value, [-100, 0], [1.2, 1], Extrapolation.CLAMP) }
-            ],
-        };
-    });
 
     useEffect(() => {
         if (id) {
@@ -78,16 +53,6 @@ export default function PersonDetailsScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* Parallax Backdrop */}
-            <Animated.View style={[styles.parallaxLayer, backdropStyle]} pointerEvents="none">
-                <ExpoImage source={{ uri: person.profile || '' }} style={styles.heroImage} contentFit="cover" />
-                <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.3)', theme.colors.background]}
-                    locations={[0, 0.5, 1]}
-                    style={styles.heroGradient}
-                />
-            </Animated.View>
-
             {/* Floating Back Button */}
             <View style={[styles.backButtonOverlay, { top: insets.top + 8 }]}>
                 <Pressable
@@ -98,29 +63,29 @@ export default function PersonDetailsScreen() {
                 </Pressable>
             </View>
 
-            <Animated.ScrollView
-                onScroll={onScroll}
-                scrollEventThrottle={16}
+            <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 100 }}
                 style={{ zIndex: 1 }}
             >
-                {/* Hero Title Area */}
-                <View style={{ height: HERO_HEIGHT, justifyContent: 'flex-end', paddingBottom: 24, paddingHorizontal: 20 }}>
-                    <Typography variant="display-large" weight="black" rounded style={{ color: 'white', fontSize: 42, lineHeight: 48 }}>
-                        {person.name}
-                    </Typography>
-                    <Typography variant="headline-small" weight="medium" style={{ color: 'white', opacity: 0.8, marginTop: 4 }}>
-                        {person.known_for_department}
-                    </Typography>
-                </View>
+                {/* Hero */}
+                <View style={styles.heroSection}>
+                    <ExpoImage source={{ uri: person.profile || '' }} style={styles.heroImage} contentFit="cover" />
+                    <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.3)', theme.colors.background]}
+                        locations={[0, 0.5, 1]}
+                        style={styles.heroGradient}
+                    />
 
-                {/* Gradient Fade for Body Start */}
-                <LinearGradient
-                    colors={['transparent', theme.colors.background]}
-                    style={{ height: 100, marginTop: -100 }}
-                    pointerEvents="none"
-                />
+                    <View style={styles.heroTitleArea}>
+                        <Typography variant="display-large" weight="black" rounded style={{ color: 'white', fontSize: 42, lineHeight: 48 }}>
+                            {person.name}
+                        </Typography>
+                        <Typography variant="headline-small" weight="medium" style={{ color: 'white', opacity: 0.8, marginTop: 4 }}>
+                            {person.known_for_department}
+                        </Typography>
+                    </View>
+                </View>
 
                 {/* Body Content */}
                 <View style={[styles.body, { backgroundColor: theme.colors.background }]}>
@@ -220,7 +185,7 @@ export default function PersonDetailsScreen() {
                     )}
 
                 </View>
-            </Animated.ScrollView>
+            </ScrollView>
         </View>
     );
 }
@@ -241,19 +206,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    parallaxLayer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
+    heroSection: {
+        position: 'relative',
         height: HERO_HEIGHT,
-        width: SCREEN_WIDTH,
-        zIndex: 0,
+    },
+    heroTitleArea: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        paddingBottom: 24,
+        paddingHorizontal: 20,
+        zIndex: 2,
     },
     heroImage: {
-        width: '100%',
-        height: '100%',
-        resizeMode: 'cover',
+        ...StyleSheet.absoluteFillObject,
     },
     heroGradient: {
         ...StyleSheet.absoluteFillObject,

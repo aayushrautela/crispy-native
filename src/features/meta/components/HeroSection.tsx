@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Sparkles, Star } from 'lucide-react-native';
 import React, { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { type SharedValue } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import { MetaActionRow } from './MetaActionRow';
 import { SplitHeroLayout } from './SplitHeroLayout';
 
@@ -21,7 +21,6 @@ const BACKDROP_HEIGHT = 420;
 interface HeroSectionProps {
     meta: any;
     enriched: Partial<TMDBMeta>;
-    colors: any;
     scrollY: SharedValue<number>;
     onWatchPress: () => void;
     onAiInsightsPress: () => void;
@@ -72,25 +71,34 @@ const HeroBackdrop = memo(function HeroBackdrop({
  * SUB-COMPONENT: HeroMetadata
  */
 const HeroMetadata = memo(function HeroMetadata({ enriched, alignment = 'center' }: { enriched: Partial<TMDBMeta>, meta?: any, alignment?: 'center' | 'flex-start' }) {
+    const { theme } = useTheme();
+
     return (
-        <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}> 
-            {enriched.rating && (
-                <View style={styles.metaItem}>
-                    <Star size={14} color="#FFD700" fill="#FFD700" />
-                    <Typography variant="label" weight="black" style={{ color: 'white', marginLeft: 4 }}>
-                        {Number(enriched.rating).toFixed(1)}
-                    </Typography>
-                </View>
+        <View style={{ alignItems: alignment === 'center' ? 'center' : 'flex-start', gap: 8 }}>
+            {enriched.genres && enriched.genres.length > 0 && (
+                <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>
+                    {enriched.genres.join(' • ')}
+                </Typography>
             )}
-            {enriched.maturityRating && (
-                <View style={styles.metaBadge}>
-                    <Typography variant="label" weight="black" style={{ color: 'white', fontSize: 10 }}>
-                        {enriched.maturityRating}
-                    </Typography>
-                </View>
-            )}
-            {enriched.year && <Typography variant="label" style={styles.metaText}>{enriched.year}</Typography>}
-            {enriched.runtime && <Typography variant="label" style={styles.metaText}>{enriched.runtime}</Typography>}
+            <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}> 
+                {enriched.rating && (
+                    <View style={styles.metaItem}>
+                        <Star size={14} color="#FFD700" fill="#FFD700" />
+                        <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, marginLeft: 4 }}>
+                            {Number(enriched.rating).toFixed(1)}
+                        </Typography>
+                    </View>
+                )}
+                {enriched.maturityRating && (
+                    <View style={[styles.metaBadge, { borderColor: theme.colors.outlineVariant || theme.colors.outline }]}>
+                        <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, fontSize: 10 }}>
+                            {enriched.maturityRating}
+                        </Typography>
+                    </View>
+                )}
+                {enriched.year && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.year}</Typography>}
+                {enriched.runtime && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.runtime}</Typography>}
+            </View>
         </View>
     );
 });
@@ -199,12 +207,22 @@ const HeroWatchButton = memo(function HeroWatchButton({ onPress, isLoading, colo
  * SUB-COMPONENT: HeroIdentity
  */
 const HeroIdentity = memo(function HeroIdentity({ enriched, meta, alignment = 'center' }: any) {
+    const { theme } = useTheme();
+
     return (
         <>
             {enriched.logo ? (
                 <ExpoImage source={{ uri: enriched.logo }} style={[styles.heroLogo, alignment === 'flex-start' && { alignSelf: 'flex-start' }]} contentFit="contain" />
             ) : (
-                <Typography variant="h1" weight="black" style={[styles.heroTitle, alignment === 'flex-start' && { textAlign: 'left', fontSize: 36, lineHeight: 44 }]}>
+                <Typography
+                    variant="h1"
+                    weight="black"
+                    style={[
+                        styles.heroTitle,
+                        { color: theme.colors.onSurface },
+                        alignment === 'flex-start' && { textAlign: 'left', fontSize: 36, lineHeight: 44 },
+                    ]}
+                >
                     {(enriched.title || meta?.name)?.toUpperCase()}
                 </Typography>
             )}
@@ -216,6 +234,7 @@ const HeroIdentity = memo(function HeroIdentity({ enriched, meta, alignment = 'c
  * SUB-COMPONENT: HeroDescription
  */
 const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpanded, onToggle, alignment = 'center' }: any) {
+    const { theme } = useTheme();
     const description = enriched.description || meta?.description || '';
     const [layoutWidth, setLayoutWidth] = React.useState(0);
     const [collapsedText, setCollapsedText] = React.useState<string | null>(null);
@@ -234,7 +253,7 @@ const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpand
     const handleMeasureText = React.useCallback((e: any) => {
         if (collapsedText !== null) return;
 
-        const lines = e?.nativeEvent?.lines as Array<{ text: string }> | undefined;
+        const lines = e?.nativeEvent?.lines as { text: string }[] | undefined;
         if (!lines || lines.length <= 3) {
             setCollapsedText(description);
             return;
@@ -264,6 +283,7 @@ const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpand
                     variant="body"
                     style={[
                         styles.descriptionText,
+                        { color: theme.colors.onSurfaceVariant },
                         styles.descriptionMeasureText,
                         alignment === 'flex-start' && { textAlign: 'left' },
                     ]}
@@ -276,7 +296,7 @@ const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpand
                 variant="body"
                 numberOfLines={isExpanded ? undefined : 3}
                 ellipsizeMode={isManualCollapsed ? 'clip' : 'tail'}
-                style={[styles.descriptionText, alignment === 'flex-start' && { textAlign: 'left' }]}
+                style={[styles.descriptionText, { color: theme.colors.onSurfaceVariant }, alignment === 'flex-start' && { textAlign: 'left' }]}
             >
                 {displayText}
             </Typography>
@@ -288,7 +308,7 @@ const HeroDescription = memo(function HeroDescription({ enriched, meta, isExpand
  * MAIN COMPONENT: HeroSection
  */
 export const HeroSection = memo(function HeroSection({
-    meta, enriched, colors, scrollY, onWatchPress, onAiInsightsPress, isAiLoading, isMuted = true,
+    meta, enriched, scrollY, onWatchPress, onAiInsightsPress, isAiLoading, isMuted = true,
     isAuthenticated, isListed, isCollected, isWatched, isSeries, userRating,
     onWatchlistToggle, onCollectionToggle, onWatchedToggle, onRatePress,
     watchState
@@ -299,8 +319,8 @@ export const HeroSection = memo(function HeroSection({
     const {
         isDescriptionExpanded, setIsDescriptionExpanded, trailerKey, showTrailer, revealTrailer,
         isPlaying, isLoading, watchButtonLabel, watchButtonIcon, watchButtonColor, watchButtonTextColor,
-        watchButtonSubtext, pillColor, toggleTrailer, palette
-    } = useHeroState({ meta, enriched, colors, scrollY, heroHeight: HERO_HEIGHT, background: theme.colors.background, watchState });
+        watchButtonSubtext, pillColor, toggleTrailer
+    } = useHeroState({ meta, enriched, scrollY, heroHeight: HERO_HEIGHT, watchState });
 
     const backdropUrl = enriched.backdrop || meta?.background || meta?.poster;
     const isSplitLayout = isTablet && isLandscape;
@@ -308,7 +328,7 @@ export const HeroSection = memo(function HeroSection({
     if (isSplitLayout) {
         return (
             <SplitHeroLayout
-                backgroundColor={palette.surface}
+                backgroundColor={theme.colors.background}
                 leftNode={
                     <>
                         <HeroBackdrop
@@ -322,8 +342,8 @@ export const HeroSection = memo(function HeroSection({
                                 onPress={toggleTrailer}
                                 disabled={!trailerKey}
                             >
-                                <Play size={14} color="white" fill={showTrailer ? "white" : "transparent"} />
-                                <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>
+                                <Play size={14} color={theme.colors.onSurface} fill={showTrailer ? theme.colors.onSurface : "transparent"} />
+                                <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface, marginLeft: 4 }}>
                                     {showTrailer ? 'Pause' : 'Trailer'}
                                 </Typography>
                             </Pressable>
@@ -364,7 +384,6 @@ export const HeroSection = memo(function HeroSection({
                                 onCollectionToggle={onCollectionToggle ?? (() => {})}
                                 onWatchedToggle={onWatchedToggle ?? (() => {})}
                                 onRatePress={onRatePress ?? (() => {})}
-                                palette={palette}
                                 style={{ marginTop: 24 }}
                             />
                         </View>
@@ -375,16 +394,16 @@ export const HeroSection = memo(function HeroSection({
     }
 
     return (
-        <View style={[styles.container, { width }]}>
+        <View style={[styles.container, { width }]}> 
             <HeroBackdrop
                 backdropUrl={backdropUrl} trailerKey={trailerKey} showTrailer={showTrailer}
                 isMuted={isMuted} isPlaying={isPlaying} revealTrailer={revealTrailer} width={width}
-                backgroundColor={palette.surface}
+                backgroundColor={theme.colors.background}
             />
 
             <View style={{ minHeight: HERO_HEIGHT, paddingTop: 350 }}>
                 <LinearGradient
-                    colors={[palette.surface + '00', palette.surface, palette.surface]}
+                    colors={[theme.colors.background + '00', theme.colors.background, theme.colors.background]}
                     locations={[0, 0.4, 1]}
                     style={styles.fadeOverlay}
                     pointerEvents="none"
@@ -397,8 +416,8 @@ export const HeroSection = memo(function HeroSection({
                         onPress={toggleTrailer}
                         disabled={!trailerKey}
                     >
-                        <Play size={14} color="white" fill={showTrailer ? "white" : "transparent"} />
-                        <Typography variant="label" weight="bold" style={{ color: 'white', marginLeft: 4 }}>
+                        <Play size={14} color={theme.colors.onSurface} fill={showTrailer ? theme.colors.onSurface : "transparent"} />
+                        <Typography variant="label" weight="bold" style={{ color: theme.colors.onSurface, marginLeft: 4 }}>
                             {showTrailer ? 'Pause' : 'Trailer'}
                         </Typography>
                     </Pressable>

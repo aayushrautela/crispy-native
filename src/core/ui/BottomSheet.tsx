@@ -11,7 +11,6 @@ import { BackHandler, ViewStyle, View, TextStyle, FlatListProps } from 'react-na
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useTheme } from '@/src/core/ThemeContext';
 
 export interface BottomSheetProps {
@@ -24,6 +23,12 @@ export interface BottomSheetProps {
   maxHeight?: number;
   onDismiss?: () => void;
   onChange?: (index: number) => void;
+  /**
+   * Content padding applied to the sheet body (not the title header).
+   * Defaults match the app's existing bottom sheet spacing.
+   */
+  contentPaddingHorizontal?: number;
+  contentPaddingBottom?: number;
   /**
    * Props for rendering a FlatList inside the bottom sheet.
    * If provided, this takes precedence over `children` and `scrollable`.
@@ -48,20 +53,22 @@ CustomBackdrop.displayName = 'CustomBackdrop';
 
 export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
   (
-    {
-      title,
-      children,
-      snapPoints,
-      index = -1,
-      scrollable = false,
-      enableDynamicSizing = true,
-      maxHeight,
-      onDismiss,
-      onChange,
-      flatListProps,
-    },
-    ref
-  ) => {
+      {
+        title,
+        children,
+        snapPoints,
+        index = -1,
+        scrollable = false,
+        enableDynamicSizing = true,
+        maxHeight,
+        onDismiss,
+        onChange,
+        contentPaddingHorizontal,
+        contentPaddingBottom,
+        flatListProps,
+      },
+      ref
+    ) => {
     // Internal ref to access modal methods if the parent doesn't provide one,
     // and for BackHandler support.
     const internalRef = useRef<BottomSheetModal>(null);
@@ -69,7 +76,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
 
     // Sync external ref with internal ref using a callback ref
     const handleRef = useCallback((node: BottomSheetModal | null) => {
-      console.log('[CustomBottomSheet] handleRef', !!node);
       internalRef.current = node;
       if (typeof ref === 'function') {
         ref(node);
@@ -88,21 +94,16 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       return ['50%'];
     }, [snapPoints, enableDynamicSizing]);
 
-    console.log('[CustomBottomSheet] render', { title, index, snapPoints: effectiveSnapPoints });
-
     // Track visibility for BackHandler
     const handleSheetChanges = useCallback((idx: number) => {
-      console.log('[CustomBottomSheet] handleSheetChanges', idx);
       isVisible.current = idx >= 0;
       onChange?.(idx);
     }, [onChange]);
 
     // Handle Hardware Back Press
     React.useEffect(() => {
-      console.log('[CustomBottomSheet] mounting BackHandler');
       const backAction = () => {
         if (isVisible.current && internalRef.current) {
-          console.log('[CustomBottomSheet] backAction: dismissing sheet');
           internalRef.current.dismiss();
           return true; // Prevent default behavior (exit app/go back)
         }
@@ -115,7 +116,6 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       );
 
       return () => {
-        console.log('[CustomBottomSheet] unmounting BackHandler');
         backHandler.remove();
       };
     }, []);
@@ -140,7 +140,8 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     }), [theme.colors.onSurfaceVariant]);
 
     // Content Styling
-    const paddingBottom = Math.max(bottom, 20) + 32;
+    const resolvedPaddingHorizontal = contentPaddingHorizontal ?? 24;
+    const resolvedPaddingBottom = contentPaddingBottom ?? (Math.max(bottom, 20) + 32);
     
     const headerStyle = useMemo<ViewStyle>(() => ({
       paddingHorizontal: 24,
@@ -164,7 +165,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
           <BottomSheetFlatList
             {...flatListProps}
             contentContainerStyle={[
-              { paddingBottom },
+              { paddingBottom: resolvedPaddingBottom },
               flatListProps.contentContainerStyle,
             ]}
           />
@@ -175,7 +176,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       // We use a regular View instead of BottomSheetView to avoid gesture conflicts with nested lists.
       if (!scrollable && enableDynamicSizing === false) {
         return (
-          <View style={[{ paddingBottom, paddingHorizontal: 24, flex: 1 }]}>
+          <View style={[{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal, flex: 1 }]}>
             {children}
           </View>
         );
@@ -184,7 +185,7 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       if (scrollable) {
         return (
           <BottomSheetScrollView
-            contentContainerStyle={{ paddingBottom, paddingHorizontal: 24 }}
+            contentContainerStyle={{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal }}
           >
             {children}
           </BottomSheetScrollView>
@@ -192,14 +193,13 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       }
 
       return (
-        <BottomSheetView style={[{ paddingBottom, paddingHorizontal: 24 }, !enableDynamicSizing && { flex: 1 }]}>
+        <BottomSheetView style={[{ paddingBottom: resolvedPaddingBottom, paddingHorizontal: resolvedPaddingHorizontal }, !enableDynamicSizing && { flex: 1 }]}>
           {children}
         </BottomSheetView>
       );
     };
 
     const handleDismiss = useCallback(() => {
-      console.log('[CustomBottomSheet] onDismiss');
       onDismiss?.();
     }, [onDismiss]);
 

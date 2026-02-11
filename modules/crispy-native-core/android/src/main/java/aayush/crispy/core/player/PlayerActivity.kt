@@ -20,6 +20,7 @@ import android.util.Rational
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -62,10 +63,6 @@ class PlayerActivity : ReactActivity() {
     private const val MIN_ASPECT = 1.0 / MAX_ASPECT
     private const val SURFACE_ATTACH_RETRY_MS = 200L
     private const val MAX_SURFACE_ATTACH_RETRIES = 15
-    private const val JS_EMIT_RETRY_MS = 250L
-    private const val MAX_PENDING_JS_EVENTS = 96
-    private const val PENDING_JS_EVENT_TTL_MS = 12_000L
-    private const val REACT_CONTEXT_WARN_THROTTLE_MS = 2_000L
 
     private var activeRef: WeakReference<PlayerActivity>? = null
     fun getActive(): PlayerActivity? = activeRef?.get()
@@ -82,6 +79,8 @@ class PlayerActivity : ReactActivity() {
   private var artworkUrl: String? = null
 
   private var surfaceView: SurfaceView? = null
+  private var subtitleSurfaceView: SurfaceView? = null
+  private var reactRootView: View? = null
   private var containerW: Int = 0
   private var containerH: Int = 0
 
@@ -97,42 +96,39 @@ class PlayerActivity : ReactActivity() {
 
   private var exoFallbackToVlcAttempted: Boolean = false
 
-  private var pendingTracksEmit: Boolean = false
-  private var cachedAudioTracks: List<Map<String, Any>> = emptyList()
-  private var cachedSubtitleTracks: List<Map<String, Any>> = emptyList()
+  private lateinit var reactEmitter: PlayerReactEventEmitter
+  private lateinit var nativeEventEmitter: PlayerNativePlayerEventEmitter
+  private lateinit var surfaceLayer: PlayerSurfaceLayerController
+  private val surfaceResizer = PlayerSurfaceResizer(TAG)
+  private val pipParamsHelper = PlayerPipParamsHelper(MAX_ASPECT, MIN_ASPECT)
 
   private var lastProgressEmitMs: Long = 0L
 
   private var wasInPip: Boolean = false
   private var activityStopped: Boolean = false
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val warnLog = PlayerThrottledLogger(TAG)
+
+  private inline fun bestEffort(step: String, crossinline block: () -> Unit) {
+    try {
+      block()
+    } catch (e: Exception) {
+      warnLog.w(step, "Best-effort step failed step=$step engine=$engine session=$sessionId", e)
+    }
+  }
 
   private var surfaceAttachRetryCount: Int = 0
   private var surfaceAttachRetryScheduled: Boolean = false
   private var surfaceAttachRetryReason: String = ""
+  private var awaitingExitPipRelayout: Boolean = false
+  private var exitPipContainerW: Int = 0
+  private var exitPipContainerH: Int = 0
+  private var lastAppliedVlcSurfaceW: Int = -1
+  private var lastAppliedVlcSurfaceH: Int = -1
   private val surfaceAttachRetryRunnable = Runnable {
     surfaceAttachRetryScheduled = false
     surfaceAttachRetryCount += 1
     ensureSurfaceAttached("retry:$surfaceAttachRetryReason", resetRetries = false)
-  }
-
-  private data class PendingJsEvent(
-    val eventName: String,
-    val payload: Any?,
-    val debugName: String,
-    val enqueuedAtMs: Long
-  )
-
-  private val pendingJsEvents: ArrayDeque<PendingJsEvent> = ArrayDeque()
-  private var jsEmitRetryScheduled: Boolean = false
-  private var lastReactContextWarnAtMs: Long = 0L
-  private val jsEmitRetryRunnable = Runnable {
-    jsEmitRetryScheduled = false
-    if (isFinishing || isDestroyedCompat()) return@Runnable
-    flushQueuedJsEventsOnUiThread()
-    if (pendingJsEvents.isNotEmpty()) {
-      scheduleJsEmitRetry()
-    }
   }
 
   override fun getMainComponentName(): String = "PlayerOverlayRoot"
@@ -163,7 +159,9 @@ class PlayerActivity : ReactActivity() {
     super.onCreate(savedInstanceState)
 
     setupImmersiveMode()
-    installTextureBehindReact()
+    reactEmitter = PlayerReactEventEmitter(this, TAG, mainHandler)
+    nativeEventEmitter = PlayerNativePlayerEventEmitter(TAG, reactEmitter, { sessionId }, { engine })
+    installSurfaceLayers()
     bindPlaybackService()
     updatePipParams()
   }
@@ -221,7 +219,7 @@ class PlayerActivity : ReactActivity() {
         @Suppress("DEPRECATION")
         intent.getSerializableExtra(EXTRA_HEADERS)
       }
-    } catch (_: Throwable) {
+    } catch (_: Exception) {
       null
     }
 
@@ -235,79 +233,150 @@ class PlayerActivity : ReactActivity() {
     return out
   }
 
-  private fun installTextureBehindReact() {
-    val content = findViewById<ViewGroup>(android.R.id.content) ?: return
+  private fun installSurfaceLayers() {
+    surfaceLayer = PlayerSurfaceLayerController(
+      this,
+      object : PlayerSurfaceLayerController.Callbacks {
+        override fun onContainerLayoutChanged(newW: Int, newH: Int, oldW: Int, oldH: Int) {
+          val prevW = containerW
+          val prevH = containerH
+          containerW = newW
+          containerH = newH
 
-    // Ensure letterboxing area is true black (not theme default gray).
-    try {
-      content.setBackgroundColor(Color.BLACK)
-    } catch (_: Throwable) {
-      // ignore
-    }
+          emitVlcDebugEvent(
+            "containerLayoutChanged",
+            mapOf(
+              "oldContainerWidth" to prevW,
+              "oldContainerHeight" to prevH,
+              "newContainerWidth" to newW,
+              "newContainerHeight" to newH
+            )
+          )
 
-    val reactRoot = content.getChildAt(0)
-    try {
-      reactRoot?.setBackgroundColor(Color.TRANSPARENT)
-    } catch (_: Throwable) {
-      // ignore
-    }
+          applyResizeTransform()
+          updatePipParams()
 
-    val sv = SurfaceView(this)
-    sv.setZOrderOnTop(false)
-    sv.setZOrderMediaOverlay(false)
-    try {
-      sv.holder.setFormat(PixelFormat.OPAQUE)
-    } catch (_: Throwable) {
-      // ignore
-    }
-    sv.layoutParams = FrameLayout.LayoutParams(
-      ViewGroup.LayoutParams.MATCH_PARENT,
-      ViewGroup.LayoutParams.MATCH_PARENT,
-      android.view.Gravity.CENTER
+          if (awaitingExitPipRelayout && !isInPictureInPictureMode) {
+            if (newW != exitPipContainerW || newH != exitPipContainerH) {
+              awaitingExitPipRelayout = false
+              ensureSurfaceAttached("exitPiP-layoutChanged")
+            }
+          }
+        }
+
+        override fun onVideoSurfaceCreated() {
+          ensureSurfaceAttached("surfaceCreated")
+          updatePipParams()
+          emitVlcDebugEvent("surfaceCreated")
+        }
+
+        override fun onVideoSurfaceChanged(format: Int, width: Int, height: Int) {
+          val content = findViewById<ViewGroup>(android.R.id.content)
+          if (content != null) {
+            val prevW = containerW
+            val prevH = containerH
+            containerW = content.width
+            containerH = content.height
+            if (containerW != prevW || containerH != prevH) {
+              applyResizeTransform()
+            }
+          }
+
+          emitVlcDebugEvent(
+            "surfaceChanged",
+            mapOf(
+              "surfaceChangedWidth" to width,
+              "surfaceChangedHeight" to height,
+              "surfaceChangedFormat" to format
+            )
+          )
+
+          if (width <= 0 || height <= 0) {
+            scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
+            emitVlcDebugEvent("surfaceChanged-invalid-size")
+            return
+          }
+
+          ensureSurfaceAttached("surfaceChanged")
+          updatePipParams()
+        }
+
+        override fun onVideoSurfaceDestroyed() {
+          cancelSurfaceAttachRetry()
+          detachSurface()
+          emitVlcDebugEvent("surfaceDestroyed")
+        }
+
+        override fun onSubtitleSurfaceCreated() {
+          ensureSurfaceAttached("subtitleSurfaceCreated")
+          emitVlcDebugEvent("subtitleSurfaceCreated")
+        }
+
+        override fun onSubtitleSurfaceChanged(format: Int, width: Int, height: Int) {
+          val content = findViewById<ViewGroup>(android.R.id.content)
+          if (content != null) {
+            val prevW = containerW
+            val prevH = containerH
+            containerW = content.width
+            containerH = content.height
+            if (containerW != prevW || containerH != prevH) {
+              applyResizeTransform()
+            }
+          }
+
+          emitVlcDebugEvent(
+            "subtitleSurfaceChanged",
+            mapOf(
+              "subtitleSurfaceChangedWidth" to width,
+              "subtitleSurfaceChangedHeight" to height,
+              "subtitleSurfaceChangedFormat" to format
+            )
+          )
+
+          if (width <= 0 || height <= 0) {
+            scheduleSurfaceAttachRetry("subtitleSurfaceChanged-invalid-size")
+            emitVlcDebugEvent("subtitleSurfaceChanged-invalid-size")
+            return
+          }
+
+          ensureSurfaceAttached("subtitleSurfaceChanged")
+          updatePipParams()
+        }
+
+        override fun onSubtitleSurfaceDestroyed() {
+          cancelSurfaceAttachRetry()
+          detachSurface()
+          emitVlcDebugEvent("subtitleSurfaceDestroyed")
+        }
+      }
     )
-    sv.holder.addCallback(surfaceCallback)
-    surfaceView = sv
-    content.addView(sv, 0)
-    
-    // Capture initial container size
-    content.post {
-        containerW = content.width
-        containerH = content.height
-        applyResizeTransform()
+
+    surfaceLayer.install()
+    surfaceView = surfaceLayer.videoSurfaceView
+    subtitleSurfaceView = surfaceLayer.subtitleSurfaceView
+    reactRootView = surfaceLayer.reactRootView
+
+    // Capture initial container size.
+    val content = findViewById<ViewGroup>(android.R.id.content)
+    content?.post {
+      containerW = content.width
+      containerH = content.height
+      applyResizeTransform()
     }
   }
 
-  private val surfaceCallback = object : SurfaceHolder.Callback {
-    override fun surfaceCreated(holder: SurfaceHolder) {
-      ensureSurfaceAttached("surfaceCreated")
-      updatePipParams()
-    }
+  private fun setReactOverlayVisible(visible: Boolean, reason: String) {
+    if (!::surfaceLayer.isInitialized) return
+    val changed = surfaceLayer.setReactOverlayVisible(visible)
+    if (!changed) return
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-      // Surface size changed. If this was triggered by our own resize, we're good.
-      // But if the container changed (rotation?), we need to update container dims.
-      val content = findViewById<ViewGroup>(android.R.id.content)
-      if (content != null) {
-          containerW = content.width
-          containerH = content.height
-      }
-      
-      if (engine == ENGINE_VLC) {
-        vlcService?.setSurfaceSize(width, height)
-      }
-      if (width <= 0 || height <= 0) {
-        scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
-        return
-      }
-      // Note: We don't call applyResizeTransform() here to avoid loops.
-      ensureSurfaceAttached("surfaceChanged")
-      updatePipParams()
-    }
-
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-      cancelSurfaceAttachRetry()
-      detachSurface()
-    }
+    emitVlcDebugEvent(
+      "setReactOverlayVisible",
+      mapOf(
+        "overlayVisible" to visible,
+        "overlayReason" to reason
+      )
+    )
   }
 
   private fun bindPlaybackService() {
@@ -321,13 +390,13 @@ class PlayerActivity : ReactActivity() {
 
     try {
       startService(serviceIntent)
-    } catch (t: Throwable) {
+    } catch (t: Exception) {
       Log.w(TAG, "startService failed", t)
     }
 
     bound = try {
       bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
-    } catch (t: Throwable) {
+    } catch (t: Exception) {
       Log.e(TAG, "bindService failed", t)
       false
     }
@@ -340,9 +409,12 @@ class PlayerActivity : ReactActivity() {
         vlcService = binder.getService()
         vlcService?.registerClient()
         vlcService?.addListener(vlcListener)
+        lastAppliedVlcSurfaceW = -1
+        lastAppliedVlcSurfaceH = -1
+        emitVlcDebugEvent("vlcServiceConnected")
+        ensureSurfaceAttached("vlcServiceConnected")
 
         applyPendingLoadIfReady()
-        ensureSurfaceAttached("vlcServiceConnected")
         updatePipParams()
         return
       }
@@ -358,19 +430,34 @@ class PlayerActivity : ReactActivity() {
     }
 
     override fun onServiceDisconnected(name: android.content.ComponentName) {
+      emitVlcDebugEvent("serviceDisconnected")
       vlcService = null
       exoService = null
+      lastAppliedVlcSurfaceW = -1
+      lastAppliedVlcSurfaceH = -1
     }
+  }
+
+  private fun updateVideoSize(width: Int, height: Int) {
+    if (width <= 0 || height <= 0) return
+    if (videoW == width && videoH == height) return
+
+    videoW = width
+    videoH = height
+    emitVlcDebugEvent(
+      "updateVideoSize",
+      mapOf(
+        "reportedVideoWidth" to width,
+        "reportedVideoHeight" to height
+      )
+    )
+    applyResizeTransform()
+    updatePipParams()
   }
 
   private val vlcListener = object : VlcEngine.Listener {
     override fun onLoad(duration: Double, width: Int, height: Int) {
-      if (width > 0 && height > 0) {
-        videoW = width
-        videoH = height
-        applyResizeTransform()
-        updatePipParams()
-      }
+      updateVideoSize(width, height)
 
       emitNativePlayerEvent(
         "load",
@@ -380,6 +467,10 @@ class PlayerActivity : ReactActivity() {
           "height" to height
         )
       )
+    }
+
+    override fun onVideoSizeChanged(width: Int, height: Int) {
+      updateVideoSize(width, height)
     }
 
     override fun onProgress(position: Double, duration: Double) {
@@ -447,12 +538,7 @@ class PlayerActivity : ReactActivity() {
 
   private val exoListener = object : ExoEngine.Listener {
     override fun onLoad(duration: Double, width: Int, height: Int) {
-      if (width > 0 && height > 0) {
-        videoW = width
-        videoH = height
-        applyResizeTransform()
-        updatePipParams()
-      }
+      updateVideoSize(width, height)
 
       emitNativePlayerEvent(
         "load",
@@ -575,30 +661,60 @@ class PlayerActivity : ReactActivity() {
   private fun attachSurfaceIfReady(reason: String): Boolean {
     val sv = surfaceView ?: return false
     val holder = sv.holder
+    val subtitleHolder = subtitleSurfaceView?.holder
     if (holder.isCreating) return false
+    if (subtitleHolder == null) return false
+    if (subtitleHolder.isCreating) return false
 
     if (engine == ENGINE_VLC) {
       val svc = vlcService ?: return false
       val surface = holder.surface
       if (surface == null || !surface.isValid) return false
 
+      val subtitleSurface = subtitleHolder.surface
+      if (subtitleSurface == null || !subtitleSurface.isValid) return false
+
       val frame = holder.surfaceFrame
-      val w = when {
-        frame.width() > 0 -> frame.width()
-        sv.width > 0 -> sv.width
-        else -> 1920
-      }
-      val h = when {
-        frame.height() > 0 -> frame.height()
-        sv.height > 0 -> sv.height
-        else -> 1080
-      }
+      val layoutParams = sv.layoutParams
+      val layoutW = layoutParams?.width ?: 0
+      val layoutH = layoutParams?.height ?: 0
+      val frameW = frame.width()
+      val frameH = frame.height()
+      val w = maxOf(layoutW, sv.width, frameW).takeIf { it > 0 } ?: 1920
+      val h = maxOf(layoutH, sv.height, frameH).takeIf { it > 0 } ?: 1080
 
       return try {
-        svc.attachSurface(surface, w, h)
+        svc.attachSurfaces(holder, subtitleHolder, w, h)
+        lastAppliedVlcSurfaceW = -1
+        lastAppliedVlcSurfaceH = -1
+        emitVlcDebugEvent(
+          "attachSurfacesIfReady:$reason",
+          mapOf(
+            "attachWidth" to w,
+            "attachHeight" to h,
+            "attachLayoutWidth" to layoutW,
+            "attachLayoutHeight" to layoutH,
+            "attachFrameWidth" to frameW,
+            "attachFrameHeight" to frameH,
+            "subtitleAttached" to true
+          )
+        )
         true
-      } catch (t: Throwable) {
-        Log.w(TAG, "Failed to attach VLC surface reason=$reason", t)
+      } catch (t: Exception) {
+        Log.w(TAG, "Failed to attach VLC surfaces reason=$reason", t)
+        emitVlcDebugEvent(
+          "attachSurfacesFailed:$reason",
+          mapOf(
+            "attachWidth" to w,
+            "attachHeight" to h,
+            "attachLayoutWidth" to layoutW,
+            "attachLayoutHeight" to layoutH,
+            "attachFrameWidth" to frameW,
+            "attachFrameHeight" to frameH,
+            "subtitleAttached" to true,
+            "error" to (t.message ?: "unknown")
+          )
+        )
         false
       }
     }
@@ -612,7 +728,7 @@ class PlayerActivity : ReactActivity() {
       player.clearVideoSurfaceView(sv)
       player.setVideoSurfaceView(sv)
       true
-    } catch (t: Throwable) {
+    } catch (t: Exception) {
       Log.w(TAG, "Failed to attach Exo surface view reason=$reason", t)
       false
     }
@@ -620,20 +736,18 @@ class PlayerActivity : ReactActivity() {
 
   private fun detachSurface() {
     if (engine == ENGINE_VLC) {
-      try {
+      bestEffort("vlcService.detachSurface") {
         vlcService?.detachSurface()
-      } catch (_: Throwable) {
-        // ignore
       }
+      lastAppliedVlcSurfaceW = -1
+      lastAppliedVlcSurfaceH = -1
       return
     }
 
     val sv = surfaceView ?: return
     val player = exoService?.getPlayer() ?: return
-    try {
+    bestEffort("exoPlayer.clearVideoSurfaceView") {
       player.clearVideoSurfaceView(sv)
-    } catch (_: Throwable) {
-      // ignore
     }
   }
 
@@ -645,14 +759,26 @@ class PlayerActivity : ReactActivity() {
 
     if (attachSurfaceIfReady(reason)) {
       cancelSurfaceAttachRetry()
+
+      val content = findViewById<ViewGroup>(android.R.id.content)
+      if (content != null) {
+        containerW = content.width
+        containerH = content.height
+      }
+      applyResizeTransform()
+      updatePipParams()
+
+      emitVlcDebugEvent("ensureSurfaceAttached:success", mapOf("attachReason" to reason))
       return
     }
 
     if (surfaceAttachRetryCount >= MAX_SURFACE_ATTACH_RETRIES) {
       Log.e(TAG, "Surface did not attach after retries; reason=$reason engine=$engine")
+      emitVlcDebugEvent("ensureSurfaceAttached:max-retries", mapOf("attachReason" to reason))
       return
     }
 
+    emitVlcDebugEvent("ensureSurfaceAttached:retry", mapOf("attachReason" to reason))
     scheduleSurfaceAttachRetry(reason)
   }
 
@@ -692,10 +818,18 @@ class PlayerActivity : ReactActivity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
       if (!isPlaying) return
       emit("onPipWillEnter", null)
+      setReactOverlayVisible(false, "onUserLeaveHint")
       try {
-        enterPictureInPictureMode(buildPipParams())
-      } catch (t: Throwable) {
+        val entered = enterPictureInPictureMode(buildPipParams())
+        if (entered) {
+          // Some devices are slow to call onPictureInPictureModeChanged; emit immediately so JS can react.
+          emit("onPipModeChanged", true)
+        } else {
+          setReactOverlayVisible(true, "enterPiP-returned-false")
+        }
+      } catch (t: Exception) {
         Log.w(TAG, "enterPiP failed", t)
+        setReactOverlayVisible(true, "enterPiP-exception")
       }
     }
   }
@@ -723,7 +857,20 @@ class PlayerActivity : ReactActivity() {
   override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode)
 
+    val previousContainerW = containerW
+    val previousContainerH = containerH
+
     emit("onPipModeChanged", isInPictureInPictureMode)
+
+    setReactOverlayVisible(!isInPictureInPictureMode, "onPictureInPictureModeChanged")
+
+    // Recompute transforms for the new window bounds (PiP window can be much smaller).
+    val content = findViewById<ViewGroup>(android.R.id.content)
+    if (content != null) {
+      containerW = content.width
+      containerH = content.height
+    }
+    applyResizeTransform()
 
     val was = wasInPip
     wasInPip = isInPictureInPictureMode
@@ -736,9 +883,24 @@ class PlayerActivity : ReactActivity() {
       return
     }
 
+    if (isInPictureInPictureMode) {
+      awaitingExitPipRelayout = false
+    }
+
     if (!isInPictureInPictureMode && was) {
       ensureSurfaceAttached("exitPiP")
-      surfaceView?.postDelayed({ ensureSurfaceAttached("exitPiP-post") }, 120L)
+
+      val containerChanged =
+        containerW > 0 && containerH > 0 &&
+          (containerW != previousContainerW || containerH != previousContainerH)
+
+      if (containerChanged) {
+        awaitingExitPipRelayout = false
+      } else {
+        awaitingExitPipRelayout = true
+        exitPipContainerW = containerW
+        exitPipContainerH = containerH
+      }
     }
   }
 
@@ -746,27 +908,29 @@ class PlayerActivity : ReactActivity() {
     stopPlaybackAndFinish()
   }
 
+  fun stopPlaybackAndFinishFromJs(reason: String?) {
+    Log.i(TAG, "stopPlaybackAndFinishFromJs reason=$reason engine=$engine")
+    stopPlaybackAndFinish()
+  }
+
   private fun stopPlaybackAndFinish() {
+    Log.i(TAG, "stopPlaybackAndFinish engine=$engine")
     // Stop playback directly via the bound service first (synchronous)
-    try {
+    bestEffort("stopPlaybackAndFinish.stopPlayback") {
       if (engine == ENGINE_VLC) {
         vlcService?.stopPlayback()
       } else {
         exoService?.stopPlayback()
       }
-    } catch (_: Throwable) {
-      // ignore
     }
     
     // Also send stop intent to the service as a backup
-    try {
+    bestEffort("stopPlaybackAndFinish.startService(ACTION_STOP)") {
       if (engine == ENGINE_VLC) {
         startService(Intent(this, VlcPlaybackService::class.java).setAction(VlcPlaybackService.ACTION_STOP))
       } else {
         startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
       }
-    } catch (_: Throwable) {
-      // ignore
     }
     finish()
   }
@@ -775,7 +939,28 @@ class PlayerActivity : ReactActivity() {
     // Let the background /player route clean up (e.g., destroyStream(sessionId)) once we close.
     emit("onNativePlayerClosed", sessionId)
 
-    try {
+    // If we are truly closing the player UI, ensure playback is stopped.
+    // (The service is started via startService(), so it can keep running after unbind unless stopped.)
+    if (isFinishing && !isInPictureInPictureMode) {
+      Log.i(TAG, "onDestroy(isFinishing) stopping playback (engine=$engine)")
+      bestEffort("onDestroy.stopPlayback") {
+        if (engine == ENGINE_VLC) {
+          vlcService?.stopPlayback()
+        } else {
+          exoService?.stopPlayback()
+        }
+      }
+
+      bestEffort("onDestroy.startService(ACTION_STOP)") {
+        if (engine == ENGINE_VLC) {
+          startService(Intent(this, VlcPlaybackService::class.java).setAction(VlcPlaybackService.ACTION_STOP))
+        } else {
+          startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
+        }
+      }
+    }
+
+    bestEffort("onDestroy.removeListener+unregister") {
       if (engine == ENGINE_VLC) {
         vlcService?.removeListener(vlcListener)
         vlcService?.unregisterClient()
@@ -783,32 +968,30 @@ class PlayerActivity : ReactActivity() {
         exoService?.removeListener(exoListener)
         exoService?.unregisterClient()
       }
-    } catch (_: Throwable) {
-      // ignore
     }
 
-    try {
-      detachSurface()
-    } catch (_: Throwable) {
-      // ignore
-    }
+    detachSurface()
 
     if (bound) {
-      try {
-        unbindService(connection)
-      } catch (_: Throwable) {
-        // ignore
-      }
+      bestEffort("onDestroy.unbindService") { unbindService(connection) }
       bound = false
     }
 
     vlcService = null
     exoService = null
     surfaceView = null
+    subtitleSurfaceView = null
+    reactRootView = null
+
+    if (::surfaceLayer.isInitialized) {
+      bestEffort("onDestroy.surfaceLayer.dispose") { surfaceLayer.dispose() }
+    }
 
     cancelSurfaceAttachRetry()
-    cancelJsEmitRetry()
-    pendingJsEvents.clear()
+
+    if (::reactEmitter.isInitialized) {
+      bestEffort("onDestroy.reactEmitter.destroy") { reactEmitter.destroy() }
+    }
 
     val active = activeRef?.get()
     if (active === this) {
@@ -827,13 +1010,15 @@ class PlayerActivity : ReactActivity() {
   }
 
   fun setResizeModeFromJs(mode: String?) {
+    Log.i(TAG, "setResizeModeFromJs engine=$engine mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} surface=${surfaceView?.width}x${surfaceView?.height}")
     resizeMode = mode
     applyResizeTransform()
     updatePipParams()
-    // Also apply resize mode to VLC engine for its internal aspect ratio handling
+    // Forward resize mode to VLC engine for its internal scaling.
     if (engine == ENGINE_VLC) {
       vlcService?.setResizeMode(mode)
     }
+    emitVlcDebugEvent("setResizeModeFromJs", mapOf("requestedMode" to (mode ?: "null")))
   }
 
   fun setAudioTrackFromJs(trackId: Int) {
@@ -861,142 +1046,172 @@ class PlayerActivity : ReactActivity() {
   fun setGpuModeFromJs(mode: String?) {}
 
   private fun buildPipParams(): PictureInPictureParams {
-    val builder = PictureInPictureParams.Builder()
-
-    val ratio = buildAspectRatio(videoW, videoH)
-    if (ratio != null) {
-      try {
-        builder.setAspectRatio(ratio)
-      } catch (_: Throwable) {
-        // ignore
-      }
-    }
-
-    val rect = computeSourceRectHint()
-    if (rect != null) {
-      try {
-        builder.setSourceRectHint(rect)
-      } catch (_: Throwable) {
-        // ignore
-      }
-    }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      try {
-        builder.setAutoEnterEnabled(isPlaying)
-      } catch (_: Throwable) {
-        // ignore
-      }
-      setSeamlessResizeEnabledCompat(builder, true)
-    }
-
-    return builder.build()
+    return pipParamsHelper.buildParams(surfaceView, videoW, videoH, isPlaying)
   }
 
   private fun updatePipParams() {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    if (isInPictureInPictureMode) return
-
-    try {
-      setPictureInPictureParams(buildPipParams())
-    } catch (_: Throwable) {
-      // ignore
-    }
+    pipParamsHelper.updateParams(this, surfaceView, videoW, videoH, isPlaying)
   }
 
   private fun applyResizeTransform() {
-    val sv = surfaceView ?: return
-    
-    // We resize the SurfaceView layout params directly.
-    
-    if (containerW <= 0 || containerH <= 0 || videoW <= 0 || videoH <= 0) {
-      // Not ready yet, keep full match_parent or previous state
-      return
+    val result = surfaceResizer.apply(
+      surfaceView,
+      subtitleSurfaceView,
+      containerW,
+      containerH,
+      videoW,
+      videoH,
+      resizeMode
+    )
+
+    if (result.status != PlayerSurfaceResizer.Status.SKIPPED_NOT_READY) {
+      syncVlcSurfaceSizeIfNeeded(result.targetW, result.targetH)
     }
-    
-    val mode = (resizeMode ?: "contain").lowercase()
-    
-    var targetW = containerW
-    var targetH = containerH
-    
-    if (mode == "stretch") {
-      targetW = containerW
-      targetH = containerH
-    } else {
-      val videoRatio = videoW.toFloat() / videoH.toFloat()
-      val containerRatio = containerW.toFloat() / containerH.toFloat()
-      
-      if (mode == "contain") {
-        if (containerRatio > videoRatio) {
-          // Container is wider -> fit height, adjust width
-          targetH = containerH
-          targetW = (containerH * videoRatio).toInt()
-        } else {
-          // Container is taller -> fit width, adjust height
-          targetW = containerW
-          targetH = (containerW / videoRatio).toInt()
-        }
-      } else if (mode == "cover") {
-         if (containerRatio > videoRatio) {
-            // Container is wider -> match width, exceed height
-            targetW = containerW
-            targetH = (containerW / videoRatio).toInt()
-        } else {
-            // Container is taller -> match height, exceed width
-            targetH = containerH
-            targetW = (containerH * videoRatio).toInt()
-        }
+
+    when (result.status) {
+      PlayerSurfaceResizer.Status.SKIPPED_NOT_READY -> {
+        emitVlcDebugEvent("applyResizeTransform:skipped-not-ready")
+      }
+
+      PlayerSurfaceResizer.Status.APPLIED -> {
+        emitVlcDebugEvent(
+          "applyResizeTransform:applied",
+          mapOf(
+            "targetWidth" to result.targetW,
+            "targetHeight" to result.targetH,
+            "videoRatio" to result.videoRatio,
+            "containerRatio" to result.containerRatio,
+            "changed" to true
+          )
+        )
+      }
+
+      PlayerSurfaceResizer.Status.NO_OP -> {
+        emitVlcDebugEvent(
+          "applyResizeTransform:no-op",
+          mapOf(
+            "targetWidth" to result.targetW,
+            "targetHeight" to result.targetH,
+            "videoRatio" to result.videoRatio,
+            "containerRatio" to result.containerRatio,
+            "changed" to false
+          )
+        )
       }
     }
-    
-    // Apply changes if needed
-    val params = sv.layoutParams as? FrameLayout.LayoutParams ?: FrameLayout.LayoutParams(targetW, targetH)
-    if (params.width != targetW || params.height != targetH) {
-        params.width = targetW
-        params.height = targetH
-        params.gravity = android.view.Gravity.CENTER
-        sv.layoutParams = params
-        // This will trigger surfaceChanged
+  }
+
+  private fun syncVlcSurfaceSizeIfNeeded(width: Int, height: Int) {
+    if (engine != ENGINE_VLC) return
+    if (width <= 0 || height <= 0) return
+    val svc = vlcService ?: return
+
+    if (lastAppliedVlcSurfaceW == width && lastAppliedVlcSurfaceH == height) {
+      return
     }
+
+    svc.setSurfaceSize(width, height)
+    lastAppliedVlcSurfaceW = width
+    lastAppliedVlcSurfaceH = height
+  }
+
+  private fun emitVlcDebugEvent(reason: String, extras: Map<String, Any> = emptyMap()) {
+    if (engine != ENGINE_VLC) return
+
+    val sv = surfaceView
+    val holder = sv?.holder
+    val surfaceFrame = holder?.surfaceFrame
+
+    val subtitleSv = subtitleSurfaceView
+    val subtitleHolder = subtitleSv?.holder
+    val subtitleSurfaceFrame = subtitleHolder?.surfaceFrame
+
+    val snapshot = HashMap<String, Any>()
+    snapshot["reason"] = reason
+    snapshot["resizeMode"] = (resizeMode ?: "contain").lowercase()
+    snapshot["containerWidth"] = containerW
+    snapshot["containerHeight"] = containerH
+    snapshot["inPipMode"] = isInPictureInPictureMode
+    snapshot["overlayVisible"] = (reactRootView?.visibility ?: View.VISIBLE) == View.VISIBLE
+    snapshot["videoWidth"] = videoW
+    snapshot["videoHeight"] = videoH
+    snapshot["surfaceViewWidth"] = sv?.width ?: 0
+    snapshot["surfaceViewHeight"] = sv?.height ?: 0
+    snapshot["holderFrameWidth"] = surfaceFrame?.width() ?: 0
+    snapshot["holderFrameHeight"] = surfaceFrame?.height() ?: 0
+    snapshot["subtitleSurfaceViewWidth"] = subtitleSv?.width ?: 0
+    snapshot["subtitleSurfaceViewHeight"] = subtitleSv?.height ?: 0
+    snapshot["subtitleHolderFrameWidth"] = subtitleSurfaceFrame?.width() ?: 0
+    snapshot["subtitleHolderFrameHeight"] = subtitleSurfaceFrame?.height() ?: 0
+    snapshot["surfaceValid"] = try {
+      holder?.surface?.isValid ?: false
+    } catch (_: Exception) {
+      false
+    }
+    snapshot["subtitleSurfaceValid"] = try {
+      subtitleHolder?.surface?.isValid ?: false
+    } catch (_: Exception) {
+      false
+    }
+    snapshot["isPlaying"] = isPlaying
+    snapshot["surfaceAttachRetryCount"] = surfaceAttachRetryCount
+
+    for ((key, value) in extras.entries) {
+      snapshot[key] = value
+    }
+
+    val serviceSnapshot = try {
+      vlcService?.getDebugSnapshot()
+    } catch (_: Exception) {
+      null
+    }
+    if (serviceSnapshot != null) {
+      snapshot["vlcEngine"] = serviceSnapshot
+    }
+
+    emitNativePlayerEvent("vlc-debug", mapOf("snapshot" to snapshot))
+
+    Log.i(
+      TAG,
+      "vlc-debug reason=$reason mode=${snapshot["resizeMode"]} container=${containerW}x${containerH} video=${videoW}x${videoH} view=${sv?.width ?: 0}x${sv?.height ?: 0} holder=${surfaceFrame?.width() ?: 0}x${surfaceFrame?.height() ?: 0}"
+    )
   }
 
   private fun maybeFallbackToVlcFromExo(exoError: String): Boolean {
     if (engine != ENGINE_EXO) return false
     if (exoFallbackToVlcAttempted) return false
 
-    val nextUrl = url
-    if (nextUrl.isNullOrBlank()) return false
+    if (url.isNullOrBlank()) return false
 
     exoFallbackToVlcAttempted = true
     Log.w(TAG, "Falling back to VLC (session=$sessionId) due to Exo error: $exoError")
 
+    // Prevent any pending surface attach retries from racing the engine switch.
+    cancelSurfaceAttachRetry()
+
     // Stop Exo playback best-effort.
-    try {
-      startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
-    } catch (_: Throwable) {
-      // ignore
+    var stoppedViaBinder = false
+    bestEffort("exoFallback.exoService.stopPlayback") {
+      val svc = exoService ?: return@bestEffort
+      svc.stopPlayback()
+      stoppedViaBinder = true
+    }
+    if (!stoppedViaBinder) {
+      bestEffort("exoFallback.startService(ACTION_STOP_EXO)") {
+        startService(Intent(this, ExoPlaybackService::class.java).setAction(ExoPlaybackService.ACTION_STOP))
+      }
     }
 
-    try {
+    bestEffort("exoFallback.exoService.removeListener+unregister") {
       exoService?.removeListener(exoListener)
       exoService?.unregisterClient()
-    } catch (_: Throwable) {
-      // ignore
     }
 
-    try {
-      // Detach Exo from the SurfaceView before switching engines.
-      detachSurface()
-    } catch (_: Throwable) {
-      // ignore
-    }
+    // Detach Exo from the SurfaceView before switching engines.
+    bestEffort("exoFallback.detachSurface") { detachSurface() }
 
     if (bound) {
-      try {
-        unbindService(connection)
-      } catch (_: Throwable) {
-        // ignore
-      }
+      bestEffort("exoFallback.unbindService") { unbindService(connection) }
       bound = false
     }
     exoService = null
@@ -1010,238 +1225,11 @@ class PlayerActivity : ReactActivity() {
     return true
   }
 
-  private fun computeSourceRectHint(): Rect? {
-    val sv = surfaceView ?: return null
-    if (sv.width <= 0 || sv.height <= 0) return null
-    
-    val out = Rect()
-    val ok = try {
-      sv.getGlobalVisibleRect(out)
-    } catch (_: Throwable) {
-      false
-    }
-    if (!ok) return null
-
-    // For SurfaceView resizing strategy, the View itself IS the content rect.
-    // So 'out' (the global rect of the view) should be correct for the PiP hint.
-    return out
-  }
-
-  private fun buildAspectRatio(width: Int, height: Int): Rational? {
-    if (width <= 0 || height <= 0) return null
-    val ratio = (width.toDouble() / height.toDouble()).coerceIn(MIN_ASPECT, MAX_ASPECT)
-    val denom = 1000
-    val num = (ratio * denom).roundToInt().coerceAtLeast(1)
-    return try {
-      Rational(num, denom)
-    } catch (_: Throwable) {
-      null
-    }
-  }
-
-  private fun setSeamlessResizeEnabledCompat(builder: PictureInPictureParams.Builder, enabled: Boolean) {
-    try {
-      val m = builder.javaClass.getMethod("setSeamlessResizeEnabled", Boolean::class.javaPrimitiveType)
-      m.invoke(builder, enabled)
-    } catch (_: Throwable) {
-      // ignore
-    }
-  }
-
-  private fun getReactContextUnsafe(): ReactContext? {
-    try {
-      // 1. Try ReactActivity's instance manager (most reliable)
-      val ctx = reactInstanceManager.currentReactContext
-      if (ctx != null) return ctx
-    } catch (_: Exception) {}
-
-    try {
-      // 2. Try Application if it is a ReactApplication
-      val app = application as? ReactApplication
-      val ctx = app?.reactNativeHost?.reactInstanceManager?.currentReactContext
-      if (ctx != null) return ctx
-    } catch (_: Exception) {}
-
-    // 3. Bridgeless fallback: try ReactHost#getCurrentReactContext via reflection.
-    val fromActivityHost = getReactContextFromReactHost(this)
-    if (fromActivityHost != null) return fromActivityHost
-
-    val fromAppHost = getReactContextFromReactHost(application)
-    if (fromAppHost != null) return fromAppHost
-
-    // 4. Fallback to the mounted React root view context.
-    val content = findViewById<ViewGroup>(android.R.id.content)
-    if (content != null) {
-      for (i in 0 until content.childCount) {
-        val child = content.getChildAt(i) ?: continue
-        val ctx = unwrapReactContext(child.context)
-        if (ctx != null) return ctx
-      }
-    }
-
-    return null
-  }
-
-  private fun getReactContextFromReactHost(hostOwner: Any?): ReactContext? {
-    if (hostOwner == null) return null
-    return try {
-      val getReactHost = hostOwner.javaClass.methods.firstOrNull {
-        it.name == "getReactHost" && it.parameterTypes.isEmpty()
-      } ?: return null
-
-      val reactHost = getReactHost.invoke(hostOwner) ?: return null
-      val getCurrentReactContext = reactHost.javaClass.methods.firstOrNull {
-        it.name == "getCurrentReactContext" && it.parameterTypes.isEmpty()
-      } ?: return null
-
-      getCurrentReactContext.invoke(reactHost) as? ReactContext
-    } catch (_: Throwable) {
-      null
-    }
-  }
-
-  private fun unwrapReactContext(context: Context?): ReactContext? {
-    var current = context
-    var guard = 0
-    while (current != null && guard < 12) {
-      if (current is ReactContext) return current
-      current = (current as? ContextWrapper)?.baseContext
-      guard += 1
-    }
-    return null
-  }
-
   private fun emit(eventName: String, payload: Any?) {
-    runOnUiThread {
-      emitOrQueueJsEventOnUiThread(eventName, payload, eventName)
-    }
+    reactEmitter.emit(eventName, payload)
   }
 
   private fun emitNativePlayerEvent(eventType: String, extras: Map<String, Any>) {
-    if (eventType == "tracks") {
-      @Suppress("UNCHECKED_CAST")
-      val audio = extras["audioTracks"] as? List<Map<String, Any>>
-      @Suppress("UNCHECKED_CAST")
-      val subs = extras["subtitleTracks"] as? List<Map<String, Any>>
-      cachedAudioTracks = audio ?: emptyList()
-      cachedSubtitleTracks = subs ?: emptyList()
-      pendingTracksEmit = true
-    }
-
-    val payload = HashMap<String, Any>()
-    payload["sessionId"] = sessionId
-    payload["engine"] = engine
-    payload["type"] = eventType
-    for ((k, v) in extras.entries) {
-      payload[k] = v
-    }
-
-    runOnUiThread {
-      if (pendingTracksEmit) {
-        val trackPayload = HashMap<String, Any>()
-        trackPayload["sessionId"] = sessionId
-        trackPayload["engine"] = engine
-        trackPayload["type"] = "tracks"
-        trackPayload["audioTracks"] = cachedAudioTracks
-        trackPayload["subtitleTracks"] = cachedSubtitleTracks
-
-        emitOrQueueJsEventOnUiThread(
-          "nativePlayerEvent",
-          Arguments.makeNativeMap(trackPayload),
-          "nativePlayerEvent:tracks"
-        )
-        pendingTracksEmit = false
-      }
-
-      if (eventType != "tracks") {
-        emitOrQueueJsEventOnUiThread(
-          "nativePlayerEvent",
-          Arguments.makeNativeMap(payload),
-          "nativePlayerEvent:$eventType"
-        )
-      }
-    }
-  }
-
-  private fun emitOrQueueJsEventOnUiThread(eventName: String, payload: Any?, debugName: String) {
-    if (tryEmitJsEvent(eventName, payload, debugName)) {
-      flushQueuedJsEventsOnUiThread()
-      return
-    }
-
-    enqueueJsEventOnUiThread(PendingJsEvent(eventName, payload, debugName, SystemClock.uptimeMillis()))
-    scheduleJsEmitRetry()
-  }
-
-  private fun tryEmitJsEvent(eventName: String, payload: Any?, debugName: String): Boolean {
-    val rc = getReactContextUnsafe()
-    if (rc == null) {
-      maybeLogReactContextUnavailable(debugName)
-      return false
-    }
-
-    return try {
-      rc
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit(eventName, payload)
-      true
-    } catch (t: Throwable) {
-      Log.e(TAG, "Failed to emit $debugName", t)
-      false
-    }
-  }
-
-  private fun enqueueJsEventOnUiThread(event: PendingJsEvent) {
-    pruneExpiredJsEventsOnUiThread(event.enqueuedAtMs)
-
-    while (pendingJsEvents.size >= MAX_PENDING_JS_EVENTS) {
-      pendingJsEvents.removeFirst()
-    }
-
-    pendingJsEvents.addLast(event)
-  }
-
-  private fun flushQueuedJsEventsOnUiThread() {
-    if (pendingJsEvents.isEmpty()) return
-
-    pruneExpiredJsEventsOnUiThread(SystemClock.uptimeMillis())
-
-    while (pendingJsEvents.isNotEmpty()) {
-      val next = pendingJsEvents.peekFirst() ?: break
-      if (!tryEmitJsEvent(next.eventName, next.payload, next.debugName)) {
-        scheduleJsEmitRetry()
-        return
-      }
-      pendingJsEvents.removeFirst()
-    }
-  }
-
-  private fun pruneExpiredJsEventsOnUiThread(nowMs: Long) {
-    while (pendingJsEvents.isNotEmpty()) {
-      val head = pendingJsEvents.peekFirst() ?: break
-      if (nowMs - head.enqueuedAtMs <= PENDING_JS_EVENT_TTL_MS) break
-      pendingJsEvents.removeFirst()
-    }
-  }
-
-  private fun scheduleJsEmitRetry() {
-    if (jsEmitRetryScheduled) return
-    jsEmitRetryScheduled = true
-    mainHandler.postDelayed(jsEmitRetryRunnable, JS_EMIT_RETRY_MS)
-  }
-
-  private fun cancelJsEmitRetry() {
-    jsEmitRetryScheduled = false
-    mainHandler.removeCallbacks(jsEmitRetryRunnable)
-  }
-
-  private fun maybeLogReactContextUnavailable(debugName: String) {
-    val now = SystemClock.uptimeMillis()
-    if (now - lastReactContextWarnAtMs < REACT_CONTEXT_WARN_THROTTLE_MS) return
-    lastReactContextWarnAtMs = now
-    Log.w(
-      TAG,
-      "ReactContext unavailable, queueing event=$debugName pending=${pendingJsEvents.size}"
-    )
+    nativeEventEmitter.emitNativePlayerEvent(eventType, extras)
   }
 }

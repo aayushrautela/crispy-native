@@ -351,7 +351,12 @@ const withFrostwireMavenRepo = (config) => {
                     `allprojects {
         repositories {
             maven { url "https://oss.sonatype.org/content/repositories/releases" }
-            maven { url "https://dl.frostwire.com/maven" }`
+            maven {
+                url "https://dl.frostwire.com/maven"
+                content {
+                    includeGroup "com.frostwire"
+                }
+            }`
                 );
                 config.modResults.contents = buildGradle;
             }

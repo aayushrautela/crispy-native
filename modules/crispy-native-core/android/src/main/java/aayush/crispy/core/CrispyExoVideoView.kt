@@ -195,7 +195,6 @@ class CrispyExoVideoView(
   private fun applyResizeMode(mode: String?) {
     playerView.resizeMode = when (mode) {
       "cover" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-      "stretch" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
       else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
     }
   }

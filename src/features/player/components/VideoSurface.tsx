@@ -57,7 +57,7 @@ interface VideoSurfaceProps {
     paused: boolean;
     volume?: number;
     rate?: number;
-    resizeMode?: 'contain' | 'cover' | 'stretch' | 'original';
+    resizeMode?: 'contain' | 'cover' | 'original';
 
     // Track selection - react-native-video format
     selectedAudioTrack?: { type: 'index' | 'disabled', value?: number };
@@ -100,11 +100,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
         onBuffering,
         onReadyForDisplay,
     } = props;
-
-    // Log metadata for debugging notifications
-    React.useEffect(() => {
-        console.log('[VideoSurface] Received metadata:', props.metadata);
-    }, [props.metadata]);
 
     const exoPlayerRef = useRef<ExoPlayerNativeRef>(null);
     const vlcPlayerRef = useRef<VlcPlayerRef>(null);
@@ -212,7 +207,6 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
 
     // ========== VLC Handlers ==========
     const handleVlcLoad = (data: any) => {
-        console.log('[VideoSurface] VLC onLoad:', data);
         onLoad?.({
             duration: data?.duration || 0,
             width: data?.width || 1920,
@@ -228,12 +222,10 @@ export const VideoSurface = forwardRef<VideoSurfaceRef, VideoSurfaceProps>((prop
     };
 
     const handleVlcError = (error: any) => {
-        console.log('[VideoSurface] VLC onError:', error);
         onError?.({ message: error?.error || 'VLC error' });
     };
 
     const handleVlcTracksChanged = (data: any) => {
-        console.log('[VideoSurface] VLC onTracksChanged:', data);
         onTracksChanged?.({
             audioTracks: data?.audioTracks || [],
             subtitleTracks: data?.subtitleTracks || [],

@@ -204,8 +204,6 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
             contentMode = .scaleAspectFit
         case "cover":
             contentMode = .scaleAspectFill
-        case "stretch":
-            contentMode = .scaleToFill
         default:
             contentMode = .scaleAspectFit
         }
@@ -294,4 +292,3 @@ public class CrispyKSVideoView: IOSVideoPlayerView {
         super.removeFromSuperview()
     }
 }
-

@@ -35,8 +35,8 @@ interface PlayerTabSystemProps {
     onSwitchToStream: (stream: any, options?: any) => void;
     playbackRate: number;
     onSelectSpeed: (rate: number) => void;
-    resizeMode: 'contain' | 'cover' | 'stretch';
-    onSelectResizeMode: (mode: 'contain' | 'cover' | 'stretch') => void;
+    resizeMode: 'contain' | 'cover';
+    onSelectResizeMode: (mode: 'contain' | 'cover') => void;
     meta: any;
     enriched: any;
     seasonEpisodes: any[];

@@ -11,7 +11,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
-import android.view.Surface
+import android.view.SurfaceHolder
 import aayush.crispy.core.MediaSessionHandler
 
 /**
@@ -38,6 +38,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   }
 
   private lateinit var engine: VlcEngine
+  private val warnLog = PlayerThrottledLogger(TAG)
   private var isForeground = false
   private var clientCount = 0
 
@@ -48,7 +49,7 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   override fun onCreate() {
     super.onCreate()
     engine = VlcEngine(applicationContext, notificationCallbacks = this, serviceCallbacks = this)
-    Log.d(TAG, "onCreate")
+    Log.i(TAG, "onCreate")
   }
 
   override fun onBind(intent: Intent?): IBinder {
@@ -57,24 +58,25 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     if (intent?.action == ACTION_STOP) {
+      Log.i(TAG, "onStartCommand ACTION_STOP")
       onStopRequested()
     }
     return START_NOT_STICKY
   }
 
   override fun onDestroy() {
-    Log.d(TAG, "onDestroy")
+    Log.i(TAG, "onDestroy")
     mainHandler.removeCallbacks(stopRunnable)
     try {
       engine.release()
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("onDestroy.engine.release", "Failed to release VLC engine", e)
     }
 
     try {
       stopForegroundCompat(true)
-    } catch (_: Throwable) {
-      // ignore
+    } catch (e: Exception) {
+      warnLog.w("onDestroy.stopForegroundCompat", "Failed to stopForeground", e)
     }
     super.onDestroy()
   }
@@ -88,8 +90,8 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
   }
   
   // Surface Management for VLC
-  fun attachSurface(surface: Surface, width: Int, height: Int) {
-      engine.attachSurface(surface, width, height)
+  fun attachSurfaces(videoHolder: SurfaceHolder, subtitleHolder: SurfaceHolder?, width: Int, height: Int) {
+    engine.attachSurfaces(videoHolder, subtitleHolder, width, height)
   }
   
   fun detachSurface() {
@@ -155,8 +157,16 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
 
   fun setResizeMode(mode: String?) {
     if (!mode.isNullOrBlank()) {
+      Log.i(TAG, "setResizeMode mode=$mode clients=$clientCount")
       engine.setResizeMode(mode)
     }
+  }
+
+  fun getDebugSnapshot(): Map<String, Any> {
+    val engineSnapshot = engine.getDebugSnapshot().toMutableMap()
+    engineSnapshot["clientCount"] = clientCount
+    engineSnapshot["isForeground"] = isForeground
+    return engineSnapshot
   }
 
   fun stopPlayback() {
@@ -178,40 +188,41 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
             startForeground(MediaSessionHandler.NOTIFICATION_ID, notification)
           }
           isForeground = true
-        } catch (t: Throwable) {
+        } catch (t: Exception) {
           Log.w(TAG, "startForeground failed", t)
-          try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+          try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
         }
       } else {
-        try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+        try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
       }
       return
     }
 
     if (isForeground) {
-      try { stopForegroundCompat(false) } catch (_: Throwable) {}
+      try { stopForegroundCompat(false) } catch (_: Exception) {}
       isForeground = false
     }
-    try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Throwable) {}
+    try { notificationManager.notify(MediaSessionHandler.NOTIFICATION_ID, notification) } catch (_: Exception) {}
     scheduleStopIfIdle()
   }
 
   override fun onNotificationCancelled() {
-    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Throwable) {}
+    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Exception) {}
     if (isForeground) {
-      try { stopForegroundCompat(true) } catch (_: Throwable) {}
+      try { stopForegroundCompat(true) } catch (_: Exception) {}
       isForeground = false
     }
   }
 
   override fun onStopRequested() {
+    Log.i(TAG, "onStopRequested")
     engine.stopPlayback()
 
     if (isForeground) {
-      try { stopForegroundCompat(true) } catch (_: Throwable) {}
+      try { stopForegroundCompat(true) } catch (_: Exception) {}
       isForeground = false
     }
-    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Throwable) {}
+    try { notificationManager.cancel(MediaSessionHandler.NOTIFICATION_ID) } catch (_: Exception) {}
 
     scheduleStopIfIdle(250)
   }

@@ -10,7 +10,7 @@ import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/featu
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 // New Decomposed Components & Hooks
@@ -21,6 +21,7 @@ import { PlayerTabSystem } from './components/PlayerTabSystem';
 import { usePlayerGestures } from './hooks/usePlayerGestures';
 
 const UP_NEXT_TRIGGER_SECONDS = 25;
+const VLC_DEBUG_LINE_LIMIT = 12;
 
 
 type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
@@ -81,6 +82,12 @@ const toFiniteNumber = (value: any): number => {
     const parsed = typeof value === 'string' ? Number.parseFloat(value) : Number(value);
     if (!Number.isFinite(parsed)) return 0;
     return parsed;
+};
+
+const formatDebugSize = (width: any, height: any) => {
+    const w = Math.round(toFiniteNumber(width));
+    const h = Math.round(toFiniteNumber(height));
+    return `${w}x${h}`;
 };
 
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
@@ -146,11 +153,22 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [pendingEpisode, setPendingEpisode] = useState<any>(null);
     const [showUpNext, setShowUpNext] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1.0);
-    const [resizeMode, setResizeMode] = useState<'contain' | 'cover' | 'stretch'>('contain');
+    const [resizeMode, setResizeMode] = useState<'contain' | 'cover'>('contain');
     const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
+    const [vlcDebugSnapshot, setVlcDebugSnapshot] = useState<Record<string, any> | null>(null);
+    const [vlcDebugLines, setVlcDebugLines] = useState<string[]>([]);
 
     const pendingSeekAfterLoadRef = useRef<number | null>(null);
     const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const appendVlcDebugLine = useCallback((line: string) => {
+        setVlcDebugLines((prev) => {
+            const next = prev.length >= VLC_DEBUG_LINE_LIMIT
+                ? [...prev.slice(prev.length - VLC_DEBUG_LINE_LIMIT + 1), line]
+                : [...prev, line];
+            return next;
+        });
+    }, []);
 
     // Meta Aggregator
     const baseId = useMemo(() => pickBaseId(contentId), [contentId]);
@@ -281,11 +299,34 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     setSelectedAudioId(evt.audioTracks?.find((t: any) => t.selected)?.id);
                     setSelectedSubtitleId(evt.subtitleTracks?.find((t: any) => t.selected)?.id ?? -1);
                     break;
+                case 'vlc-debug':
+                    {
+                        const snapshot = evt.snapshot && typeof evt.snapshot === 'object' ? evt.snapshot : evt;
+                        setVlcDebugSnapshot(snapshot);
+
+                        const line = [
+                            String(snapshot.reason || 'unknown'),
+                            `mode=${String(snapshot.resizeMode || '-')}`,
+                            `video=${formatDebugSize(snapshot.videoWidth, snapshot.videoHeight)}`,
+                            `container=${formatDebugSize(snapshot.containerWidth, snapshot.containerHeight)}`,
+                            `target=${formatDebugSize(snapshot.targetWidth, snapshot.targetHeight)}`,
+                        ].join(' | ');
+
+                        appendVlcDebugLine(line);
+                        console.log('[VLC_DEBUG]', snapshot);
+                        break;
+                    }
                 // 'buffering', 'isPlaying', 'first-frame', 'error', 'end' handled by usePlayerLogic
             }
         });
         return () => sub.remove();
-    }, [sessionId, isSeeking, contentType]);
+    }, [sessionId, isSeeking, contentType, appendVlcDebugLine]);
+
+    useEffect(() => {
+        if (playbackEngine === 'vlc') return;
+        setVlcDebugSnapshot(null);
+        setVlcDebugLines([]);
+    }, [playbackEngine]);
 
     useEffect(() => {
         if (Platform.OS !== 'android') return;
@@ -395,6 +436,10 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         ...externalSubtitles.map(s => ({ key: `ext:${s.url}`, kind: 'external', url: s.url, title: s.title }))
     ], [externalSubtitles]);
 
+    const vlcEngineSnapshot = (vlcDebugSnapshot?.vlcEngine && typeof vlcDebugSnapshot.vlcEngine === 'object')
+        ? vlcDebugSnapshot.vlcEngine as Record<string, any>
+        : null;
+
     return (
         <View style={styles.container} pointerEvents="box-none">
             <PlayerLoadingCurtain
@@ -430,6 +475,23 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 bottomOffset={(showControls ? 110 : 40) + subtitleOffset}
             />
 
+            {playbackEngine === 'vlc' && !isPipMode && (
+                <View pointerEvents="none" style={styles.vlcDebugOverlay}>
+                    <View style={styles.vlcDebugCard}>
+                        <Text style={styles.vlcDebugTitle}>VLC Debug</Text>
+                        <Text style={styles.vlcDebugLine}>jsMode={resizeMode} nativeMode={String(vlcDebugSnapshot?.resizeMode || '-')}</Text>
+                        <Text style={styles.vlcDebugLine}>reason={String(vlcDebugSnapshot?.reason || 'waiting')}</Text>
+                        <Text style={styles.vlcDebugLine}>video={formatDebugSize(vlcDebugSnapshot?.videoWidth, vlcDebugSnapshot?.videoHeight)} container={formatDebugSize(vlcDebugSnapshot?.containerWidth, vlcDebugSnapshot?.containerHeight)}</Text>
+                        <Text style={styles.vlcDebugLine}>surface={formatDebugSize(vlcDebugSnapshot?.surfaceViewWidth, vlcDebugSnapshot?.surfaceViewHeight)} holder={formatDebugSize(vlcDebugSnapshot?.holderFrameWidth, vlcDebugSnapshot?.holderFrameHeight)}</Text>
+                        <Text style={styles.vlcDebugLine}>target={formatDebugSize(vlcDebugSnapshot?.targetWidth, vlcDebugSnapshot?.targetHeight)} retries={Math.round(toFiniteNumber(vlcDebugSnapshot?.surfaceAttachRetryCount))}</Text>
+                        {vlcEngineSnapshot && (
+                            <Text style={styles.vlcDebugLine}>engineState={String(vlcEngineSnapshot.state || '-')} engineMode={String(vlcEngineSnapshot.resizeMode || '-')} scaleType={String(vlcEngineSnapshot.lastAppliedScaleType || '-')}</Text>
+                        )}
+                        <Text style={styles.vlcDebugLog}>{vlcDebugLines.join('\n') || 'waiting for vlc-debug events...'}</Text>
+                    </View>
+                </View>
+            )}
+
             <Pressable style={StyleSheet.absoluteFill} pointerEvents={isPipMode ? 'none' : 'auto'} onPress={handleTouchEnd}>
                 <PlayerControls
                     visible={showControls && !isPipMode}
@@ -444,7 +506,11 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     setProgress={setProgress}
                     resetControlsTimer={resetControlsTimer}
                     togglePlay={togglePlay}
-                    onClose={() => CrispyNativeCore.closePlayerActivity()}
+                    onClose={() => {
+                        void CrispyNativeCore.closePlayerActivity().then((ok) => {
+                            console.log('[PlayerOverlayRoot] closePlayerActivity', { ok });
+                        });
+                    }}
                     onTabOpen={(tab) => setActiveTab(tab as ActiveTab)}
                     seekAccumulation={seekAccumulation}
                     playPauseAnimatedStyle={playPauseAnimatedStyle}
@@ -480,7 +546,13 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 playbackRate={playbackRate}
                 onSelectSpeed={(r) => { setPlaybackRate(r); CrispyNativeCore.nativePlayerSetRate(r); }}
                 resizeMode={resizeMode}
-                onSelectResizeMode={(m) => { setResizeMode(m); CrispyNativeCore.nativePlayerSetResizeMode(m); }}
+                onSelectResizeMode={(m) => {
+                    setResizeMode(m);
+                    appendVlcDebugLine(`js:setResizeMode mode=${m}`);
+                    void CrispyNativeCore.nativePlayerSetResizeMode(m).then((ok) => {
+                        console.log('[PlayerOverlayRoot] nativePlayerSetResizeMode', { mode: m, ok });
+                    });
+                }}
                 meta={meta}
                 enriched={enriched}
                 seasonEpisodes={seasonEpisodes}
@@ -492,4 +564,38 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
+    vlcDebugOverlay: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        right: 12,
+        zIndex: 120,
+    },
+    vlcDebugCard: {
+        backgroundColor: 'rgba(0,0,0,0.72)',
+        borderColor: 'rgba(255,255,255,0.22)',
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    vlcDebugTitle: {
+        color: '#9FE870',
+        fontSize: 12,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    vlcDebugLine: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        lineHeight: 14,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    vlcDebugLog: {
+        color: '#8FD2FF',
+        fontSize: 10,
+        lineHeight: 13,
+        marginTop: 6,
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
 });

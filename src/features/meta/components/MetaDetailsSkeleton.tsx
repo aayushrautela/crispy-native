@@ -11,7 +11,7 @@ const BACKDROP_HEIGHT = 420;
 const HERO_HEIGHT = 600;
 
 export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
-    const { isTablet, isLandscape, width } = useResponsive();
+    const { isTablet, isLandscape } = useResponsive();
     const isSplitLayout = isTablet && isLandscape;
 
     if (isSplitLayout) {
@@ -94,7 +94,7 @@ export const MetaDetailsSkeleton = memo(function MetaDetailsSkeleton() {
         <View style={styles.container}>
             {/* Static Backdrop Skeleton */}
             <View style={styles.staticBackdrop}>
-                <Skeleton height={BACKDROP_HEIGHT} borderRadius={0} />
+                <Skeleton height={BACKDROP_HEIGHT} width="100%" borderRadius={0} />
             </View>
 
             <ScrollView

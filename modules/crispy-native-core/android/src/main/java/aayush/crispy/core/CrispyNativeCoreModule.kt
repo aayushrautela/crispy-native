@@ -206,7 +206,8 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("closePlayerActivity") {
-      return@AsyncFunction withPlayerActivityUi("closePlayerActivity") { it.finish() }
+      Log.i("CrispyModule", "closePlayerActivity")
+      return@AsyncFunction withPlayerActivityUi("closePlayerActivity") { it.stopPlaybackAndFinishFromJs("closePlayerActivity") }
     }
 
     AsyncFunction("nativePlayerSetPaused") { paused: Boolean ->
@@ -230,6 +231,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("nativePlayerSetResizeMode") { mode: String? ->
+      Log.i("CrispyModule", "nativePlayerSetResizeMode mode=$mode")
       return@AsyncFunction withPlayerActivityUi("nativePlayerSetResizeMode") { it.setResizeModeFromJs(mode) }
     }
 
@@ -384,7 +386,12 @@ class CrispyNativeCoreModule : Module() {
   }
 
   private fun withPlayerActivityUi(action: String, fn: (PlayerActivity) -> Unit): Boolean {
-    val activity = (appContext.currentActivity as? PlayerActivity) ?: PlayerActivity.getActive() ?: return false
+    val current = appContext.currentActivity
+    val activity = (current as? PlayerActivity) ?: PlayerActivity.getActive()
+    if (activity == null) {
+      Log.w("CrispyModule", "$action: no PlayerActivity (current=${current?.javaClass?.simpleName})")
+      return false
+    }
     activity.runOnUiThread {
       try {
         fn(activity)

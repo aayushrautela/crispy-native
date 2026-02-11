@@ -5,7 +5,7 @@ import { useUserStore } from '../../../core/stores/userStore';
 
 interface UseTraktCommentsProps {
     id: string | undefined;
-    type: 'movie' | 'show' | 'season' | 'episode';
+    type: 'movie' | 'show' | 'episode';
     season?: number;
     episode?: number;
     enabled?: boolean;

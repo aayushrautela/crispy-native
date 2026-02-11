@@ -1,10 +1,12 @@
 import { SectionHeader } from '@/src/core/ui/SectionHeader';
+import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import { Image as ExpoImage } from 'expo-image';
 import React, { memo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-const CastItem = memo(function CastItem({ person, theme, onPress, palette }: { person: any; theme: any; onPress: () => void; palette: any }) {
+const CastItem = memo(function CastItem({ person, onPress }: { person: any; onPress: () => void }) {
+    const { theme } = useTheme();
     return (
         <Pressable onPress={onPress}>
             <View style={styles.castItem}>
@@ -35,13 +37,10 @@ const CastItem = memo(function CastItem({ person, theme, onPress, palette }: { p
 
 interface CastSectionProps {
     cast: any[];
-    theme: any;
-    colors: any;
-    palette: any;
     onPersonPress: (id: string) => void;
 }
 
-export const CastSection = memo(function CastSection({ cast, theme, colors, palette, onPersonPress }: CastSectionProps) {
+export const CastSection = memo(function CastSection({ cast, onPersonPress }: CastSectionProps) {
     if (!cast || cast.length === 0) return null;
 
     return (
@@ -56,8 +55,6 @@ export const CastSection = memo(function CastSection({ cast, theme, colors, pale
                     <CastItem
                         key={`${person.id}-${index}`}
                         person={person}
-                        theme={theme}
-                        palette={palette}
                         onPress={() => onPersonPress(person.id)}
                     />
                 ))}

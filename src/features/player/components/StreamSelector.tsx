@@ -4,10 +4,17 @@ import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import { Cpu, Globe, Play } from 'lucide-react-native';
+import { Image as ExpoImage } from 'expo-image';
 import React from 'react';
 import { ListRenderItem, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export interface StreamMetadata {
+    title: string;
+    subtitle?: string;
+    overview?: string;
+    thumbnail?: string;
+}
 
 interface StreamSelectorProps {
     type: string;
@@ -16,9 +23,10 @@ interface StreamSelectorProps {
     hideHeader?: boolean;
     onStreamsLoaded?: (streams: any[]) => void;
     isVisible?: boolean;
+    metadata?: StreamMetadata;
 }
 
-export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded, isVisible = true }: StreamSelectorProps) => {
+export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded, isVisible = true, metadata }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
@@ -41,46 +49,97 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         }
     }, [streams, onStreamsLoaded]);
 
-    const renderItem: ListRenderItem<any> = ({ item, index }: { item: any, index: number }) => {
+    const listPaddingHorizontal = React.useMemo(() => (hideHeader ? 20 : 24), [hideHeader]);
+
+    const contentContainerStyle = React.useMemo(
+        () => ({
+            // Let the sheet control overall sizing; keep just enough room for gesture nav.
+            paddingBottom: Math.max(bottom, 12) + 12,
+            paddingHorizontal: listPaddingHorizontal,
+        }),
+        [bottom, listPaddingHorizontal]
+    );
+
+    const handleSelect = React.useCallback((item: any) => {
+        onSelect(item);
+    }, [onSelect]);
+
+    const keyExtractor = React.useCallback((item: any, index: number) => {
+        const key = item?.url || item?.id || item?.infoHash;
+        return key ? String(key) : String(index);
+    }, []);
+
+    const renderItem = React.useCallback<ListRenderItem<any>>(({ item }: { item: any }) => {
         if (!item) return null;
 
-        const mainTitle = item.name?.replace(/\n/g, ' ') || "Stream";
-        const subtitle = item.title || item.description || "";
-
-        const isTorrent = !!item.infoHash;
-        const isYT = !!item.ytId;
+        const mainTitle = item.name?.replace(/\n/g, ' ') || 'Stream';
+        const subtitle = item.title || item.description || '';
 
         return (
-            <View style={{ paddingHorizontal: hideHeader ? 20 : 24, marginBottom: 12 }}>
-                <ExpressiveSurface
-                    variant="tonal"
-                    rounding="xl"
-                    onPress={() => onSelect(item)}
-                    style={styles.streamItem}
-                >
-                    <View style={[styles.iconBox, { backgroundColor: theme.colors.surfaceVariant }]}>
-                        {isTorrent ? (
-                            <Cpu size={22} color={theme.colors.primary} />
-                        ) : isYT ? (
-                            <Globe size={22} color={"#FF0000"} />
-                        ) : (
-                            <Globe size={22} color={theme.colors.secondary} />
+            <ExpressiveSurface
+                variant="tonal"
+                rounding="none"
+                disableLayoutAnimation
+                onPress={() => handleSelect(item)}
+                style={styles.streamItem}
+            >
+                <View style={styles.streamTextBlock}>
+                    <Typography variant="title-medium" weight="bold" style={[styles.streamTitle, { color: theme.colors.onSecondaryContainer }]}>
+                        {mainTitle}
+                    </Typography>
+                    <Typography variant="body-small" style={[styles.streamSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                        {subtitle}
+                    </Typography>
+                </View>
+            </ExpressiveSurface>
+        );
+    }, [handleSelect, theme.colors.onSecondaryContainer, theme.colors.onSurfaceVariant]);
+
+    const renderHeader = () => {
+        if (!metadata) {
+            if (hideHeader) return null;
+            return (
+                <View style={styles.simpleHeader}>
+                    <Typography variant="headline-small" weight="black" style={{ color: theme.colors.onSurface }}>
+                        Available Streams
+                    </Typography>
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.headerContainer}>
+                <View style={styles.metaRow}>
+                    {metadata.thumbnail && (
+                        <ExpoImage
+                            source={{ uri: metadata.thumbnail }}
+                            style={styles.thumbnail}
+                            contentFit="cover"
+                        />
+                    )}
+                    <View style={styles.titleStack}>
+                        <Typography variant="title-large" weight="black" numberOfLines={1}>
+                            {metadata.title}
+                        </Typography>
+                        {metadata.subtitle && (
+                            <Typography variant="label" weight="bold" style={{ opacity: 0.6 }}>
+                                {metadata.subtitle}
+                            </Typography>
                         )}
                     </View>
-                    <View style={{ flex: 1, gap: 2 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
-                                {mainTitle}
-                            </Typography>
-                        </View>
-                        <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
-                            {subtitle}
-                        </Typography>
-                    </View>
-                    <View style={[styles.playButton, { backgroundColor: theme.colors.primary + '15' }]}>
-                        <Play size={16} color={theme.colors.primary} fill={theme.colors.primary} />
-                    </View>
-                </ExpressiveSurface>
+                </View>
+
+                {metadata.overview && (
+                    <Typography variant="body-medium" style={styles.overview} numberOfLines={4}>
+                        {metadata.overview}
+                    </Typography>
+                )}
+
+                <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+                <Typography variant="label" weight="black" style={styles.sectionLabel}>
+                    SELECT AN OPTION
+                </Typography>
             </View>
         );
     };
@@ -97,19 +156,13 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     }
 
     return (
-        <View style={[{ flex: 1 }, hideHeader && { paddingTop: 0, paddingHorizontal: 0 }]}>
-            {!hideHeader && (
-                <View style={{ paddingHorizontal: 24, marginBottom: 24, paddingTop: 32 }}>
-                    <Typography variant="headline-small" weight="black" style={{ color: theme.colors.onSurface }}>
-                        Available Streams
-                    </Typography>
-                </View>
-            )}
-
+        <View style={[{ flex: 1 }, (hideHeader || metadata) && { paddingTop: 0, paddingHorizontal: 0 }]}>
             <BottomSheetFlatList
                 data={streams || []}
-                keyExtractor={(item: any, index: number) => `${item.url || index}-${index}`}
+                keyExtractor={keyExtractor}
                 renderItem={renderItem}
+                ListHeaderComponent={renderHeader}
+                ItemSeparatorComponent={() => <View style={styles.separator} />}
                 style={{ flex: 1 }}
                 ListEmptyComponent={
                     <View style={styles.empty}>
@@ -118,7 +171,8 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                         </Typography>
                     </View>
                 }
-                contentContainerStyle={{ paddingBottom: bottom + 40 }}
+                contentContainerStyle={contentContainerStyle}
+                removeClippedSubviews
             />
         </View>
     );
@@ -127,6 +181,49 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
 const styles = StyleSheet.create({
     container: {
         // Handled via inline styles for better nesting control
+    },
+    simpleHeader: {
+        paddingHorizontal: 0,
+        marginBottom: 24,
+        paddingTop: 32,
+    },
+    headerContainer: {
+        paddingHorizontal: 0,
+        paddingTop: 12,
+        marginBottom: 8,
+    },
+    metaRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+        marginBottom: 16,
+    },
+    thumbnail: {
+        width: 100,
+        height: 56,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    titleStack: {
+        flex: 1,
+        gap: 2,
+    },
+    overview: {
+        opacity: 0.8,
+        lineHeight: 20,
+        marginBottom: 20,
+    },
+    divider: {
+        height: 1,
+        width: '100%',
+        marginBottom: 20,
+        opacity: 0.2,
+    },
+    sectionLabel: {
+        opacity: 0.5,
+        fontSize: 12,
+        letterSpacing: 1,
+        marginBottom: 12,
     },
     loading: {
         height: 300,
@@ -137,25 +234,23 @@ const styles = StyleSheet.create({
         padding: 40,
         alignItems: 'center',
     },
+    separator: {
+        height: 8,
+    },
     streamItem: {
-        padding: 16,
-        paddingLeft: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
+        width: '100%',
+        borderRadius: 10,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
     },
-    iconBox: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
+    streamTextBlock: {
+        width: '100%',
+        gap: 2,
     },
-    playButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
+    streamTitle: {
+        lineHeight: 20,
+    },
+    streamSubtitle: {
+        opacity: 0.8,
     },
 });

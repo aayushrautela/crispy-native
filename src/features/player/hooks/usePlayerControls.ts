@@ -23,13 +23,6 @@ export const usePlayerControls = (
     const seekToTime = useCallback((rawSeconds: number) => {
         const timeInSeconds = Math.max(0, Math.min(rawSeconds, duration > 0 ? duration - END_EPSILON : rawSeconds));
 
-        console.log('[usePlayerControls] seekToTime:', {
-            timeInSeconds,
-            useExoPlayer,
-            duration,
-            platform: Platform.OS
-        });
-
         // iOS KSPlayer
         if (Platform.OS === 'ios' && iosPlayerRef?.current) {
             isSeeking.current = true;
