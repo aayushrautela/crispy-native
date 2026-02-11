@@ -527,7 +527,7 @@ export default function MetaDetailsScreen() {
                         visible={showRatingModal}
                         onClose={() => setShowRatingModal(false)}
                         title={enriched.title || meta?.name}
-                        initialRating={userRating ? userRating * 2 : 0}
+                        initialRating={userRating !== null && userRating !== undefined ? userRating * 2 : null}
                         onRate={(r) => {
                             const baseId = enriched.imdbId || id as string;
                             const traktType = (isSeries ? 'show' : 'movie') as any;
