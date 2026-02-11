@@ -2,7 +2,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeProvider as NavigationThemeProvider, type Theme as NavigationTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
@@ -10,7 +10,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../core/AuthContext';
 import { DiscoveryProvider } from '../core/DiscoveryContext';
-import { StorageService } from '../core/storage';
 import { SyncService } from '../core/services/SyncService';
 import { TraktService } from '../core/services/TraktService';
 import { SessionManager } from '../core/SessionManager';
@@ -19,8 +18,6 @@ import { ThemeProvider, useTheme } from '../core/ThemeContext';
 import { CatalogActionsProvider } from '../features/catalog/context/CatalogActionsContext';
 import { TraktProvider } from '../features/trakt/context/TraktContext';
 import '../styles/global.css';
-
-console.log('[CRISPY-BOOT] _layout.tsx module evaluating');
 
 // Create a client
 const queryClient = new QueryClient({
@@ -41,13 +38,11 @@ export const unstable_settings = {
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
-  const { user, loading } = useAuth();
+  const { loading, mode, hasKnownAccounts } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-
-  useEffect(() => {
-    console.log('[CRISPY-BOOT] RootLayoutNav mounted');
-  }, []);
+  const params = useGlobalSearchParams<{ mode?: string | string[] }>();
+  const routeMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -83,7 +78,6 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (loaded || error) {
-      console.log('[CRISPY-BOOT] Fonts loaded state:', { loaded, error });
       SplashScreen.hideAsync();
     }
   }, [loaded, error]);
@@ -92,25 +86,44 @@ function RootLayoutNav() {
     if (loading || !loaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const guestFlag = StorageService.getGlobal<boolean | string>('crispy-guest-mode');
-    const isGuestMode = guestFlag === true || guestFlag === 'true';
-    const isAuthenticated = !!user || isGuestMode;
+    const authSegment = String(segments[1] ?? '');
+    const inLoginScreen = inAuthGroup && authSegment === 'login';
+    const inProfilesScreen = inAuthGroup && authSegment === 'profiles';
+    const isAddAccountFlow = inLoginScreen && routeMode === 'add-account';
+    const isAuthenticated = mode === 'account' || mode === 'guest';
 
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (!!user && inAuthGroup) {
-      router.replace('/(tabs)');
+    if (isAuthenticated) {
+      if (inAuthGroup && !isAddAccountFlow && !inProfilesScreen) {
+        router.replace('/(tabs)');
+      }
+      return;
     }
-  }, [user, loading, loaded, segments, router]);
 
-  // Listen for Account Switches
+    if (hasKnownAccounts) {
+      if (!inProfilesScreen && !isAddAccountFlow) {
+        router.replace('/(auth)/profiles' as never);
+      }
+      return;
+    }
+
+    if (!inAuthGroup) {
+      router.replace('/(auth)/login');
+    }
+  }, [mode, hasKnownAccounts, loading, loaded, routeMode, segments, router]);
+
   useEffect(() => {
+    let hasBootstrapped = false;
+
     const unsub = SessionManager.subscribe(() => {
-      // When accounts change (login/logout/switch), reload the store
-      // This ensures the store reads data for the *new* active user
-      useUserStore.getState().reloadFromStorage(); // Reloads from disk (safe context switch)
-      TraktService.getInstance().reset(); // Reset Trakt service to load new user tokens
+      if (hasBootstrapped) {
+        queryClient.clear();
+      }
+
+      useUserStore.getState().reloadFromStorage();
+      TraktService.getInstance().reset();
+      hasBootstrapped = true;
     });
+
     return unsub;
   }, []);
 
@@ -137,7 +150,6 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  console.log('[CRISPY-BOOT] RootLayout component rendering');
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>

@@ -25,6 +25,7 @@ export type UserStorageKey =
 export type GlobalStorageKey =
     | 'crispy_known_sessions'
     | 'crispy_active_user_id'
+    | 'crispy_session_mode'
     | 'crispy-guest-mode'
     | 'crispy-migrated'
     | 'crispy-is-first-boot';

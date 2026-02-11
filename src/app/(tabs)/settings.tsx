@@ -89,9 +89,10 @@ export default function SettingsScreen() {
                 <View style={{ paddingTop: 20 }}>
                     <SettingsGroup title="Account">
                         <SettingsItem
-                            label="Profile"
+                            label="Profiles"
                             icon={User}
-                            onPress={() => router.push('/settings/account')}
+                            description="Switch accounts or continue as guest"
+                            onPress={() => router.push('/(auth)/profiles' as never)}
                         />
                         <SettingsItem
                             label="Trakt.tv"
