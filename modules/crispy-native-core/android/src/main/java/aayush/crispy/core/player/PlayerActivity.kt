@@ -281,6 +281,7 @@ class PlayerActivity : ReactActivity() {
     override fun surfaceCreated(holder: SurfaceHolder) {
       ensureSurfaceAttached("surfaceCreated")
       updatePipParams()
+      emitVlcDebugEvent("surfaceCreated")
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -291,12 +292,21 @@ class PlayerActivity : ReactActivity() {
           containerW = content.width
           containerH = content.height
       }
+      emitVlcDebugEvent(
+        "surfaceChanged",
+        mapOf(
+          "surfaceChangedWidth" to width,
+          "surfaceChangedHeight" to height,
+          "surfaceChangedFormat" to format
+        )
+      )
       
       if (engine == ENGINE_VLC) {
         vlcService?.setSurfaceSize(width, height)
       }
       if (width <= 0 || height <= 0) {
         scheduleSurfaceAttachRetry("surfaceChanged-invalid-size")
+        emitVlcDebugEvent("surfaceChanged-invalid-size")
         return
       }
       // Note: We don't call applyResizeTransform() here to avoid loops.
@@ -307,6 +317,7 @@ class PlayerActivity : ReactActivity() {
     override fun surfaceDestroyed(holder: SurfaceHolder) {
       cancelSurfaceAttachRetry()
       detachSurface()
+      emitVlcDebugEvent("surfaceDestroyed")
     }
   }
 
@@ -340,6 +351,7 @@ class PlayerActivity : ReactActivity() {
         vlcService = binder.getService()
         vlcService?.registerClient()
         vlcService?.addListener(vlcListener)
+        emitVlcDebugEvent("vlcServiceConnected")
 
         applyPendingLoadIfReady()
         ensureSurfaceAttached("vlcServiceConnected")
@@ -358,6 +370,7 @@ class PlayerActivity : ReactActivity() {
     }
 
     override fun onServiceDisconnected(name: android.content.ComponentName) {
+      emitVlcDebugEvent("serviceDisconnected")
       vlcService = null
       exoService = null
     }
@@ -369,6 +382,13 @@ class PlayerActivity : ReactActivity() {
 
     videoW = width
     videoH = height
+    emitVlcDebugEvent(
+      "updateVideoSize",
+      mapOf(
+        "reportedVideoWidth" to width,
+        "reportedVideoHeight" to height
+      )
+    )
     applyResizeTransform()
     updatePipParams()
   }
@@ -600,9 +620,24 @@ class PlayerActivity : ReactActivity() {
 
       return try {
         svc.attachSurface(surface, w, h)
+        emitVlcDebugEvent(
+          "attachSurfaceIfReady:$reason",
+          mapOf(
+            "attachWidth" to w,
+            "attachHeight" to h
+          )
+        )
         true
       } catch (t: Throwable) {
         Log.w(TAG, "Failed to attach VLC surface reason=$reason", t)
+        emitVlcDebugEvent(
+          "attachSurfaceFailed:$reason",
+          mapOf(
+            "attachWidth" to w,
+            "attachHeight" to h,
+            "error" to (t.message ?: "unknown")
+          )
+        )
         false
       }
     }
@@ -649,14 +684,17 @@ class PlayerActivity : ReactActivity() {
 
     if (attachSurfaceIfReady(reason)) {
       cancelSurfaceAttachRetry()
+      emitVlcDebugEvent("ensureSurfaceAttached:success", mapOf("attachReason" to reason))
       return
     }
 
     if (surfaceAttachRetryCount >= MAX_SURFACE_ATTACH_RETRIES) {
       Log.e(TAG, "Surface did not attach after retries; reason=$reason engine=$engine")
+      emitVlcDebugEvent("ensureSurfaceAttached:max-retries", mapOf("attachReason" to reason))
       return
     }
 
+    emitVlcDebugEvent("ensureSurfaceAttached:retry", mapOf("attachReason" to reason))
     scheduleSurfaceAttachRetry(reason)
   }
 
@@ -870,6 +908,7 @@ class PlayerActivity : ReactActivity() {
     if (engine == ENGINE_VLC) {
       vlcService?.setResizeMode(mode)
     }
+    emitVlcDebugEvent("setResizeModeFromJs", mapOf("requestedMode" to (mode ?: "null")))
   }
 
   fun setAudioTrackFromJs(trackId: Int) {
@@ -947,6 +986,7 @@ class PlayerActivity : ReactActivity() {
     
     if (containerW <= 0 || containerH <= 0 || videoW <= 0 || videoH <= 0) {
       // Not ready yet, keep full match_parent or previous state
+      emitVlcDebugEvent("applyResizeTransform:skipped-not-ready")
       return
     }
     
@@ -988,8 +1028,75 @@ class PlayerActivity : ReactActivity() {
         params.gravity = android.view.Gravity.CENTER
         sv.layoutParams = params
         Log.i(TAG, "applyResizeTransform mode=$mode container=${containerW}x${containerH} video=${videoW}x${videoH} -> ${targetW}x${targetH}")
+        emitVlcDebugEvent(
+          "applyResizeTransform:applied",
+          mapOf(
+            "targetWidth" to targetW,
+            "targetHeight" to targetH,
+            "videoRatio" to videoRatio.toDouble(),
+            "containerRatio" to containerRatio.toDouble(),
+            "changed" to true
+          )
+        )
         // This will trigger surfaceChanged
+    } else {
+        emitVlcDebugEvent(
+          "applyResizeTransform:no-op",
+          mapOf(
+            "targetWidth" to targetW,
+            "targetHeight" to targetH,
+            "videoRatio" to videoRatio.toDouble(),
+            "containerRatio" to containerRatio.toDouble(),
+            "changed" to false
+          )
+        )
     }
+  }
+
+  private fun emitVlcDebugEvent(reason: String, extras: Map<String, Any> = emptyMap()) {
+    if (engine != ENGINE_VLC) return
+
+    val sv = surfaceView
+    val holder = sv?.holder
+    val surfaceFrame = holder?.surfaceFrame
+    val snapshot = HashMap<String, Any>()
+    snapshot["reason"] = reason
+    snapshot["resizeMode"] = (resizeMode ?: "contain").lowercase()
+    snapshot["containerWidth"] = containerW
+    snapshot["containerHeight"] = containerH
+    snapshot["videoWidth"] = videoW
+    snapshot["videoHeight"] = videoH
+    snapshot["surfaceViewWidth"] = sv?.width ?: 0
+    snapshot["surfaceViewHeight"] = sv?.height ?: 0
+    snapshot["holderFrameWidth"] = surfaceFrame?.width() ?: 0
+    snapshot["holderFrameHeight"] = surfaceFrame?.height() ?: 0
+    snapshot["surfaceValid"] = try {
+      holder?.surface?.isValid ?: false
+    } catch (_: Throwable) {
+      false
+    }
+    snapshot["isPlaying"] = isPlaying
+    snapshot["surfaceAttachRetryCount"] = surfaceAttachRetryCount
+
+    for ((key, value) in extras.entries) {
+      snapshot[key] = value
+    }
+
+    val serviceSnapshot = try {
+      vlcService?.getDebugSnapshot()
+    } catch (_: Throwable) {
+      null
+    }
+    if (serviceSnapshot != null) {
+      snapshot["vlcEngine"] = serviceSnapshot
+    }
+
+    emitNativePlayerEvent("vlc-debug", mapOf("snapshot" to snapshot))
+
+    Log.i(
+      TAG,
+      "vlc-debug reason=$reason mode=${snapshot["resizeMode"]} container=${containerW}x${containerH} video=${videoW}x${videoH} view=${sv?.width ?: 0}x${sv?.height ?: 0} holder=${surfaceFrame?.width() ?: 0}x${surfaceFrame?.height() ?: 0}"
+    )
   }
 
   private fun maybeFallbackToVlcFromExo(exoError: String): Boolean {

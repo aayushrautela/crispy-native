@@ -161,6 +161,13 @@ class VlcPlaybackService : Service(), VlcEngine.NotificationCallbacks, VlcEngine
     }
   }
 
+  fun getDebugSnapshot(): Map<String, Any> {
+    val engineSnapshot = engine.getDebugSnapshot().toMutableMap()
+    engineSnapshot["clientCount"] = clientCount
+    engineSnapshot["isForeground"] = isForeground
+    return engineSnapshot
+  }
+
   fun stopPlayback() {
     onStopRequested()
   }

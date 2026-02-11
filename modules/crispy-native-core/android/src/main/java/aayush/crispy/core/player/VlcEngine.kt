@@ -82,6 +82,7 @@ class VlcEngine(
   private var surfaceWidth: Int = 0
   private var surfaceHeight: Int = 0
   private var resizeMode: String = "contain"
+  private var lastAppliedScaleType: String = "uninitialized"
 
   private var pendingSeekPositionSec: Double? = null
   private var isSeekable: Boolean = false
@@ -249,9 +250,16 @@ class VlcEngine(
       vout.setWindowSize(width, height)
       vout.addCallback(this)
       vout.attachViews(this)
-      Log.i(TAG, "Surface attached: ${width}x${height}")
+      Log.i(
+        TAG,
+        "Surface attached: ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
     } else {
       vout.setWindowSize(width, height)
+      Log.i(
+        TAG,
+        "Surface re-sized while attached: ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
     }
     applyResizeMode()
   }
@@ -262,8 +270,16 @@ class VlcEngine(
     if (vout.areViewsAttached()) {
       vout.setWindowSize(width, height)
     }
+    val previousW = surfaceWidth
+    val previousH = surfaceHeight
     surfaceWidth = width
     surfaceHeight = height
+    if (previousW != width || previousH != height) {
+      Log.i(
+        TAG,
+        "setSurfaceSize ${previousW}x${previousH} -> ${width}x${height} mode=$resizeMode video=${cachedWidth}x${cachedHeight}"
+      )
+    }
     applyResizeMode()
   }
 
@@ -276,6 +292,8 @@ class VlcEngine(
     }
     if (resizeMode != next) {
       Log.i(TAG, "Resize mode: $resizeMode -> $next")
+    } else {
+      Log.i(TAG, "Resize mode unchanged: $next")
     }
     resizeMode = next
     applyResizeMode()
@@ -283,7 +301,13 @@ class VlcEngine(
 
   private fun applyResizeMode() {
     val mp = mediaPlayer ?: return
-    if (surfaceWidth <= 0 || surfaceHeight <= 0) return
+    if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+      Log.i(
+        TAG,
+        "applyResizeMode skipped mode=$resizeMode surface=${surfaceWidth}x${surfaceHeight} video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
+      return
+    }
     
     try {
       val scaleType = when (resizeMode) {
@@ -292,7 +316,11 @@ class VlcEngine(
       }
 
       mp.setVideoScale(scaleType)
-      Log.i(TAG, "applyResizeMode mode=$resizeMode scaleType=$scaleType surface=${surfaceWidth}x${surfaceHeight}")
+      lastAppliedScaleType = scaleType.toString()
+      Log.i(
+        TAG,
+        "applyResizeMode mode=$resizeMode scaleType=$scaleType surface=${surfaceWidth}x${surfaceHeight} video=${cachedWidth}x${cachedHeight} state=$currentState"
+      )
       // NOTE: Avoid mixing legacy `scale`/`aspectRatio` with `setVideoScale`.
       // On some libVLC versions/devices, setting those after `setVideoScale` can
       // effectively override the ScaleType and make Fit/Fill appear to do nothing.
@@ -504,9 +532,10 @@ class VlcEngine(
     val darHeight = baseH
 
     val sizeChanged = cachedWidth != darWidth || cachedHeight != darHeight
-    if (sizeChanged) {
-      Log.d(TAG, "New layout: ${width}x${height} vis=${visibleWidth}x${visibleHeight} sar=${sarNum}:${sarDen} -> dar=${darWidth}x${darHeight}")
-    }
+    Log.i(
+      TAG,
+      "onNewVideoLayout raw=${width}x${height} vis=${visibleWidth}x${visibleHeight} sar=${sarNum}:${sarDen} dar=${darWidth}x${darHeight} mode=$resizeMode surface=${surfaceWidth}x${surfaceHeight} changed=$sizeChanged"
+    )
 
     cachedWidth = darWidth
     cachedHeight = darHeight
@@ -604,6 +633,24 @@ class VlcEngine(
     mediaSessionHandler = null
     mediaPlayer = null
     libVLC = null
+  }
+
+  fun getDebugSnapshot(): Map<String, Any> {
+    return mapOf(
+      "state" to currentState.name,
+      "isPaused" to isPaused,
+      "isSeekable" to isSeekable,
+      "hasSentLoadEvent" to hasSentLoadEvent,
+      "firstFrameEmitted" to firstFrameEmitted,
+      "resizeMode" to resizeMode,
+      "lastAppliedScaleType" to lastAppliedScaleType,
+      "surfaceWidth" to surfaceWidth,
+      "surfaceHeight" to surfaceHeight,
+      "videoWidth" to cachedWidth,
+      "videoHeight" to cachedHeight,
+      "durationMs" to cachedDuration,
+      "listenerCount" to listeners.size
+    )
   }
 
   private fun encodeUrlForVlc(url: String): String {

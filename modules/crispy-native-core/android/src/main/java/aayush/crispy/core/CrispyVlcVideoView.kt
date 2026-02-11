@@ -121,12 +121,15 @@ class CrispyVlcVideoView(
     )
     surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
+            Log.i(TAG, "surfaceCreated surface=${surfaceView.width}x${surfaceView.height} view=${width}x${height} mode=${requestedResizeMode ?: "contain"}")
             playbackService?.attachSurface(holder.surface, surfaceView.width, surfaceView.height)
         }
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            Log.i(TAG, "surfaceChanged format=$format surface=${width}x${height} view=${this@CrispyVlcVideoView.width}x${this@CrispyVlcVideoView.height} video=${videoW}x${videoH} mode=${requestedResizeMode ?: "contain"}")
             playbackService?.setSurfaceSize(width, height)
         }
         override fun surfaceDestroyed(holder: SurfaceHolder) {
+            Log.i(TAG, "surfaceDestroyed video=${videoW}x${videoH} mode=${requestedResizeMode ?: "contain"}")
             playbackService?.detachSurface()
         }
     })
@@ -175,6 +178,7 @@ class CrispyVlcVideoView(
   
   fun setResizeMode(mode: String?) {
       requestedResizeMode = mode
+      Log.i(TAG, "setResizeMode mode=${mode ?: "contain"} view=${width}x${height} video=${videoW}x${videoH} surface=${surfaceView.width}x${surfaceView.height}")
       playbackService?.setResizeMode(mode)
       applyResizeTransform()
   }
@@ -299,11 +303,15 @@ class CrispyVlcVideoView(
 
     videoW = width
     videoH = height
+    Log.i(TAG, "updateVideoSize video=${videoW}x${videoH} view=${this.width}x${this.height} mode=${requestedResizeMode ?: "contain"}")
     applyResizeTransform()
   }
 
   private fun applyResizeTransform() {
-    if (width <= 0 || height <= 0 || videoW <= 0 || videoH <= 0) return
+    if (width <= 0 || height <= 0 || videoW <= 0 || videoH <= 0) {
+      Log.i(TAG, "applyResizeTransform skipped view=${width}x${height} video=${videoW}x${videoH} mode=${requestedResizeMode ?: "contain"}")
+      return
+    }
 
     val mode = (requestedResizeMode ?: "contain").lowercase()
     val containerW = width
@@ -345,6 +353,9 @@ class CrispyVlcVideoView(
       params.height = targetH
       params.gravity = android.view.Gravity.CENTER
       surfaceView.layoutParams = params
+      Log.i(TAG, "applyResizeTransform mode=$mode view=${containerW}x${containerH} video=${videoW}x${videoH} -> ${targetW}x${targetH}")
+    } else {
+      Log.i(TAG, "applyResizeTransform no-op mode=$mode view=${containerW}x${containerH} video=${videoW}x${videoH} target=${targetW}x${targetH}")
     }
   }
 }
