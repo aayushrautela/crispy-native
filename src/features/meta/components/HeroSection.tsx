@@ -74,24 +74,31 @@ const HeroMetadata = memo(function HeroMetadata({ enriched, alignment = 'center'
     const { theme } = useTheme();
 
     return (
-        <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}> 
-            {enriched.rating && (
-                <View style={styles.metaItem}>
-                    <Star size={14} color="#FFD700" fill="#FFD700" />
-                    <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, marginLeft: 4 }}>
-                        {Number(enriched.rating).toFixed(1)}
-                    </Typography>
-                </View>
+        <View style={{ alignItems: alignment === 'center' ? 'center' : 'flex-start', gap: 8 }}>
+            {enriched.genres && enriched.genres.length > 0 && (
+                <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>
+                    {enriched.genres.join(' • ')}
+                </Typography>
             )}
-            {enriched.maturityRating && (
-                <View style={[styles.metaBadge, { borderColor: theme.colors.outlineVariant || theme.colors.outline }]}>
-                    <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, fontSize: 10 }}>
-                        {enriched.maturityRating}
-                    </Typography>
-                </View>
-            )}
-            {enriched.year && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.year}</Typography>}
-            {enriched.runtime && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.runtime}</Typography>}
+            <View style={[styles.metadataRow, { justifyContent: alignment === 'center' ? 'center' : 'flex-start' }]}> 
+                {enriched.rating && (
+                    <View style={styles.metaItem}>
+                        <Star size={14} color="#FFD700" fill="#FFD700" />
+                        <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, marginLeft: 4 }}>
+                            {Number(enriched.rating).toFixed(1)}
+                        </Typography>
+                    </View>
+                )}
+                {enriched.maturityRating && (
+                    <View style={[styles.metaBadge, { borderColor: theme.colors.outlineVariant || theme.colors.outline }]}>
+                        <Typography variant="label" weight="black" style={{ color: theme.colors.onSurface, fontSize: 10 }}>
+                            {enriched.maturityRating}
+                        </Typography>
+                    </View>
+                )}
+                {enriched.year && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.year}</Typography>}
+                {enriched.runtime && <Typography variant="label" style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>{enriched.runtime}</Typography>}
+            </View>
         </View>
     );
 });

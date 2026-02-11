@@ -242,7 +242,7 @@ export default function MetaDetailsScreen() {
         const swatches = colorExtraction.swatches || {};
         const baseOrder = colorExtraction.platform === 'ios'
             ? ['primary', 'detail', 'secondary', 'background']
-            : ['dominant', 'vibrant', 'darkVibrant', 'lightVibrant', 'average', 'lightMuted', 'muted', 'darkMuted'];
+            : ['vibrant', 'darkVibrant', 'lightVibrant', 'dominant', 'average', 'lightMuted', 'muted', 'darkMuted'];
 
         const ordered = baseOrder.filter((k) => !!swatches[k]);
         const extras = Object.keys(swatches).filter((k) => !baseOrder.includes(k)).sort();

@@ -131,7 +131,7 @@ export function useMetaAggregator(id: string, type: string, activeSeason: number
         const pickSeed = (platform: string | undefined, swatches: Record<string, string>) => {
             const candidates = platform === 'ios'
                 ? ['primary', 'detail', 'secondary', 'background']
-                : ['dominant', 'vibrant', 'darkVibrant', 'lightVibrant', 'average', 'lightMuted', 'muted', 'darkMuted'];
+                : ['vibrant', 'darkVibrant', 'lightVibrant', 'dominant', 'average', 'lightMuted', 'muted', 'darkMuted'];
 
             for (const key of candidates) {
                 const color = swatches[key];
