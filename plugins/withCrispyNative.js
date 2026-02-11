@@ -23,8 +23,8 @@ const withCrispyNative = (config) => {
     // 4. Picture-in-Picture Support
     config = withAndroidManifestPiP(config);
 
-    // 5. Disable Bridgeless Mode (Fix for react-native-video / Legacy modules)
-    config = withBridgelessDisabled(config);
+    // 5. Enable Bridgeless Mode (Required by Reanimated v4)
+    config = withBridgelessEnabled(config);
 
     // 6. Add Audio Permissions & Media Receiver
     config = withAudioConfig(config);
@@ -120,15 +120,16 @@ const withIosConfiguration = (config) => {
 };
 
 /**
- * Disable Bridgeless mode to support legacy modules like react-native-video.
- * Adds react.bridgelessEnabled=false to gradle.properties.
+ * Enable Bridgeless mode.
+ * Reanimated v4 throws in dev when RN$Bridgeless is not enabled.
+ * Adds react.bridgelessEnabled=true to gradle.properties.
  */
-const withBridgelessDisabled = (config) => {
+const withBridgelessEnabled = (config) => {
     return withGradleProperties(config, (config) => {
         config.modResults.push({
             type: 'property',
             key: 'react.bridgelessEnabled',
-            value: 'false',
+            value: 'true',
         });
         return config;
     });
