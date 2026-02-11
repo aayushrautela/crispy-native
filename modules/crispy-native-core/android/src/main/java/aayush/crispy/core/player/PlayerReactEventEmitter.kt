@@ -146,10 +146,8 @@ internal class PlayerReactEventEmitter(
   }
 
   private fun getReactContextUnsafe(): ReactContext? {
-    try {
-      val ctx = activity.reactInstanceManager.currentReactContext
-      if (ctx != null) return ctx
-    } catch (_: Exception) {}
+    val fromActivityManager = getReactContextFromActivityManager(activity)
+    if (fromActivityManager != null) return fromActivityManager
 
     try {
       val app = activity.application as? ReactApplication
@@ -175,6 +173,33 @@ internal class PlayerReactEventEmitter(
     }
 
     return null
+  }
+
+  private fun getReactContextFromActivityManager(activity: ReactActivity): ReactContext? {
+    return try {
+      var owner: Class<*>? = activity.javaClass
+      var getReactInstanceManager: java.lang.reflect.Method? = null
+      while (owner != null && getReactInstanceManager == null) {
+        getReactInstanceManager = owner.declaredMethods.firstOrNull {
+          it.name == "getReactInstanceManager" && it.parameterTypes.isEmpty()
+        }
+        owner = owner.superclass
+      }
+
+      val managerMethod = getReactInstanceManager ?: return null
+      managerMethod.isAccessible = true
+      val reactInstanceManager = managerMethod.invoke(activity) ?: return null
+
+      val getCurrentReactContext = reactInstanceManager.javaClass.methods.firstOrNull {
+        it.name == "getCurrentReactContext" && it.parameterTypes.isEmpty()
+      } ?: return null
+
+      getCurrentReactContext.invoke(reactInstanceManager) as? ReactContext
+    } catch (_: Exception) {
+      null
+    } catch (_: LinkageError) {
+      null
+    }
   }
 
   private fun getReactContextFromReactHost(hostOwner: Any?): ReactContext? {
