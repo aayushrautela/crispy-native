@@ -20,6 +20,7 @@ import android.util.Rational
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -83,6 +84,7 @@ class PlayerActivity : ReactActivity() {
 
   private var surfaceView: SurfaceView? = null
   private var subtitleSurfaceView: SurfaceView? = null
+  private var reactRootView: View? = null
   private var containerW: Int = 0
   private var containerH: Int = 0
 
@@ -247,6 +249,7 @@ class PlayerActivity : ReactActivity() {
     }
 
     val reactRoot = content.getChildAt(0)
+    reactRootView = reactRoot
     try {
       reactRoot?.setBackgroundColor(Color.TRANSPARENT)
     } catch (_: Throwable) {
@@ -299,6 +302,48 @@ class PlayerActivity : ReactActivity() {
         containerH = content.height
         applyResizeTransform()
     }
+
+    // Keep container dimensions in sync (PiP resize / multi-window).
+    content.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+      val newW = right - left
+      val newH = bottom - top
+      val oldW = oldRight - oldLeft
+      val oldH = oldBottom - oldTop
+      if (newW <= 0 || newH <= 0) return@addOnLayoutChangeListener
+      if (newW == oldW && newH == oldH) return@addOnLayoutChangeListener
+
+      val prevW = containerW
+      val prevH = containerH
+      containerW = newW
+      containerH = newH
+
+      emitVlcDebugEvent(
+        "containerLayoutChanged",
+        mapOf(
+          "oldContainerWidth" to prevW,
+          "oldContainerHeight" to prevH,
+          "newContainerWidth" to newW,
+          "newContainerHeight" to newH
+        )
+      )
+      applyResizeTransform()
+      updatePipParams()
+    }
+  }
+
+  private fun setReactOverlayVisible(visible: Boolean, reason: String) {
+    val v = reactRootView ?: return
+    val next = if (visible) View.VISIBLE else View.INVISIBLE
+    if (v.visibility == next) return
+
+    v.visibility = next
+    emitVlcDebugEvent(
+      "setReactOverlayVisible",
+      mapOf(
+        "overlayVisible" to visible,
+        "overlayReason" to reason
+      )
+    )
   }
 
   private val surfaceCallback = object : SurfaceHolder.Callback {
@@ -313,8 +358,13 @@ class PlayerActivity : ReactActivity() {
       // But if the container changed (rotation?), we need to update container dims.
       val content = findViewById<ViewGroup>(android.R.id.content)
       if (content != null) {
+          val prevW = containerW
+          val prevH = containerH
           containerW = content.width
           containerH = content.height
+          if (containerW != prevW || containerH != prevH) {
+            applyResizeTransform()
+          }
       }
       emitVlcDebugEvent(
         "surfaceChanged",
@@ -352,6 +402,17 @@ class PlayerActivity : ReactActivity() {
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+      val content = findViewById<ViewGroup>(android.R.id.content)
+      if (content != null) {
+        val prevW = containerW
+        val prevH = containerH
+        containerW = content.width
+        containerH = content.height
+        if (containerW != prevW || containerH != prevH) {
+          applyResizeTransform()
+        }
+      }
+
       emitVlcDebugEvent(
         "subtitleSurfaceChanged",
         mapOf(
@@ -370,6 +431,7 @@ class PlayerActivity : ReactActivity() {
         return
       }
       ensureSurfaceAttached("subtitleSurfaceChanged")
+      updatePipParams()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -800,10 +862,18 @@ class PlayerActivity : ReactActivity() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
       if (!isPlaying) return
       emit("onPipWillEnter", null)
+      setReactOverlayVisible(false, "onUserLeaveHint")
       try {
-        enterPictureInPictureMode(buildPipParams())
+        val entered = enterPictureInPictureMode(buildPipParams())
+        if (entered) {
+          // Some devices are slow to call onPictureInPictureModeChanged; emit immediately so JS can react.
+          emit("onPipModeChanged", true)
+        } else {
+          setReactOverlayVisible(true, "enterPiP-returned-false")
+        }
       } catch (t: Throwable) {
         Log.w(TAG, "enterPiP failed", t)
+        setReactOverlayVisible(true, "enterPiP-exception")
       }
     }
   }
@@ -832,6 +902,16 @@ class PlayerActivity : ReactActivity() {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode)
 
     emit("onPipModeChanged", isInPictureInPictureMode)
+
+    setReactOverlayVisible(!isInPictureInPictureMode, "onPictureInPictureModeChanged")
+
+    // Recompute transforms for the new window bounds (PiP window can be much smaller).
+    val content = findViewById<ViewGroup>(android.R.id.content)
+    if (content != null) {
+      containerW = content.width
+      containerH = content.height
+    }
+    applyResizeTransform()
 
     val was = wasInPip
     wasInPip = isInPictureInPictureMode
@@ -1153,6 +1233,8 @@ class PlayerActivity : ReactActivity() {
     snapshot["resizeMode"] = (resizeMode ?: "contain").lowercase()
     snapshot["containerWidth"] = containerW
     snapshot["containerHeight"] = containerH
+    snapshot["inPipMode"] = isInPictureInPictureMode
+    snapshot["overlayVisible"] = (reactRootView?.visibility ?: View.VISIBLE) == View.VISIBLE
     snapshot["videoWidth"] = videoW
     snapshot["videoHeight"] = videoH
     snapshot["surfaceViewWidth"] = sv?.width ?: 0
