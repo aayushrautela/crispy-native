@@ -6,7 +6,7 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
-import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
+import { useNativePlayerSessionStore, type PlaybackState, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -90,6 +90,25 @@ const formatDebugSize = (width: any, height: any) => {
     return `${w}x${h}`;
 };
 
+const mapMachineStatusToPlaybackState = (status: string): PlaybackState => {
+    switch (status) {
+        case 'booting_torrent':
+        case 'polling_localhost':
+            return 'resolving';
+        case 'loading_media':
+            return 'loading';
+        case 'buffering':
+            return 'buffering';
+        case 'playing':
+        case 'paused':
+            return 'ready';
+        case 'error':
+            return 'error';
+        default:
+            return 'idle';
+    }
+};
+
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { theme } = useTheme();
     const settings = useUserStore((s) => s.settings);
@@ -115,6 +134,75 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
 
     // --- Core Player Logic (State Machine) ---
     const { state: playerState, dispatch } = usePlayerLogic(sessionId);
+    const bootstrapLoadDispatchedRef = useRef(false);
+
+    useEffect(() => {
+        if (bootstrapLoadDispatchedRef.current) return;
+        if (playerState.status !== 'idle' || playerState.stream) return;
+
+        const streamUrl = session?.url || props.url || '';
+        const streamInfoHash = session?.infoHash;
+        if (!streamUrl && !streamInfoHash) {
+            bootstrapLoadDispatchedRef.current = true;
+            dispatch({ type: 'ERROR', error: 'No stream source available for playback.', fatal: true });
+            return;
+        }
+
+        bootstrapLoadDispatchedRef.current = true;
+        dispatch({
+            type: 'LOAD_STREAM',
+            stream: {
+                url: streamUrl || undefined,
+                infoHash: streamInfoHash,
+                fileIdx: session?.fileIdx,
+                behaviorHints: {
+                    headers: session?.headers,
+                },
+            },
+            engine: playbackEngine === 'vlc' ? 'vlc' : 'exo',
+            meta: {
+                title: episodeTitle || derivedTitle || 'Now Playing',
+                subtitle: contentType === 'movie' ? 'Movie' : derivedTitle || 'Series',
+                artworkUrl: poster || undefined,
+                contentId,
+            },
+        });
+    }, [
+        session,
+        props.url,
+        playbackEngine,
+        episodeTitle,
+        derivedTitle,
+        contentType,
+        poster,
+        contentId,
+        playerState.status,
+        playerState.stream,
+        dispatch,
+    ]);
+
+    useEffect(() => {
+        if (!sessionId) return;
+
+        const patch: {
+            playbackState: PlaybackState;
+            engine: 'exoplayer' | 'vlc';
+            url?: string;
+            headers?: Record<string, string>;
+        } = {
+            playbackState: mapMachineStatusToPlaybackState(playerState.status),
+            engine: playerState.engine === 'vlc' ? 'vlc' : 'exoplayer',
+        };
+
+        if (playerState.resolvedUrl) {
+            patch.url = playerState.resolvedUrl;
+        }
+        if (playerState.stream?.behaviorHints?.headers) {
+            patch.headers = playerState.stream.behaviorHints.headers;
+        }
+
+        useNativePlayerSessionStore.getState().patchSession(sessionId, patch);
+    }, [sessionId, playerState.status, playerState.engine, playerState.resolvedUrl, playerState.stream]);
     
     // Derived UI State
     const paused = playerState.status === 'paused';
@@ -125,6 +213,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [showControls, setShowControls] = useState(true);
     const [activeTab, setActiveTab] = useState<ActiveTab>('none');
     const [isPipMode, setIsPipMode] = useState(false);
+    const [isLoadingCurtainVisible, setIsLoadingCurtainVisible] = useState(false);
     const [progress, setProgress] = useState({ position: 0, duration: 0 });
     const [stableDuration, setStableDuration] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
@@ -183,6 +272,14 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         if (pState === 'booting_torrent' || pState === 'polling_localhost' || pState === 'loading_media') return true;
         return false;
     }, [buffering, playerState.status]);
+
+    const loadingText = useMemo(() => {
+        if (playerState.status === 'booting_torrent') return 'Starting torrent stream...';
+        if (playerState.status === 'polling_localhost') return 'Connecting to peers...';
+        if (playerState.status === 'loading_media') return 'Loading stream...';
+        if (playerState.status === 'buffering') return 'Buffering...';
+        return 'Loading...';
+    }, [playerState.status]);
 
     // Fetch Intro Data
     useEffect(() => {
@@ -406,6 +503,10 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             id: nextMd.contentId,
             paused: false, // Auto-play
             artworkUrl: nextMd.artworkUrl,
+            url: stream?.url,
+            headers: stream?.behaviorHints?.headers,
+            infoHash: stream?.infoHash,
+            fileIdx: typeof stream?.fileIdx === 'number' ? stream.fileIdx : undefined,
         });
 
         dispatch({ 
@@ -474,6 +575,8 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 stableDuration={stableDuration}
                 lastError={lastError}
                 isPipMode={isPipMode}
+                loadingText={loadingText}
+                onVisibilityChange={setIsLoadingCurtainVisible}
             />
 
             <PlayerSkipIntro
@@ -539,7 +642,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                     playPauseAnimatedStyle={playPauseAnimatedStyle}
                     feedbackAnimatedStyle={feedbackAnimatedStyle}
                     formatTime={formatTime}
-                    isLoading={isLoading}
+                    isLoading={isLoading || isLoadingCurtainVisible}
                 />
             </Pressable>
 
