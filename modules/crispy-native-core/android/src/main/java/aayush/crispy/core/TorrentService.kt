@@ -284,6 +284,9 @@ class TorrentService : Service() {
                         Log.d(TAG, "[ALERT] PEER_DISCONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.message()}")
                     }
 
+                    else -> {
+                    }
+
                 }
             }
         })
