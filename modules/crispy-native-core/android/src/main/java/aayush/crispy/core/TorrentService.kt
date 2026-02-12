@@ -538,6 +538,13 @@ class TorrentService : Service() {
         val deadline = System.currentTimeMillis() + timeoutMs
         var attempts = 0
 
+        val urls = listOf(
+            "http://127.0.0.1:11470/stats.json",
+            "http://localhost:11470/stats.json",
+        )
+
+        var lastSummary: String? = null
+
         while (System.currentTimeMillis() < deadline) {
             attempts++
 
@@ -545,11 +552,29 @@ class TorrentService : Service() {
                 startServer()
             }
 
-            if (isServerReachable()) {
+            var okUrl: String? = null
+            val summaries = mutableListOf<String>()
+            for (url in urls) {
+                val result = probeServer(url)
+                if (result.ok) {
+                    okUrl = url
+                    break
+                }
+                summaries.add(result.summary)
+            }
+
+            if (okUrl != null) {
                 if (attempts > 1) {
-                    Log.d(TAG, "CrispyServer became ready after $attempts checks")
+                    Log.d(TAG, "CrispyServer became ready after $attempts checks (url=$okUrl)")
                 }
                 return true
+            }
+
+            val summary = "alive=${server?.isAlive == true} attempts=$attempts ${summaries.joinToString(" | ")}".trim()
+            val shouldLog = attempts == 1 || attempts % 5 == 0 || System.currentTimeMillis() + 150 >= deadline
+            if (shouldLog && summary != lastSummary) {
+                Log.d(TAG, "CrispyServer not ready: $summary")
+                lastSummary = summary
             }
 
             try {
@@ -564,19 +589,33 @@ class TorrentService : Service() {
         return false
     }
 
-    private fun isServerReachable(): Boolean {
+    private data class ServerProbeResult(
+        val ok: Boolean,
+        val summary: String,
+    )
+
+    private fun probeServer(url: String): ServerProbeResult {
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL("http://127.0.0.1:11470/stats.json").openConnection() as HttpURLConnection).apply {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 250
                 readTimeout = 250
                 requestMethod = "GET"
                 instanceFollowRedirects = false
             }
 
-            connection.responseCode in 200..399
-        } catch (_: Exception) {
-            false
+            val code = connection.responseCode
+            ServerProbeResult(
+                ok = code in 200..399,
+                summary = "probe=$url code=$code",
+            )
+        } catch (e: Exception) {
+            val cls = e::class.java.simpleName
+            val msg = e.message ?: "(no message)"
+            ServerProbeResult(
+                ok = false,
+                summary = "probe=$url err=$cls: $msg",
+            )
         } finally {
             connection?.disconnect()
         }
