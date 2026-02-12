@@ -11,6 +11,8 @@ import com.frostwire.jlibtorrent.*
 import com.frostwire.jlibtorrent.alerts.*
 import com.frostwire.jlibtorrent.swig.settings_pack
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -532,15 +534,61 @@ class TorrentService : Service() {
 
     fun getDownloadDir(): File = getExternalFilesDir(null) ?: filesDir
 
+    fun awaitServerReady(timeoutMs: Long = 3000L): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var attempts = 0
+
+        while (System.currentTimeMillis() < deadline) {
+            attempts++
+
+            if (server?.isAlive != true) {
+                startServer()
+            }
+
+            if (isServerReachable()) {
+                if (attempts > 1) {
+                    Log.d(TAG, "CrispyServer became ready after $attempts checks")
+                }
+                return true
+            }
+
+            try {
+                Thread.sleep(120)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                break
+            }
+        }
+
+        Log.w(TAG, "CrispyServer readiness check timed out after ${timeoutMs}ms")
+        return false
+    }
+
+    private fun isServerReachable(): Boolean {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL("http://127.0.0.1:11470/stats.json").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 250
+                readTimeout = 250
+                requestMethod = "GET"
+                instanceFollowRedirects = false
+            }
+
+            connection.responseCode in 200..399
+        } catch (_: Exception) {
+            false
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
     fun getStreamUrl(infoHash: String, fileIdx: Int): String? {
         val hash = infoHash.lowercase()
         if (!activeTorrents.containsKey(hash)) return null
         
         // Optimistic return - we don't wait for handle or metadata here.
         // The CrispyServer handles waiting/retrying when the player actually connects.
-        // Use explicit IPv4 loopback. Some Android networking stacks resolve `localhost` to IPv6 (::1)
-        // while our NanoHTTPD server binds to 127.0.0.1.
-        return "http://127.0.0.1:11470/$hash/$fileIdx"
+        return "http://localhost:11470/$hash/$fileIdx"
     }
 
     fun getLargestFileIndex(infoHash: String): Int {

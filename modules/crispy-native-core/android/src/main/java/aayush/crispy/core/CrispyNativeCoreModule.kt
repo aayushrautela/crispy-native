@@ -80,6 +80,11 @@ class CrispyNativeCoreModule : Module() {
           Log.e("CrispyModule", "Failed to start stream: Service not bound (timeout)")
           return@AsyncFunction null
       }
+
+      if (!service.awaitServerReady()) {
+          Log.e("CrispyModule", "Failed to start stream: local server not ready")
+          return@AsyncFunction null
+      }
       
       // Start torrent download (non-blocking) with Session ID
       if (!service.startInfoHash(infoHash, sessionId)) {

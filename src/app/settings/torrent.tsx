@@ -26,7 +26,8 @@ type FileStats = {
     pieceLength: number;
 };
 
-const SERVER_ORIGIN = 'http://127.0.0.1:11470';
+const PRIMARY_SERVER_ORIGIN = 'http://localhost:11470';
+const FALLBACK_SERVER_ORIGIN = 'http://127.0.0.1:11470';
 
 function normalizeInfoHash(input: string): string | null {
     const trimmed = input.trim();
@@ -44,6 +45,10 @@ function formatBytes(bytes: number): string {
 
 function formatSpeed(bytesPerSec: number): string {
     return `${formatBytes(bytesPerSec)}/s`;
+}
+
+function delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export default function TorrentDebugScreen() {
@@ -65,6 +70,7 @@ export default function TorrentDebugScreen() {
     const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
     const warmInFlight = useRef(false);
     const activeInfoHashRef = useRef<string | null>(null);
+    const serverOriginRef = useRef(PRIMARY_SERVER_ORIGIN);
 
     const normalized = useMemo(() => normalizeInfoHash(input), [input]);
 
@@ -79,16 +85,52 @@ export default function TorrentDebugScreen() {
         }
     }, []);
 
+    const fetchLocal = useCallback(async (path: string, init?: RequestInit) => {
+        const fallbackOrigin = serverOriginRef.current === PRIMARY_SERVER_ORIGIN
+            ? FALLBACK_SERVER_ORIGIN
+            : PRIMARY_SERVER_ORIGIN;
+        const origins = [serverOriginRef.current, fallbackOrigin];
+
+        let lastError: unknown = null;
+        for (const origin of origins) {
+            try {
+                const response = await fetch(`${origin}${path}`, init);
+                serverOriginRef.current = origin;
+                return response;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+
+        if (lastError instanceof Error) {
+            throw lastError;
+        }
+        throw new Error('Local server request failed');
+    }, []);
+
+    const waitForServerReady = useCallback(async () => {
+        for (let i = 0; i < 20; i++) {
+            try {
+                const response = await fetchLocal('/stats.json', { cache: 'no-store' });
+                if (response.ok) return true;
+            } catch {
+                // ignore and retry
+            }
+            await delay(120);
+        }
+        return false;
+    }, [fetchLocal]);
+
     const pollOnce = useCallback(async (infoHash: string, fileIdx: number | null) => {
         try {
-            const tsRes = await fetch(`${SERVER_ORIGIN}/${infoHash}/stats.json`);
+            const tsRes = await fetchLocal(`/${infoHash}/stats.json`, { cache: 'no-store' });
             if (tsRes.ok) {
                 const json = (await tsRes.json()) as TorrentStats;
                 setTorrentStats(json);
             }
 
             if (fileIdx != null) {
-                const fsRes = await fetch(`${SERVER_ORIGIN}/${infoHash}/${fileIdx}/stats.json`);
+                const fsRes = await fetchLocal(`/${infoHash}/${fileIdx}/stats.json`, { cache: 'no-store' });
                 if (fsRes.ok) {
                     const json = (await fsRes.json()) as FileStats;
                     setFileStats(json);
@@ -99,7 +141,7 @@ export default function TorrentDebugScreen() {
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
-    }, []);
+    }, [fetchLocal]);
 
     const start = useCallback(async () => {
         const infoHash = normalized;
@@ -120,9 +162,25 @@ export default function TorrentDebugScreen() {
             const url = await CrispyNativeCore.startStream(infoHash, -1, 'torrent-debug');
             setStreamUrl(url);
 
+            if (!url) {
+                throw new Error('startStream returned no URL');
+            }
+
+            try {
+                const parsed = new URL(url);
+                serverOriginRef.current = `${parsed.protocol}//${parsed.host}`;
+            } catch {
+                serverOriginRef.current = PRIMARY_SERVER_ORIGIN;
+            }
+
             const idxFromUrl = url?.match(/\/(\d+)$/)?.[1];
             const fileIdx = idxFromUrl ? Number.parseInt(idxFromUrl, 10) : null;
             setActiveFileIdx(Number.isFinite(fileIdx as number) ? (fileIdx as number) : null);
+
+            const ready = await waitForServerReady();
+            if (!ready) {
+                throw new Error(`Local server not ready (${serverOriginRef.current})`);
+            }
 
             stopPolling();
             await pollOnce(infoHash, Number.isFinite(fileIdx as number) ? (fileIdx as number) : null);
@@ -136,7 +194,7 @@ export default function TorrentDebugScreen() {
                     if (warmInFlight.current) return;
                     warmInFlight.current = true;
                     try {
-                        await fetch(`${SERVER_ORIGIN}/${infoHash}/${fileIdx}`, {
+                        await fetchLocal(`/${infoHash}/${fileIdx}`, {
                             headers: {
                                 Range: 'bytes=0-1048575',
                             },
@@ -153,7 +211,7 @@ export default function TorrentDebugScreen() {
         } finally {
             setIsStarting(false);
         }
-    }, [normalized, pollOnce, stopPolling, warmOnStart]);
+    }, [fetchLocal, normalized, pollOnce, stopPolling, waitForServerReady, warmOnStart]);
 
     const stop = useCallback(async () => {
         stopPolling();
