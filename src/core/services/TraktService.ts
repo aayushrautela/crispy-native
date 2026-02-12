@@ -4,7 +4,7 @@ import { TraktAuth, useUserStore } from '../stores/userStore';
 // Helper to safely get IDs
 const media_ids = (item: any) => item?.ids || {};
 
-// Storage keys - these will be prefixed by StorageService for per-user isolation
+// Storage keys - persisted in active profile scope
 const TRAKT_AUTH_KEY = 'crispy-trakt-auth';
 
 // Trakt API configuration
@@ -77,21 +77,20 @@ export class TraktService {
         if (this.isInitialized) return;
 
         try {
-            // Reverted to User storage for profile isolation
-            const auth = StorageService.getUser<TraktAuth>(TRAKT_AUTH_KEY);
+            const auth = StorageService.getProfile<TraktAuth>(TRAKT_AUTH_KEY);
             if (auth) {
                 this.accessToken = auth.accessToken || null;
                 this.refreshToken = auth.refreshToken || null;
                 this.tokenExpiry = auth.expiresAt || 0;
             }
             this.isInitialized = true;
-            console.log('[TraktService] Initialized (User). Authenticated:', !!this.accessToken);
+            console.log('[TraktService] Initialized (Profile). Authenticated:', !!this.accessToken);
         } catch (error) {
             console.error('[TraktService] Initialization failed:', error);
         }
     }
 
-    // Call this when switching users to force re-read of storage
+    // Call this when switching profiles to force re-read of storage
     public reset() {
         this.accessToken = null;
         this.refreshToken = null;
@@ -205,8 +204,7 @@ export class TraktService {
         this.refreshToken = auth.refreshToken || null;
         this.tokenExpiry = auth.expiresAt || 0;
 
-        // Save Trakt to per-user namespace
-        StorageService.setUser(TRAKT_AUTH_KEY, auth);
+        StorageService.setProfile(TRAKT_AUTH_KEY, auth);
     }
 
     public logout() {
@@ -214,7 +212,7 @@ export class TraktService {
         this.refreshToken = null;
         this.tokenExpiry = 0;
 
-        StorageService.removeUser(TRAKT_AUTH_KEY);
+        StorageService.removeProfile(TRAKT_AUTH_KEY);
         useUserStore.getState().updateTraktAuth({});
     }
 

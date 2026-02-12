@@ -1,3 +1,5 @@
+import { StorageService } from './storage';
+
 export interface Language {
     code: string;
     name: string;
@@ -191,15 +193,13 @@ export const LANGUAGES: Language[] = [
     { code: 'zu', name: 'Zulu', nativeName: 'isiZulu' },
 ];
 
-import { StorageService } from './storage';
-
 const LANGUAGE_STORAGE_KEY = 'crispy-language';
 const DEFAULT_LANGUAGE = 'en';
 
 export function getStoredLanguage(): string {
-    return StorageService.getUser(LANGUAGE_STORAGE_KEY, DEFAULT_LANGUAGE);
+    return StorageService.getProfile(LANGUAGE_STORAGE_KEY, DEFAULT_LANGUAGE);
 }
 
 export function setStoredLanguage(code: string): void {
-    StorageService.setUser(LANGUAGE_STORAGE_KEY, code);
+    StorageService.setProfile(LANGUAGE_STORAGE_KEY, code);
 }

@@ -1,82 +1,122 @@
 import { useAuth } from '@/src/core/AuthContext';
+import { useProfiles } from '@/src/core/ProfileContext';
 import { useTheme } from '@/src/core/ThemeContext';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { Plus, User, UserCheck, UserMinus } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { LogOut, Plus, User, UserCheck, UserMinus } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 export default function ProfilesScreen() {
     const { theme } = useTheme();
     const router = useRouter();
+    const { signOut } = useAuth();
     const {
-        knownAccounts,
-        activeAccount,
-        mode,
-        switchAccount,
-        continueAsGuest,
-        removeAccount,
-    } = useAuth();
+        loading,
+        profiles,
+        activeProfileId,
+        switchProfile,
+        createProfile,
+        deleteProfile,
+    } = useProfiles();
 
-    const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
-    const [guestLoading, setGuestLoading] = useState(false);
+    const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
     const [removeLoadingId, setRemoveLoadingId] = useState<string | null>(null);
+    const [newProfileName, setNewProfileName] = useState('');
+    const [creating, setCreating] = useState(false);
+    const [signingOut, setSigningOut] = useState(false);
 
-    const activeAccountId = mode === 'account' ? activeAccount?.user_id : null;
+    const canInteract = useMemo(() => {
+        return !loading && !creating && !signingOut && !pendingProfileId && !removeLoadingId;
+    }, [creating, loading, pendingProfileId, removeLoadingId, signingOut]);
 
-    const handleAccountPress = async (userId: string) => {
-        if (pendingAccountId || guestLoading || removeLoadingId) return;
+    const handleProfilePress = async (profileId: string) => {
+        if (!canInteract) return;
 
-        if (activeAccountId === userId) {
+        setPendingProfileId(profileId);
+        try {
+            await switchProfile(profileId);
             router.replace('/(tabs)');
+        } catch (error: any) {
+            Alert.alert('Unable to switch profile', error?.message || 'Please try again.');
+        } finally {
+            setPendingProfileId(null);
+        }
+    };
+
+    const handleCreateProfile = async () => {
+        if (!canInteract) return;
+
+        const trimmed = newProfileName.trim();
+        if (!trimmed) {
+            Alert.alert('Profile name required', 'Please enter a profile name.');
             return;
         }
 
-        setPendingAccountId(userId);
+        setCreating(true);
         try {
-            await switchAccount(userId);
+            const profile = await createProfile(trimmed);
+            setNewProfileName('');
+            await switchProfile(profile.id);
             router.replace('/(tabs)');
         } catch (error: any) {
-            Alert.alert('Unable to switch account', error?.message || 'Please try again.');
+            Alert.alert('Unable to create profile', error?.message || 'Please try again.');
         } finally {
-            setPendingAccountId(null);
+            setCreating(false);
         }
     };
 
-    const handleContinueAsGuest = async () => {
-        if (pendingAccountId || guestLoading || removeLoadingId) return;
-
-        setGuestLoading(true);
-        try {
-            await continueAsGuest();
-            router.replace('/(tabs)');
-        } catch (error: any) {
-            Alert.alert('Unable to continue as guest', error?.message || 'Please try again.');
-        } finally {
-            setGuestLoading(false);
+    const handleDeleteProfile = (profileId: string, label: string) => {
+        if (!canInteract) return;
+        if (profiles.length <= 1) {
+            Alert.alert('Cannot delete profile', 'Create another profile before deleting this one.');
+            return;
         }
-    };
 
-    const handleRemoveAccount = (userId: string, label: string) => {
         Alert.alert(
-            'Remove Account',
-            `Remove ${label} from this device?`,
+            'Delete Profile',
+            `Delete ${label}? This removes local profile data on this device.`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Remove',
+                    text: 'Delete',
                     style: 'destructive',
                     onPress: async () => {
-                        setRemoveLoadingId(userId);
+                        setRemoveLoadingId(profileId);
                         try {
-                            await removeAccount(userId);
+                            await deleteProfile(profileId);
                         } catch (error: any) {
-                            Alert.alert('Unable to remove account', error?.message || 'Please try again.');
+                            Alert.alert('Unable to delete profile', error?.message || 'Please try again.');
                         } finally {
                             setRemoveLoadingId(null);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleSignOut = () => {
+        Alert.alert(
+            'Sign Out',
+            'Sign out of this household account?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setSigningOut(true);
+                        try {
+                            await signOut();
+                            router.replace('/(auth)/login');
+                        } catch (error: any) {
+                            Alert.alert('Unable to sign out', error?.message || 'Please try again.');
+                        } finally {
+                            setSigningOut(false);
                         }
                     },
                 },
@@ -89,29 +129,28 @@ export default function ProfilesScreen() {
             <View style={styles.container}>
                 <View style={styles.headerCopy}>
                     <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSurface }}>
-                        Continue with a profile
+                        Who&apos;s watching?
                     </Typography>
                     <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
-                        Switch instantly between saved accounts or use local guest mode.
+                        Profiles keep recommendations, Trakt history, and settings separate.
                     </Typography>
                 </View>
 
-                <SettingsGroup title="Saved Profiles">
-                    {knownAccounts.length > 0 ? (
-                        knownAccounts.map((account) => {
-                            const isCurrent = account.user_id === activeAccountId;
-                            const isSwitching = pendingAccountId === account.user_id;
-                            const isRemoving = removeLoadingId === account.user_id;
-                            const label = account.name || account.email || 'Crispy User';
+                <SettingsGroup title="Profiles">
+                    {profiles.length > 0 ? (
+                        profiles.map((profile) => {
+                            const isCurrent = profile.id === activeProfileId;
+                            const isSwitching = pendingProfileId === profile.id;
+                            const isRemoving = removeLoadingId === profile.id;
 
                             return (
                                 <Pressable
-                                    key={account.user_id}
-                                    onPress={() => void handleAccountPress(account.user_id)}
-                                    disabled={isSwitching || isRemoving || guestLoading || !!pendingAccountId || !!removeLoadingId}
+                                    key={profile.id}
+                                    onPress={() => void handleProfilePress(profile.id)}
+                                    disabled={!canInteract || isSwitching || isRemoving}
                                     style={({ pressed }) => [
-                                        styles.accountRow,
-                                        pressed && styles.accountRowPressed,
+                                        styles.profileRow,
+                                        pressed && styles.profileRowPressed,
                                     ]}
                                 >
                                     <View
@@ -131,30 +170,22 @@ export default function ProfilesScreen() {
                                         )}
                                     </View>
 
-                                    <View style={styles.accountMeta}>
+                                    <View style={styles.profileMeta}>
                                         <Typography variant="title-small" weight="semibold" style={{ color: theme.colors.onSurface }}>
-                                            {label}
+                                            {profile.name}
                                         </Typography>
                                         <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
-                                            {account.email}
+                                            {isCurrent ? 'Current profile' : 'Tap to switch'}
                                         </Typography>
                                     </View>
 
-                                    <View style={styles.accountActions}>
-                                        {isCurrent && (
-                                            <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                                                <Typography variant="label-small" weight="bold" style={{ color: theme.colors.onSecondaryContainer }}>
-                                                    Current
-                                                </Typography>
-                                            </View>
-                                        )}
-
+                                    <View style={styles.profileActions}>
                                         <Pressable
                                             onPress={(event) => {
                                                 event.stopPropagation();
-                                                handleRemoveAccount(account.user_id, label);
+                                                handleDeleteProfile(profile.id, profile.name);
                                             }}
-                                            disabled={isRemoving || !!pendingAccountId || guestLoading || !!removeLoadingId}
+                                            disabled={isRemoving || !canInteract}
                                             style={({ pressed }) => [
                                                 styles.removeButton,
                                                 {
@@ -172,30 +203,50 @@ export default function ProfilesScreen() {
                     ) : (
                         <View style={styles.emptyState}>
                             <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                                No saved accounts yet.
+                                No profiles yet.
                             </Typography>
                             <Typography variant="body-small" style={{ color: theme.colors.outline }}>
-                                Add an account to enable one-tap switching.
+                                Create your first profile to continue.
                             </Typography>
                         </View>
                     )}
                 </SettingsGroup>
 
-                <View style={styles.actions}>
-                    <ExpressiveButton
-                        title="Add Account"
-                        icon={Plus}
-                        variant="tonal"
-                        onPress={() => router.push('/(auth)/login?mode=add-account')}
-                        disabled={!!pendingAccountId || guestLoading || !!removeLoadingId}
-                    />
+                <SettingsGroup title="Create Profile">
+                    <View style={styles.createRow}>
+                        <TextInput
+                            value={newProfileName}
+                            onChangeText={setNewProfileName}
+                            placeholder="Profile name"
+                            placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: theme.colors.elevation.level2,
+                                    color: theme.colors.onSurface,
+                                    borderColor: theme.colors.outlineVariant,
+                                },
+                            ]}
+                        />
+                        <ExpressiveButton
+                            title="Add"
+                            icon={Plus}
+                            onPress={handleCreateProfile}
+                            isLoading={creating}
+                            disabled={!canInteract}
+                            style={styles.createButton}
+                        />
+                    </View>
+                </SettingsGroup>
 
+                <View style={styles.footerActions}>
                     <ExpressiveButton
-                        title="Continue as Guest"
+                        title="Sign Out"
+                        icon={LogOut}
                         variant="outline"
-                        onPress={handleContinueAsGuest}
-                        isLoading={guestLoading}
-                        disabled={!!pendingAccountId || !!removeLoadingId}
+                        onPress={handleSignOut}
+                        isLoading={signingOut}
+                        disabled={!canInteract}
                     />
                 </View>
             </View>
@@ -213,14 +264,14 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         gap: 4,
     },
-    accountRow: {
+    profileRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 16,
         gap: 12,
     },
-    accountRowPressed: {
+    profileRowPressed: {
         opacity: 0.85,
     },
     avatar: {
@@ -230,19 +281,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    accountMeta: {
+    profileMeta: {
         flex: 1,
         gap: 2,
     },
-    accountActions: {
+    profileActions: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-    },
-    badge: {
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
     },
     removeButton: {
         width: 28,
@@ -256,8 +302,22 @@ const styles = StyleSheet.create({
         paddingVertical: 20,
         gap: 4,
     },
-    actions: {
+    createRow: {
         paddingHorizontal: 20,
         gap: 10,
+    },
+    input: {
+        borderRadius: 14,
+        borderWidth: 1,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontSize: 16,
+    },
+    createButton: {
+        width: '100%',
+    },
+    footerActions: {
+        paddingHorizontal: 20,
+        paddingTop: 10,
     },
 });

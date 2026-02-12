@@ -25,7 +25,7 @@ export function useAiInsights() {
 
     const loadFromCache = useCallback(async (id: string) => {
         if (!id) return false;
-        const cached = StorageService.getUser<AiInsightsResult>(`${CACHE_PREFIX}${id}`);
+        const cached = StorageService.getProfile<AiInsightsResult>(`${CACHE_PREFIX}${id}`);
         if (cached) {
             setInsights(cached);
             return true;
@@ -41,7 +41,7 @@ export function useAiInsights() {
 
         // Check cache first
         const cacheKey = `${CACHE_PREFIX}${meta.tmdbId || meta.id}`;
-        const cached = StorageService.getUser<AiInsightsResult>(cacheKey);
+        const cached = StorageService.getProfile<AiInsightsResult>(cacheKey);
         if (cached) {
             setInsights(cached);
             setIsLoading(false);
@@ -115,7 +115,7 @@ Return ONLY valid JSON.
 
                 const data = JSON.parse(jsonString);
                 setInsights(data);
-                StorageService.setUser(cacheKey, data);
+                StorageService.setProfile(cacheKey, data);
                 return data;
             }
         } catch (e) {

@@ -5,9 +5,14 @@ export const storage = createMMKV({
     id: 'crispy-storage'
 });
 
-console.log('[Storage] MMKV Initialized. Active User:', storage.getString('crispy_active_user_id') || 'None');
+const STORAGE_SCHEMA_VERSION = 2;
+const STORAGE_SCHEMA_KEY = 'crispy-schema-version';
+const ACTIVE_ACCOUNT_KEY = 'crispy-active-account-id';
+const ACTIVE_PROFILE_KEY = 'crispy-active-profile-id';
 
-export type UserStorageKey =
+console.log('[Storage] MMKV Initialized. Active Account:', storage.getString(ACTIVE_ACCOUNT_KEY) || 'None');
+
+export type ProfileStorageKey =
     | 'crispy-mobile-navbar-style'
     | 'crispy-intro-skip-mode'
     | 'crispy-omdb-key'
@@ -22,56 +27,157 @@ export type UserStorageKey =
     | 'crispy-openrouter-key'
     | string;
 
-export type GlobalStorageKey =
-    | 'crispy_known_sessions'
-    | 'crispy_active_user_id'
-    | 'crispy_session_mode'
-    | 'crispy-guest-mode'
+export type AccountStorageKey =
+    | 'crispy-addons'
+    | 'crispy-profiles-cache'
+    | string;
+
+export type DeviceStorageKey =
+    | typeof ACTIVE_ACCOUNT_KEY
+    | typeof ACTIVE_PROFILE_KEY
+    | typeof STORAGE_SCHEMA_KEY
     | 'crispy-migrated'
     | 'crispy-is-first-boot';
 
 class StorageServiceImpl {
-    public getUser<T>(key: UserStorageKey, defaultValue: T): T;
-    public getUser<T>(key: UserStorageKey): T | null;
-    public getUser<T>(key: UserStorageKey, defaultValue?: T): T | null {
-        const activeUserId = storage.getString('crispy_active_user_id');
-        if (!activeUserId) {
-            const val = this.getRaw(key, defaultValue);
-            // console.log(`[Storage] GET ${key} (Global) ->`, val ? 'Found' : 'Null');
-            return val;
-        }
-        const namespacedKey = "u_" + activeUserId + ":" + key;
-        const val = this.getRaw(namespacedKey, defaultValue);
-        // console.log(`[Storage] GET ${namespacedKey} (User ${activeUserId}) ->`, val ? 'Found' : 'Null');
-        return val;
+    constructor() {
+        this.ensureSchemaVersion();
     }
-    public setUser<T>(key: UserStorageKey, value: T): void {
-        const activeUserId = storage.getString('crispy_active_user_id');
-        if (!activeUserId) {
-            console.log(`[Storage] SET ${key} (Global)`);
-            this.setRaw(key, value);
+
+    private ensureSchemaVersion() {
+        const current = storage.getNumber(STORAGE_SCHEMA_KEY) ?? 0;
+        if (current >= STORAGE_SCHEMA_VERSION) {
             return;
         }
-        const namespacedKey = "u_" + activeUserId + ":" + key;
-        console.log(`[Storage] SET ${namespacedKey} (User ${activeUserId})`);
-        this.setRaw(namespacedKey, value);
+
+        console.log(`[Storage] Resetting storage schema ${current} -> ${STORAGE_SCHEMA_VERSION}`);
+        storage.clearAll();
+        storage.set(STORAGE_SCHEMA_KEY, STORAGE_SCHEMA_VERSION);
     }
-    public removeUser(key: UserStorageKey): void {
-        const activeUserId = storage.getString('crispy_active_user_id');
-        const fullKey = activeUserId ? "u_" + activeUserId + ":" + key : key;
-        storage.remove(fullKey);
+
+    public getActiveAccountId(): string | null {
+        return storage.getString(ACTIVE_ACCOUNT_KEY) ?? null;
     }
-    public removeGlobal(key: GlobalStorageKey): void {
-        storage.remove(key);
+
+    public setActiveAccountId(accountId: string | null): void {
+        if (!accountId) {
+            storage.remove(ACTIVE_ACCOUNT_KEY);
+            storage.remove(ACTIVE_PROFILE_KEY);
+            return;
+        }
+        storage.set(ACTIVE_ACCOUNT_KEY, accountId);
     }
-    public getGlobal<T>(key: GlobalStorageKey, defaultValue: T): T;
-    public getGlobal<T>(key: GlobalStorageKey): T | null;
-    public getGlobal<T>(key: GlobalStorageKey, defaultValue?: T): T | null {
+
+    public getActiveProfileId(): string | null {
+        return storage.getString(ACTIVE_PROFILE_KEY) ?? null;
+    }
+
+    public setActiveProfileId(profileId: string | null): void {
+        if (!profileId) {
+            storage.remove(ACTIVE_PROFILE_KEY);
+            return;
+        }
+        storage.set(ACTIVE_PROFILE_KEY, profileId);
+    }
+
+    public getDevice<T>(key: DeviceStorageKey, defaultValue: T): T;
+    public getDevice<T>(key: DeviceStorageKey): T | null;
+    public getDevice<T>(key: DeviceStorageKey, defaultValue?: T): T | null {
         return this.getRaw(key, defaultValue);
     }
-    public setGlobal<T>(key: GlobalStorageKey, value: T): void {
+
+    public setDevice<T>(key: DeviceStorageKey, value: T): void {
         this.setRaw(key, value);
     }
+
+    public removeDevice(key: DeviceStorageKey): void {
+        storage.remove(key);
+    }
+
+    public getGlobal<T>(key: string, defaultValue: T): T;
+    public getGlobal<T>(key: string): T | null;
+    public getGlobal<T>(key: string, defaultValue?: T): T | null {
+        return this.getRaw(key, defaultValue);
+    }
+
+    public setGlobal<T>(key: string, value: T): void {
+        this.setRaw(key, value);
+    }
+
+    public removeGlobal(key: string): void {
+        storage.remove(key);
+    }
+
+    public getAccount<T>(key: AccountStorageKey, defaultValue: T): T;
+    public getAccount<T>(key: AccountStorageKey): T | null;
+    public getAccount<T>(key: AccountStorageKey, defaultValue?: T): T | null {
+        const accountId = this.getActiveAccountId();
+        if (!accountId) return defaultValue ?? null;
+        return this.getRaw(this.accountKey(accountId, key), defaultValue);
+    }
+
+    public setAccount<T>(key: AccountStorageKey, value: T): void {
+        const accountId = this.getActiveAccountId();
+        if (!accountId) {
+            console.warn(`[Storage] setAccount(${key}) ignored: no active account`);
+            return;
+        }
+        this.setRaw(this.accountKey(accountId, key), value);
+    }
+
+    public removeAccount(key: AccountStorageKey): void {
+        const accountId = this.getActiveAccountId();
+        if (!accountId) return;
+        storage.remove(this.accountKey(accountId, key));
+    }
+
+    public getProfile<T>(key: ProfileStorageKey, defaultValue: T): T;
+    public getProfile<T>(key: ProfileStorageKey): T | null;
+    public getProfile<T>(key: ProfileStorageKey, defaultValue?: T): T | null {
+        const accountId = this.getActiveAccountId();
+        const profileId = this.getActiveProfileId();
+        if (!accountId || !profileId) return defaultValue ?? null;
+        return this.getRaw(this.profileKey(accountId, profileId, key), defaultValue);
+    }
+
+    public setProfile<T>(key: ProfileStorageKey, value: T): void {
+        const accountId = this.getActiveAccountId();
+        const profileId = this.getActiveProfileId();
+        if (!accountId || !profileId) {
+            console.warn(`[Storage] setProfile(${key}) ignored: no active profile`);
+            return;
+        }
+        this.setRaw(this.profileKey(accountId, profileId, key), value);
+    }
+
+    public removeProfile(key: ProfileStorageKey): void {
+        const accountId = this.getActiveAccountId();
+        const profileId = this.getActiveProfileId();
+        if (!accountId || !profileId) return;
+        storage.remove(this.profileKey(accountId, profileId, key));
+    }
+
+    public clearProfileNamespace(profileId: string): void {
+        const accountId = this.getActiveAccountId();
+        if (!accountId) return;
+
+        const prefix = `a_${accountId}:p_${profileId}:`;
+        const keys = storage.getAllKeys();
+        keys.forEach((key) => {
+            if (key.startsWith(prefix)) {
+                storage.remove(key);
+            }
+        });
+    }
+
+    private accountKey(accountId: string, key: string): string {
+        return `a_${accountId}:${key}`;
+    }
+
+    private profileKey(accountId: string, profileId: string, key: string): string {
+        return `a_${accountId}:p_${profileId}:${key}`;
+    }
+
     private getRaw<T>(key: string, defaultValue?: T): T | null {
         try {
             const item = storage.getString(key);

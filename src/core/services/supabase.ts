@@ -10,13 +10,39 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export interface UserData {
+export type SupabaseJson =
+    | string
+    | number
+    | boolean
+    | null
+    | { [key: string]: SupabaseJson }
+    | SupabaseJson[];
+
+export interface ProfileRecord {
     id: string;
-    user_id: string;
+    account_id: string;
+    name: string;
+    avatar: string | null;
+    order_index: number;
+    last_active_at: string | null;
     created_at: string;
     updated_at: string;
-    settings?: any;
-    addons?: any;
-    catalog_prefs?: any;
-    trakt_auth?: any;
+}
+
+export interface AccountDataRecord {
+    id: string;
+    account_id: string;
+    created_at: string;
+    updated_at: string;
+    addons: SupabaseJson;
+}
+
+export interface ProfileDataRecord {
+    id: string;
+    profile_id: string;
+    created_at: string;
+    updated_at: string;
+    settings: SupabaseJson;
+    catalog_prefs: SupabaseJson;
+    trakt_auth: SupabaseJson;
 }

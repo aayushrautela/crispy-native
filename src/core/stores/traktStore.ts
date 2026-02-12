@@ -83,31 +83,31 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
 
     setWatchlist: (items) => {
         set({ watchlist: items, watchlistIds: buildIds(items) });
-        StorageService.setUser('trakt-watchlist', items);
+        StorageService.setProfile('trakt-watchlist', items);
     },
     setCollection: (items) => {
         set({ collection: items, collectionIds: buildIds(items) });
-        StorageService.setUser('trakt-collection', items);
+        StorageService.setProfile('trakt-collection', items);
     },
     setContinueWatching: (items) => {
         set({ continueWatching: items });
-        StorageService.setUser('trakt-continue-watching', items);
+        StorageService.setProfile('trakt-continue-watching', items);
     },
     setRatedContent: (items) => {
         set({ ratedContent: items });
-        StorageService.setUser('trakt-rated-content', items);
+        StorageService.setProfile('trakt-rated-content', items);
     },
     setWatchedShowsRaw: (items) => {
         set({ watchedShowsRaw: items, watchedEpisodeIds: buildEpisodeIds(items) });
-        StorageService.setUser('trakt-watched-shows-raw', items);
+        StorageService.setProfile('trakt-watched-shows-raw', items);
     },
     setWatchedHistory: (items) => {
         set({ watchedHistory: items, watchedIds: buildIds(items) });
-        StorageService.setUser('trakt-watched-history', items);
+        StorageService.setProfile('trakt-watched-history', items);
     },
     setRecommendations: (items) => {
         set({ recommendations: items });
-        StorageService.setUser('trakt-recommendations', items);
+        StorageService.setProfile('trakt-recommendations', items);
     },
     setIsLoading: (isLoading) => set({ isLoading }),
 
@@ -117,13 +117,13 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
     isEpisodeWatched: (showId, season, episode) => get().watchedEpisodeIds.has(`${showId}:${season}:${episode}`),
 
     hydrate: () => {
-        const watchlist = StorageService.getUser<any[]>('trakt-watchlist') || [];
-        const collection = StorageService.getUser<any[]>('trakt-collection') || [];
-        const continueWatching = StorageService.getUser<any[]>('trakt-continue-watching') || [];
-        const ratedContent = StorageService.getUser<any[]>('trakt-rated-content') || [];
-        const watchedShowsRaw = StorageService.getUser<any[]>('trakt-watched-shows-raw') || [];
-        const watchedHistory = StorageService.getUser<any[]>('trakt-watched-history') || [];
-        const recommendations = StorageService.getUser<any[]>('trakt-recommendations') || [];
+        const watchlist = StorageService.getProfile<any[]>('trakt-watchlist') || [];
+        const collection = StorageService.getProfile<any[]>('trakt-collection') || [];
+        const continueWatching = StorageService.getProfile<any[]>('trakt-continue-watching') || [];
+        const ratedContent = StorageService.getProfile<any[]>('trakt-rated-content') || [];
+        const watchedShowsRaw = StorageService.getProfile<any[]>('trakt-watched-shows-raw') || [];
+        const watchedHistory = StorageService.getProfile<any[]>('trakt-watched-history') || [];
+        const recommendations = StorageService.getProfile<any[]>('trakt-recommendations') || [];
 
         set({
             watchlist,

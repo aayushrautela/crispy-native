@@ -78,29 +78,29 @@ export interface UserState {
 
 function getDefaultSettings(): AppSettings {
     return {
-        tmdbKey: StorageService.getUser<string>('crispy-tmdb-key') || '',
-        omdbKey: StorageService.getUser<string>('crispy-omdb-key') || '',
-        addonSearchEnabled: StorageService.getUser<boolean>('crispy-addon-search-enabled') || false,
-        autoplayEnabled: StorageService.getUser<boolean>('crispy-autoplay-enabled') || false,
+        tmdbKey: StorageService.getProfile<string>('crispy-tmdb-key') || '',
+        omdbKey: StorageService.getProfile<string>('crispy-omdb-key') || '',
+        addonSearchEnabled: StorageService.getProfile<boolean>('crispy-addon-search-enabled') || false,
+        autoplayEnabled: StorageService.getProfile<boolean>('crispy-autoplay-enabled') || false,
         language: getStoredLanguage(),
-        audioLanguage: StorageService.getUser<string>('crispy-audio-language') || 'en',
-        subtitleLanguage: StorageService.getUser<string>('crispy-subtitle-language') || 'en',
-        subtitleSize: StorageService.getUser<number>('crispy-subtitle-size') ?? 100,
-        subtitlePosition: StorageService.getUser<number>('crispy-subtitle-position') ?? 5,
-        subtitleColor: StorageService.getUser<string>('crispy-subtitle-color') || '#FFFFFF',
-        subtitleBackColor: StorageService.getUser<string>('crispy-subtitle-back-color') || '#00000000',
-        subtitleBorderColor: StorageService.getUser<string>('crispy-subtitle-border-color') || '#000000',
-        introSkipMode: (StorageService.getUser<string>('crispy-intro-skip-mode') as any) || 'manual',
-        mobileNavbarStyle: (StorageService.getUser<string>('crispy-mobile-navbar-style') as any) || 'floating',
-        openRouterKey: StorageService.getUser<string>('crispy-openrouter-key') || '',
-        aiInsightsMode: (StorageService.getUser<string>('crispy-ai-insights-mode') as any) || 'off',
-        aiModelType: (StorageService.getUser<string>('crispy-ai-model-type') as any) || 'deepseek-r1',
-        aiCustomModelName: StorageService.getUser<string>('crispy-ai-custom-model-name') || '',
-        showRatingBadges: StorageService.getUser<boolean>('crispy-show-rating-badges') ?? true,
-        accentColor: StorageService.getUser<string>('crispy-accent-color') || 'Golden Amber',
-        amoledMode: !!StorageService.getUser<boolean>('crispy-amoled-mode'),
-        useMaterialYou: StorageService.getUser<boolean>('crispy-material-you') ?? true,
-        videoPlayerEngine: normalizeVideoPlayerEngine(StorageService.getUser<string>('crispy-video-engine')),
+        audioLanguage: StorageService.getProfile<string>('crispy-audio-language') || 'en',
+        subtitleLanguage: StorageService.getProfile<string>('crispy-subtitle-language') || 'en',
+        subtitleSize: StorageService.getProfile<number>('crispy-subtitle-size') ?? 100,
+        subtitlePosition: StorageService.getProfile<number>('crispy-subtitle-position') ?? 5,
+        subtitleColor: StorageService.getProfile<string>('crispy-subtitle-color') || '#FFFFFF',
+        subtitleBackColor: StorageService.getProfile<string>('crispy-subtitle-back-color') || '#00000000',
+        subtitleBorderColor: StorageService.getProfile<string>('crispy-subtitle-border-color') || '#000000',
+        introSkipMode: (StorageService.getProfile<string>('crispy-intro-skip-mode') as any) || 'manual',
+        mobileNavbarStyle: (StorageService.getProfile<string>('crispy-mobile-navbar-style') as any) || 'floating',
+        openRouterKey: StorageService.getProfile<string>('crispy-openrouter-key') || '',
+        aiInsightsMode: (StorageService.getProfile<string>('crispy-ai-insights-mode') as any) || 'off',
+        aiModelType: (StorageService.getProfile<string>('crispy-ai-model-type') as any) || 'deepseek-r1',
+        aiCustomModelName: StorageService.getProfile<string>('crispy-ai-custom-model-name') || '',
+        showRatingBadges: StorageService.getProfile<boolean>('crispy-show-rating-badges') ?? true,
+        accentColor: StorageService.getProfile<string>('crispy-accent-color') || 'Golden Amber',
+        amoledMode: !!StorageService.getProfile<boolean>('crispy-amoled-mode'),
+        useMaterialYou: StorageService.getProfile<boolean>('crispy-material-you') ?? true,
+        videoPlayerEngine: normalizeVideoPlayerEngine(StorageService.getProfile<string>('crispy-video-engine')),
     };
 }
 
@@ -206,9 +206,9 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
             const finalKey = map[key] || storageKey;
 
             if (val === undefined || val === '' || val === null) {
-                StorageService.removeUser(finalKey);
+                StorageService.removeProfile(finalKey);
             } else {
-                StorageService.setUser(finalKey, val);
+                StorageService.setProfile(finalKey, val);
             }
         }
     });
@@ -216,7 +216,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
 
 // Initializer to load addons safely
 function loadInitialAddons(): Addon[] {
-    const stored = StorageService.getUser<Addon[]>('crispy-addons');
+    const stored = StorageService.getAccount<Addon[]>('crispy-addons');
     // If not found or empty, try the DEFAULT_ADDONS
     if (!stored || !Array.isArray(stored) || stored.length === 0) {
         return getDefaultAddons();
@@ -233,8 +233,8 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         settings: getDefaultSettings(),
         addons: initialAddons,
         manifests: {}, // Start empty, hydrate later via effect/action
-        catalogPrefs: StorageService.getUser<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
-        traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+        catalogPrefs: StorageService.getProfile<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
+        traktAuth: StorageService.getProfile<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
 
         loading: true,
         setLoading: (loading) => set({ loading }),
@@ -250,7 +250,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
 
         updateAddons: (addons) => {
             set({ addons });
-            StorageService.setUser('crispy-addons', addons);
+            StorageService.setAccount('crispy-addons', addons);
         },
 
         // --- NEW Addon Actions ---
@@ -284,7 +284,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
                 }));
 
                 // Persist
-                StorageService.setUser('crispy-addons', nextAddons);
+                StorageService.setAccount('crispy-addons', nextAddons);
 
             } catch (e) {
                 console.error('[UserStore] Failed to add addon:', url, e);
@@ -306,7 +306,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
                 };
             });
 
-            StorageService.setUser('crispy-addons', nextAddons);
+            StorageService.setAccount('crispy-addons', nextAddons);
         },
 
         updateManifest: (url, manifest) => {
@@ -333,13 +333,13 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             const current = get().catalogPrefs;
             const next = { ...current, ...prefs, updatedAt: Date.now() };
             set({ catalogPrefs: next });
-            StorageService.setUser('crispy-catalog-prefs', next);
+            StorageService.setProfile('crispy-catalog-prefs', next);
         },
 
         updateTraktAuth: (auth) => {
             const next = { ...auth, updatedAt: Date.now() };
             set({ traktAuth: next });
-            StorageService.setUser('crispy-trakt-auth', next);
+            StorageService.setProfile('crispy-trakt-auth', next);
         },
 
         hydrate: (fetched) => {
@@ -352,16 +352,17 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             }
             if (fetched.addons) {
                 nextState.addons = fetched.addons;
-                StorageService.setUser('crispy-addons', nextState.addons);
+                StorageService.setAccount('crispy-addons', nextState.addons);
                 // Trigger re-fetch of manifests for new addons
                 setTimeout(() => get().syncManifests(), 100);
             }
             if (fetched.catalogPrefs) {
                 nextState.catalogPrefs = { ...current.catalogPrefs, ...fetched.catalogPrefs };
+                StorageService.setProfile('crispy-catalog-prefs', nextState.catalogPrefs);
             }
             if (fetched.traktAuth) {
                 nextState.traktAuth = { ...current.traktAuth, ...fetched.traktAuth };
-                StorageService.setUser('crispy-trakt-auth', nextState.traktAuth);
+                StorageService.setProfile('crispy-trakt-auth', nextState.traktAuth);
             }
 
             set({ ...nextState as any, loading: false });
@@ -375,8 +376,8 @@ export const useUserStore = create<UserStoreState>((set, get) => {
                 settings: getDefaultSettings(),
                 addons: addons,
                 manifests: {},
-                catalogPrefs: StorageService.getUser<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
-                traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+                catalogPrefs: StorageService.getProfile<CatalogPreferences>('crispy-catalog-prefs') || DEFAULT_CATALOG_PREFS,
+                traktAuth: StorageService.getProfile<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
                 loading: false // Data is ready
             });
 
@@ -392,11 +393,11 @@ export const useUserStore = create<UserStoreState>((set, get) => {
                 addons: defaults,
                 manifests: {},
                 catalogPrefs: DEFAULT_CATALOG_PREFS,
-                traktAuth: StorageService.getUser<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
+                traktAuth: StorageService.getProfile<TraktAuth>('crispy-trakt-auth') || DEFAULT_TRAKT_AUTH,
                 loading: true
             });
             // Ensure defaults are persisted (Wipe custom data)
-            StorageService.setUser('crispy-addons', defaults);
+            StorageService.setAccount('crispy-addons', defaults);
         },
         
         // Alias for resetToDefaults or similar reset logic expected by SyncService

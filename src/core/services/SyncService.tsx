@@ -3,309 +3,483 @@ import type { User } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useAuth } from '../AuthContext';
-import { AppSettings, TraktAuth, UserState, useUserStore } from '../stores/userStore';
+import { useProfiles } from '../ProfileContext';
+import {
+    Addon,
+    AppSettings,
+    CatalogPreferences,
+    TraktAuth,
+    UserState,
+    useUserStore,
+} from '../stores/userStore';
 import { TraktService } from './TraktService';
 import { supabase } from './supabase';
 
+interface ProfileSyncSnapshot {
+    settings: AppSettings;
+    catalogPrefs: CatalogPreferences;
+    traktAuth: TraktAuth;
+}
+
+function getProfileSnapshot(state: UserState): ProfileSyncSnapshot {
+    return {
+        settings: state.settings,
+        catalogPrefs: state.catalogPrefs,
+        traktAuth: state.traktAuth,
+    };
+}
+
 export function SyncService() {
     const { user } = useAuth();
-    const userRef = useRef<User | null>(null);
-    userRef.current = user;
-
+    const { activeProfileId } = useProfiles();
     const hydrate = useUserStore((state) => state.hydrate);
-    const reset = useUserStore((state) => state.reset);
-    const initialLoadDone = useRef<string | null>(null);
-    const lastSynced = useRef<Pick<UserState, 'settings' | 'addons' | 'catalogPrefs' | 'traktAuth'> | null>(null);
-    const lastCloudUpdatedAt = useRef<string | null>(null);
+
+    const userRef = useRef<User | null>(null);
+    const activeProfileIdRef = useRef<string | null>(null);
+    userRef.current = user;
+    activeProfileIdRef.current = activeProfileId;
+
+    const accountReadyRef = useRef<string | null>(null);
+    const profileReadyRef = useRef<string | null>(null);
+
+    const lastSyncedAddons = useRef<Addon[] | null>(null);
+    const lastSyncedProfile = useRef<ProfileSyncSnapshot | null>(null);
+
+    const lastAccountCloudUpdatedAt = useRef<string | null>(null);
+    const lastProfileCloudUpdatedAt = useRef<string | null>(null);
+
     const isApplyingRemote = useRef(false);
-    const fetchRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const hasUnsyncedLocalChanges = useRef(false);
+    const hasUnsyncedAccountChanges = useRef(false);
+    const hasUnsyncedProfileChanges = useRef(false);
 
-    // Save data on change (debounced)
-    const saveData = useRef(debounce(async (newState: UserState) => {
-        const currentUser = userRef.current;
-        if (!currentUser || initialLoadDone.current !== currentUser.id || isApplyingRemote.current) {
-            console.log('[SyncService] ⏳ Skipping sync (not yet hydrated)');
-            return;
-        }
+    const accountRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const profileRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-        const prev = lastSynced.current;
+    const saveAccount = useRef(
+        debounce(async (addons: Addon[]) => {
+            const currentUser = userRef.current;
+            if (!currentUser || accountReadyRef.current !== currentUser.id || isApplyingRemote.current) {
+                return;
+            }
 
-        const updates: Record<string, any> = {};
-        if (!prev || prev.addons !== newState.addons) updates.addons = newState.addons;
-        if (!prev || prev.catalogPrefs !== newState.catalogPrefs) updates.catalog_prefs = newState.catalogPrefs;
-        if (!prev || prev.traktAuth !== newState.traktAuth) updates.trakt_auth = newState.traktAuth;
-        if (!prev || prev.settings !== newState.settings) updates.settings = newState.settings;
+            if (lastSyncedAddons.current === addons) {
+                return;
+            }
 
-        const keys = Object.keys(updates);
-        if (keys.length === 0) return;
-
-        console.log('[SyncService] ☁️ Sync to Supabase:', keys.join(', '));
-        hasUnsyncedLocalChanges.current = true;
-
-        const nowIso = new Date().toISOString();
-        const payload = {
-            user_id: currentUser.id,
-            updated_at: nowIso,
-            ...updates
-        };
-
-        const { error } = await supabase
-            .from('user_data')
-            .upsert(payload, { onConflict: 'user_id' });
-
-        if (error) {
-            console.error('[SyncService] Sync failed:', error);
-        } else {
-            console.log('[SyncService] Sync successful');
-            lastSynced.current = {
-                addons: newState.addons,
-                catalogPrefs: newState.catalogPrefs,
-                traktAuth: newState.traktAuth,
-                settings: newState.settings,
-            };
-            lastCloudUpdatedAt.current = nowIso;
-            hasUnsyncedLocalChanges.current = false;
-        }
-    }, 2000)).current;
-
-    const refreshFromCloud = useCallback(async () => {
-        const currentUser = userRef.current;
-        if (!currentUser || initialLoadDone.current !== currentUser.id) return;
-        if (isApplyingRemote.current) return;
-        if (hasUnsyncedLocalChanges.current) {
-            // Try pushing local changes first; do not pull remote over unsynced state.
-            saveData(useUserStore.getState());
-            if (saveData.flush) saveData.flush();
-            return;
-        }
-
-        const { data: profile, error } = await supabase
-            .from('user_data')
-            .select('*')
-            .eq('user_id', currentUser.id)
-            .maybeSingle();
-
-        if (error) {
-            console.error('[SyncService] Refresh failed:', error);
-            return;
-        }
-
-        if (!profile) {
-            // Cloud row missing; recreate it from local state.
-            const localState = useUserStore.getState();
+            hasUnsyncedAccountChanges.current = true;
             const nowIso = new Date().toISOString();
-            const seed = {
-                user_id: currentUser.id,
-                addons: localState.addons,
-                catalog_prefs: localState.catalogPrefs,
-                trakt_auth: localState.traktAuth,
-                settings: localState.settings,
+            const payload = {
+                account_id: currentUser.id,
+                addons,
                 updated_at: nowIso,
             };
 
-            const { error: seedError } = await supabase
-                .from('user_data')
-                .upsert(seed, { onConflict: 'user_id' });
+            const { error } = await supabase
+                .from('account_data')
+                .upsert(payload, { onConflict: 'account_id' });
 
-            if (seedError) {
-                console.error('[SyncService] Failed to recreate cloud row:', seedError);
+            if (error) {
+                console.error('[SyncService] Failed syncing account data:', error);
                 return;
             }
 
-            lastCloudUpdatedAt.current = nowIso;
-            lastSynced.current = {
-                addons: localState.addons,
-                catalogPrefs: localState.catalogPrefs,
-                traktAuth: localState.traktAuth,
-                settings: localState.settings,
+            lastSyncedAddons.current = addons;
+            lastAccountCloudUpdatedAt.current = nowIso;
+            hasUnsyncedAccountChanges.current = false;
+        }, 2000)
+    ).current;
+
+    const saveProfile = useRef(
+        debounce(async (snapshot: ProfileSyncSnapshot, profileId: string) => {
+            const currentUser = userRef.current;
+            const currentProfileId = activeProfileIdRef.current;
+
+            if (!currentUser || !currentProfileId || isApplyingRemote.current) {
+                return;
+            }
+
+            if (profileReadyRef.current !== currentProfileId || profileId !== currentProfileId) {
+                return;
+            }
+
+            const previous = lastSyncedProfile.current;
+            if (
+                previous &&
+                previous.settings === snapshot.settings &&
+                previous.catalogPrefs === snapshot.catalogPrefs &&
+                previous.traktAuth === snapshot.traktAuth
+            ) {
+                return;
+            }
+
+            hasUnsyncedProfileChanges.current = true;
+            const nowIso = new Date().toISOString();
+            const payload = {
+                profile_id: profileId,
+                settings: snapshot.settings,
+                catalog_prefs: snapshot.catalogPrefs,
+                trakt_auth: snapshot.traktAuth,
+                updated_at: nowIso,
             };
-            return;
-        }
 
-        const remoteUpdatedAt = typeof profile.updated_at === 'string' ? profile.updated_at : null;
-        if (remoteUpdatedAt && lastCloudUpdatedAt.current === remoteUpdatedAt) return;
+            const { error } = await supabase
+                .from('profile_data')
+                .upsert(payload, { onConflict: 'profile_id' });
 
+            if (error) {
+                console.error('[SyncService] Failed syncing profile data:', error);
+                return;
+            }
+
+            lastSyncedProfile.current = snapshot;
+            lastProfileCloudUpdatedAt.current = nowIso;
+            hasUnsyncedProfileChanges.current = false;
+        }, 2000)
+    ).current;
+
+    const resetSyncRefs = useCallback(() => {
+        accountReadyRef.current = null;
+        profileReadyRef.current = null;
+        lastSyncedAddons.current = null;
+        lastSyncedProfile.current = null;
+        lastAccountCloudUpdatedAt.current = null;
+        lastProfileCloudUpdatedAt.current = null;
+        hasUnsyncedAccountChanges.current = false;
+        hasUnsyncedProfileChanges.current = false;
+    }, []);
+
+    const applyRemoteProfilePayload = useCallback((payload: Partial<UserState>) => {
         isApplyingRemote.current = true;
         try {
-            const payload: Partial<UserState> = {};
-            if (profile.settings !== undefined && profile.settings !== null) payload.settings = profile.settings as AppSettings;
-            if (Array.isArray(profile.addons)) payload.addons = profile.addons;
-            if (profile.trakt_auth !== undefined && profile.trakt_auth !== null) payload.traktAuth = profile.trakt_auth as TraktAuth;
-            if (profile.catalog_prefs !== undefined && profile.catalog_prefs !== null) payload.catalogPrefs = profile.catalog_prefs;
-
             hydrate(payload);
             TraktService.getInstance().reset();
-
-            const stateAfterHydrate = useUserStore.getState();
-            lastSynced.current = {
-                addons: stateAfterHydrate.addons,
-                catalogPrefs: stateAfterHydrate.catalogPrefs,
-                traktAuth: stateAfterHydrate.traktAuth,
-                settings: stateAfterHydrate.settings,
-            };
-            lastCloudUpdatedAt.current = remoteUpdatedAt;
         } finally {
             isApplyingRemote.current = false;
         }
-    }, [hydrate, saveData]);
+    }, [hydrate]);
 
-    // Load data when user becomes available
+    const loadAccountData = useCallback(async (accountId: string) => {
+        const localState = useUserStore.getState();
+
+        const { data, error } = await supabase
+            .from('account_data')
+            .select('*')
+            .eq('account_id', accountId)
+            .maybeSingle();
+
+        if (error) {
+            throw error;
+        }
+
+        if (!data) {
+            const nowIso = new Date().toISOString();
+            const { error: seedError } = await supabase
+                .from('account_data')
+                .upsert(
+                    {
+                        account_id: accountId,
+                        addons: localState.addons,
+                        updated_at: nowIso,
+                    },
+                    { onConflict: 'account_id' }
+                );
+
+            if (seedError) {
+                throw seedError;
+            }
+
+            lastSyncedAddons.current = localState.addons;
+            lastAccountCloudUpdatedAt.current = nowIso;
+            accountReadyRef.current = accountId;
+            hasUnsyncedAccountChanges.current = false;
+            return;
+        }
+
+        const remoteAddons = Array.isArray(data.addons) ? (data.addons as Addon[]) : null;
+        if (remoteAddons) {
+            isApplyingRemote.current = true;
+            try {
+                hydrate({ addons: remoteAddons });
+            } finally {
+                isApplyingRemote.current = false;
+            }
+        }
+
+        const state = useUserStore.getState();
+        lastSyncedAddons.current = state.addons;
+        lastAccountCloudUpdatedAt.current = typeof data.updated_at === 'string' ? data.updated_at : null;
+        accountReadyRef.current = accountId;
+        hasUnsyncedAccountChanges.current = false;
+    }, [hydrate]);
+
+    const loadProfileData = useCallback(async (profileId: string) => {
+        const localState = useUserStore.getState();
+
+        const { data, error } = await supabase
+            .from('profile_data')
+            .select('*')
+            .eq('profile_id', profileId)
+            .maybeSingle();
+
+        if (error) {
+            throw error;
+        }
+
+        if (!data) {
+            const nowIso = new Date().toISOString();
+            const snapshot = getProfileSnapshot(localState);
+            const { error: seedError } = await supabase
+                .from('profile_data')
+                .upsert(
+                    {
+                        profile_id: profileId,
+                        settings: snapshot.settings,
+                        catalog_prefs: snapshot.catalogPrefs,
+                        trakt_auth: snapshot.traktAuth,
+                        updated_at: nowIso,
+                    },
+                    { onConflict: 'profile_id' }
+                );
+
+            if (seedError) {
+                throw seedError;
+            }
+
+            lastSyncedProfile.current = snapshot;
+            lastProfileCloudUpdatedAt.current = nowIso;
+            profileReadyRef.current = profileId;
+            hasUnsyncedProfileChanges.current = false;
+            return;
+        }
+
+        const payload: Partial<UserState> = {};
+        if (data.settings !== undefined && data.settings !== null) {
+            payload.settings = data.settings as AppSettings;
+        }
+        if (data.catalog_prefs !== undefined && data.catalog_prefs !== null) {
+            payload.catalogPrefs = data.catalog_prefs as CatalogPreferences;
+        }
+        if (data.trakt_auth !== undefined && data.trakt_auth !== null) {
+            payload.traktAuth = data.trakt_auth as TraktAuth;
+        }
+
+        if (Object.keys(payload).length > 0) {
+            applyRemoteProfilePayload(payload);
+        }
+
+        const state = useUserStore.getState();
+        lastSyncedProfile.current = getProfileSnapshot(state);
+        lastProfileCloudUpdatedAt.current = typeof data.updated_at === 'string' ? data.updated_at : null;
+        profileReadyRef.current = profileId;
+        hasUnsyncedProfileChanges.current = false;
+    }, [applyRemoteProfilePayload]);
+
+    const refreshAccountFromCloud = useCallback(async () => {
+        const currentUser = userRef.current;
+        if (!currentUser || accountReadyRef.current !== currentUser.id || isApplyingRemote.current) {
+            return;
+        }
+
+        if (hasUnsyncedAccountChanges.current) {
+            saveAccount(useUserStore.getState().addons);
+            if (saveAccount.flush) saveAccount.flush();
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('account_data')
+            .select('*')
+            .eq('account_id', currentUser.id)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[SyncService] Failed refreshing account data:', error);
+            return;
+        }
+
+        if (!data) {
+            await loadAccountData(currentUser.id);
+            return;
+        }
+
+        const remoteUpdatedAt = typeof data.updated_at === 'string' ? data.updated_at : null;
+        if (remoteUpdatedAt && remoteUpdatedAt === lastAccountCloudUpdatedAt.current) {
+            return;
+        }
+
+        const remoteAddons = Array.isArray(data.addons) ? (data.addons as Addon[]) : null;
+        if (remoteAddons) {
+            isApplyingRemote.current = true;
+            try {
+                hydrate({ addons: remoteAddons });
+            } finally {
+                isApplyingRemote.current = false;
+            }
+        }
+
+        lastSyncedAddons.current = useUserStore.getState().addons;
+        lastAccountCloudUpdatedAt.current = remoteUpdatedAt;
+    }, [hydrate, loadAccountData, saveAccount]);
+
+    const refreshProfileFromCloud = useCallback(async () => {
+        const profileId = activeProfileIdRef.current;
+        if (!profileId || profileReadyRef.current !== profileId || isApplyingRemote.current) {
+            return;
+        }
+
+        if (hasUnsyncedProfileChanges.current) {
+            saveProfile(getProfileSnapshot(useUserStore.getState()), profileId);
+            if (saveProfile.flush) saveProfile.flush();
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('profile_data')
+            .select('*')
+            .eq('profile_id', profileId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[SyncService] Failed refreshing profile data:', error);
+            return;
+        }
+
+        if (!data) {
+            await loadProfileData(profileId);
+            return;
+        }
+
+        const remoteUpdatedAt = typeof data.updated_at === 'string' ? data.updated_at : null;
+        if (remoteUpdatedAt && remoteUpdatedAt === lastProfileCloudUpdatedAt.current) {
+            return;
+        }
+
+        const payload: Partial<UserState> = {};
+        if (data.settings !== undefined && data.settings !== null) {
+            payload.settings = data.settings as AppSettings;
+        }
+        if (data.catalog_prefs !== undefined && data.catalog_prefs !== null) {
+            payload.catalogPrefs = data.catalog_prefs as CatalogPreferences;
+        }
+        if (data.trakt_auth !== undefined && data.trakt_auth !== null) {
+            payload.traktAuth = data.trakt_auth as TraktAuth;
+        }
+
+        if (Object.keys(payload).length > 0) {
+            applyRemoteProfilePayload(payload);
+        }
+
+        lastSyncedProfile.current = getProfileSnapshot(useUserStore.getState());
+        lastProfileCloudUpdatedAt.current = remoteUpdatedAt;
+    }, [applyRemoteProfilePayload, loadProfileData, saveProfile]);
+
     useEffect(() => {
-        if (fetchRetryTimer.current) {
-            clearTimeout(fetchRetryTimer.current);
-            fetchRetryTimer.current = null;
+        if (accountRetryTimer.current) {
+            clearTimeout(accountRetryTimer.current);
+            accountRetryTimer.current = null;
         }
 
         if (!user) {
-            initialLoadDone.current = null;
-            lastSynced.current = null;
-            lastCloudUpdatedAt.current = null;
-            hasUnsyncedLocalChanges.current = false;
+            resetSyncRefs();
             return;
         }
-        if (initialLoadDone.current === user.id) return;
 
-        const loadUserData = async () => {
-            console.log('[SyncService] 🔄 Fetching profile for:', user.email);
+        if (accountReadyRef.current === user.id) {
+            return;
+        }
 
-            // Ensure local store is scoped to the active user before applying cloud.
-            reset();
-            lastSynced.current = null;
-            lastCloudUpdatedAt.current = null;
-            hasUnsyncedLocalChanges.current = false;
-
-            // Fetch profile
-            const { data: profile, error } = await supabase
-                .from('user_data')
-                .select('*')
-                .eq('user_id', user.id)
-                .maybeSingle();
-
-            if (error) {
-                console.error('[SyncService] Fetch failed:', error);
-                // Do not start syncing if we couldn't read the cloud state.
-                fetchRetryTimer.current = setTimeout(() => {
-                    if (initialLoadDone.current !== user.id) {
-                        loadUserData();
+        const load = async () => {
+            try {
+                await loadAccountData(user.id);
+            } catch (error) {
+                console.error('[SyncService] Failed loading account data:', error);
+                accountRetryTimer.current = setTimeout(() => {
+                    if (userRef.current?.id === user.id && accountReadyRef.current !== user.id) {
+                        void load();
                     }
                 }, 5000);
-                return;
             }
-
-            if (!profile) {
-                console.log('[SyncService] 🧱 No cloud row. Seeding Supabase with local state...');
-                const localState = useUserStore.getState();
-                const nowIso = new Date().toISOString();
-
-                const seed = {
-                    user_id: user.id,
-                    addons: localState.addons,
-                    catalog_prefs: localState.catalogPrefs,
-                    trakt_auth: localState.traktAuth,
-                    settings: localState.settings,
-                    updated_at: nowIso
-                };
-
-                const { error: seedError } = await supabase
-                    .from('user_data')
-                    .upsert(seed, { onConflict: 'user_id' });
-
-                if (seedError) {
-                    console.error('[SyncService] Seed failed:', seedError);
-                    fetchRetryTimer.current = setTimeout(() => {
-                        if (initialLoadDone.current !== user.id) {
-                            loadUserData();
-                        }
-                    }, 5000);
-                    return;
-                }
-
-                lastSynced.current = {
-                    addons: localState.addons,
-                    catalogPrefs: localState.catalogPrefs,
-                    traktAuth: localState.traktAuth,
-                    settings: localState.settings,
-                };
-                lastCloudUpdatedAt.current = nowIso;
-                TraktService.getInstance().reset();
-                initialLoadDone.current = user.id;
-                return;
-            }
-
-            if (profile) {
-                console.log('[SyncService] 🔄 Hydrating store from cloud...');
-
-                // Construct hydration payload
-                isApplyingRemote.current = true;
-                try {
-                    const payload: Partial<UserState> = {};
-
-                    // Cloud wins when the key exists (including explicit empty values)
-                    if (profile.settings !== undefined && profile.settings !== null) payload.settings = profile.settings as AppSettings;
-                    if (Array.isArray(profile.addons)) payload.addons = profile.addons;
-                    if (profile.trakt_auth !== undefined && profile.trakt_auth !== null) payload.traktAuth = profile.trakt_auth as TraktAuth;
-                    if (profile.catalog_prefs !== undefined && profile.catalog_prefs !== null) payload.catalogPrefs = profile.catalog_prefs;
-
-                    // Hydrate the store
-                    hydrate(payload);
-
-                    // Reset TraktService to re-read tokens from namespaced storage
-                    TraktService.getInstance().reset();
-                } finally {
-                    isApplyingRemote.current = false;
-                }
-            }
-
-            initialLoadDone.current = user.id;
-
-            const stateAfterHydrate = useUserStore.getState();
-            lastSynced.current = {
-                addons: stateAfterHydrate.addons,
-                catalogPrefs: stateAfterHydrate.catalogPrefs,
-                traktAuth: stateAfterHydrate.traktAuth,
-                settings: stateAfterHydrate.settings,
-            };
-            lastCloudUpdatedAt.current = typeof profile.updated_at === 'string' ? profile.updated_at : null;
         };
 
-        loadUserData();
-    }, [user, hydrate, reset]);
+        void load();
+    }, [loadAccountData, resetSyncRefs, user]);
 
-    // Flush pending sync on app background; refresh on resume.
+    useEffect(() => {
+        if (profileRetryTimer.current) {
+            clearTimeout(profileRetryTimer.current);
+            profileRetryTimer.current = null;
+        }
+
+        if (!user || !activeProfileId) {
+            profileReadyRef.current = null;
+            lastSyncedProfile.current = null;
+            lastProfileCloudUpdatedAt.current = null;
+            hasUnsyncedProfileChanges.current = false;
+            return;
+        }
+
+        if (profileReadyRef.current === activeProfileId) {
+            return;
+        }
+
+        const load = async () => {
+            try {
+                await loadProfileData(activeProfileId);
+            } catch (error) {
+                console.error('[SyncService] Failed loading profile data:', error);
+                profileRetryTimer.current = setTimeout(() => {
+                    if (activeProfileIdRef.current === activeProfileId && profileReadyRef.current !== activeProfileId) {
+                        void load();
+                    }
+                }, 5000);
+            }
+        };
+
+        void load();
+    }, [activeProfileId, loadProfileData, user]);
+
     useEffect(() => {
         const sub = AppState.addEventListener('change', (state) => {
             if (state === 'active') {
-                refreshFromCloud().catch((e) => console.error('[SyncService] Refresh crashed:', e));
+                void refreshAccountFromCloud();
+                void refreshProfileFromCloud();
                 return;
             }
-            if (saveData.flush) {
-                saveData.flush();
-            }
+
+            if (saveAccount.flush) saveAccount.flush();
+            if (saveProfile.flush) saveProfile.flush();
         });
 
         return () => {
             sub.remove();
         };
-    }, [refreshFromCloud, saveData]);
+    }, [refreshAccountFromCloud, refreshProfileFromCloud, saveAccount, saveProfile]);
 
-    // Listen to store changes
     useEffect(() => {
-        const unsub = useUserStore.subscribe((state) => {
+        const unsubscribe = useUserStore.subscribe((state) => {
             if (isApplyingRemote.current) return;
-            if (user && initialLoadDone.current === user.id) {
-                saveData(state);
+
+            const currentUser = userRef.current;
+            if (currentUser && accountReadyRef.current === currentUser.id) {
+                saveAccount(state.addons);
+            }
+
+            const profileId = activeProfileIdRef.current;
+            if (currentUser && profileId && profileReadyRef.current === profileId) {
+                saveProfile(getProfileSnapshot(state), profileId);
             }
         });
 
         return () => {
-            unsub();
-            if (saveData.flush) {
-                saveData.flush();
-            }
-            saveData.cancel();
+            unsubscribe();
+            if (saveAccount.flush) saveAccount.flush();
+            if (saveProfile.flush) saveProfile.flush();
+            saveAccount.cancel();
+            saveProfile.cancel();
+            if (accountRetryTimer.current) clearTimeout(accountRetryTimer.current);
+            if (profileRetryTimer.current) clearTimeout(profileRetryTimer.current);
         };
-    }, [user, saveData]);
+    }, [saveAccount, saveProfile]);
 
     return null;
 }

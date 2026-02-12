@@ -2,17 +2,18 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeProvider as NavigationThemeProvider, type Theme as NavigationTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../core/AuthContext';
-import { DiscoveryProvider } from '../core/DiscoveryContext';
+import { clearDiscoveryCache, DiscoveryProvider } from '../core/DiscoveryContext';
+import { ProfileProvider, useProfiles } from '../core/ProfileContext';
 import { SyncService } from '../core/services/SyncService';
 import { TraktService } from '../core/services/TraktService';
-import { SessionManager } from '../core/SessionManager';
+import { useTraktStore } from '../core/stores/traktStore';
 import { useUserStore } from '../core/stores/userStore';
 import { ThemeProvider, useTheme } from '../core/ThemeContext';
 import { CatalogActionsProvider } from '../features/catalog/context/CatalogActionsContext';
@@ -37,46 +38,46 @@ export const unstable_settings = {
 };
 
 function AuthRouteGuard({ loaded }: { loaded: boolean }) {
-  const { loading, mode, hasKnownAccounts } = useAuth();
+  const { loading, user } = useAuth();
+  const { loading: profilesLoading, activeProfileId } = useProfiles();
   const segments = useSegments();
   const router = useRouter();
-  const params = useGlobalSearchParams<{ mode?: string | string[] }>();
-  const routeMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
 
   useEffect(() => {
     if (loading || !loaded) return;
+    if (user && profilesLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
     const authSegment = String(segments[1] ?? '');
     const inLoginScreen = inAuthGroup && authSegment === 'login';
     const inProfilesScreen = inAuthGroup && authSegment === 'profiles';
-    const isAddAccountFlow = inLoginScreen && routeMode === 'add-account';
-    const isAuthenticated = mode === 'account' || mode === 'guest';
 
-    if (isAuthenticated) {
-      if (inAuthGroup && !isAddAccountFlow && !inProfilesScreen) {
-        router.replace('/(tabs)');
+    if (!user) {
+      if (!inLoginScreen) {
+        router.replace('/(auth)/login');
       }
       return;
     }
 
-    if (hasKnownAccounts) {
-      if (!inProfilesScreen && !isAddAccountFlow) {
+    if (!activeProfileId) {
+      if (!inProfilesScreen) {
         router.replace('/(auth)/profiles' as never);
       }
       return;
     }
 
-    if (!inAuthGroup) {
-      router.replace('/(auth)/login');
+    if (inAuthGroup) {
+      router.replace('/(tabs)');
     }
-  }, [mode, hasKnownAccounts, loading, loaded, routeMode, segments, router]);
+  }, [activeProfileId, loaded, loading, profilesLoading, router, segments, user]);
 
   return null;
 }
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
+  const { activeProfileId } = useProfiles();
+  const lastProfileIdRef = useRef<string | null>(null);
 
   const navigationTheme = useMemo<NavigationTheme>(() => {
     return {
@@ -117,20 +118,16 @@ function RootLayoutNav() {
   }, [loaded, error]);
 
   useEffect(() => {
-    let hasBootstrapped = false;
+    if (!loaded) return;
+    if (lastProfileIdRef.current === activeProfileId) return;
 
-    const unsub = SessionManager.subscribe(() => {
-      if (hasBootstrapped) {
-        queryClient.clear();
-      }
-
-      useUserStore.getState().reloadFromStorage();
-      TraktService.getInstance().reset();
-      hasBootstrapped = true;
-    });
-
-    return unsub;
-  }, []);
+    queryClient.clear();
+    clearDiscoveryCache();
+    useUserStore.getState().reloadFromStorage();
+    useTraktStore.getState().hydrate();
+    TraktService.getInstance().reset();
+    lastProfileIdRef.current = activeProfileId;
+  }, [activeProfileId, loaded]);
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
@@ -161,14 +158,16 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <AuthProvider>
-            <SyncService />
-            <ThemeProvider>
-              <DiscoveryProvider>
-                <TraktProvider>
-                  <RootLayoutNav />
-                </TraktProvider>
-              </DiscoveryProvider>
-            </ThemeProvider>
+            <ProfileProvider>
+              <SyncService />
+              <ThemeProvider>
+                <DiscoveryProvider>
+                  <TraktProvider>
+                    <RootLayoutNav />
+                  </TraktProvider>
+                </DiscoveryProvider>
+              </ThemeProvider>
+            </ProfileProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

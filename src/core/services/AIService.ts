@@ -100,7 +100,7 @@ export class AIService {
     }
 
     static async getApiKey(): Promise<string | null> {
-        return StorageService.getUser<string>('crispy-openrouter-key') || process.env.EXPO_PUBLIC_OPENROUTER_KEY || null;
+        return StorageService.getProfile<string>('crispy-openrouter-key') || process.env.EXPO_PUBLIC_OPENROUTER_KEY || null;
     }
 
     static async generateResponse(
