@@ -9,26 +9,57 @@ import { Lock, LogIn, Mail, User as UserIcon, UserPlus } from 'lucide-react-nati
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
 
+const USERNAME_MIN_LENGTH = 3;
+const USERNAME_MAX_LENGTH = 32;
+const USERNAME_REGEX = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
+
+function normalizeUsername(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const { theme } = useTheme();
     const router = useRouter();
 
     const handleAuth = async () => {
+        const normalizedEmail = email.trim().toLowerCase();
+
+        if (!normalizedEmail) {
+            alert('Email is required.');
+            return;
+        }
+
+        if (!password) {
+            alert('Password is required.');
+            return;
+        }
+
         setLoading(true);
         try {
             if (isSignUp) {
+                const normalizedUsername = normalizeUsername(username);
+                if (
+                    normalizedUsername.length < USERNAME_MIN_LENGTH
+                    || normalizedUsername.length > USERNAME_MAX_LENGTH
+                    || !USERNAME_REGEX.test(normalizedUsername)
+                ) {
+                    alert('Username must be 3-32 chars, lowercase, and can only use letters, numbers, dots, underscores, or hyphens.');
+                    return;
+                }
+
                 const { data, error } = await supabase.auth.signUp({
-                    email,
+                    email: normalizedEmail,
                     password,
                     options: {
                         data: {
-                            name: name || email.split('@')[0],
-                            full_name: name || email.split('@')[0]
+                            username: normalizedUsername,
+                            name: normalizedUsername,
+                            full_name: normalizedUsername,
                         }
                     }
                 });
@@ -38,7 +69,7 @@ export default function LoginScreen() {
                     return;
                 }
             } else {
-                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
                 if (error) throw error;
             }
             router.replace('/(auth)/profiles' as never);
@@ -69,15 +100,16 @@ export default function LoginScreen() {
                             <>
                                 <SettingsItem
                                     icon={UserIcon}
-                                    label="Full Name"
+                                    label="Username"
                                     showChevron={false}
                                 />
                                 <View style={styles.inputWrapper}>
                                     <TextInput
-                                        value={name}
-                                        onChangeText={setName}
-                                        placeholder="Your Name"
+                                        value={username}
+                                        onChangeText={setUsername}
+                                        placeholder="username"
                                         placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
+                                        autoCapitalize="none"
                                         style={[styles.input, { backgroundColor: theme.colors.elevation.level2, color: theme.colors.onSurface }]}
                                     />
                                 </View>
