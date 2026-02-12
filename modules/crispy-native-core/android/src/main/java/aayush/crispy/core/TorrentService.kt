@@ -1,6 +1,7 @@
 package aayush.crispy.core
 
 import android.app.*
+import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import android.os.Build
@@ -49,6 +50,146 @@ class TorrentService : Service() {
         private const val LISTEN_BIND_RETRIES = 8
         private const val LOCAL_SERVER_HOST = "localhost"
         private const val LOCAL_SERVER_PORT = 11470
+        private const val TORRENT_STORAGE_DIR = "torrents"
+        private val LEGACY_MEDIA_EXTENSIONS = setOf(
+            "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "ts", "m2ts", "mpg", "mpeg",
+            "srt", "ass", "ssa", "vtt", "sub", "idx"
+        )
+        private val LEGACY_TORRENT_EXTENSIONS = setOf("torrent", "part", "parts")
+        private val storageLock = Any()
+        @Volatile
+        private var legacySweepCompleted = false
+
+        private fun safeSize(path: File): Long {
+            return try {
+                if (!path.exists()) {
+                    0L
+                } else if (path.isFile) {
+                    path.length()
+                } else {
+                    path.listFiles()?.sumOf { safeSize(it) } ?: 0L
+                }
+            } catch (_: Exception) {
+                0L
+            }
+        }
+
+        private fun extensionOf(path: File): String {
+            val name = path.name
+            val dotIndex = name.lastIndexOf('.')
+            if (dotIndex <= 0 || dotIndex == name.lastIndex) {
+                return ""
+            }
+            return name.substring(dotIndex + 1).lowercase()
+        }
+
+        private fun containsLegacyMedia(path: File, depth: Int = 0): Boolean {
+            if (depth > 6 || !path.exists()) {
+                return false
+            }
+
+            if (path.isFile) {
+                val ext = extensionOf(path)
+                return LEGACY_MEDIA_EXTENSIONS.contains(ext) || LEGACY_TORRENT_EXTENSIONS.contains(ext)
+            }
+
+            return try {
+                path.listFiles()?.any { child -> containsLegacyMedia(child, depth + 1) } ?: false
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        private fun cleanupLegacyTorrentStorage(context: Context): Pair<Int, Long> {
+            val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+            if (!baseDir.exists()) {
+                return 0 to 0L
+            }
+
+            var removedEntries = 0
+            var freedBytes = 0L
+
+            val children = baseDir.listFiles() ?: return 0 to 0L
+            for (child in children) {
+                if (child.name == TORRENT_STORAGE_DIR) {
+                    continue
+                }
+                if (!containsLegacyMedia(child)) {
+                    continue
+                }
+
+                val bytes = safeSize(child)
+                val removed = try {
+                    child.deleteRecursively()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to remove legacy torrent entry ${child.absolutePath}", e)
+                    false
+                }
+
+                if (removed) {
+                    removedEntries++
+                    freedBytes += bytes
+                }
+            }
+
+            return removedEntries to freedBytes
+        }
+
+        fun getTorrentStorageDir(context: Context): File {
+            val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+            val torrentDir = File(baseDir, TORRENT_STORAGE_DIR)
+            if (!torrentDir.exists() && !torrentDir.mkdirs()) {
+                Log.w(TAG, "Failed to create torrent storage directory at ${torrentDir.absolutePath}")
+            }
+            return torrentDir
+        }
+
+        fun cleanupTorrentStorage(context: Context, reason: String): Boolean {
+            val torrentDir = getTorrentStorageDir(context)
+            var removedEntries = 0
+            var freedBytes = 0L
+            var hadErrors = false
+            var legacyRemovedEntries = 0
+            var legacyFreedBytes = 0L
+
+            synchronized(storageLock) {
+                val children = torrentDir.listFiles() ?: emptyArray()
+                for (child in children) {
+                    val childSize = safeSize(child)
+                    val removed = try {
+                        child.deleteRecursively()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to delete ${child.absolutePath}", e)
+                        false
+                    }
+
+                    if (removed) {
+                        removedEntries++
+                        freedBytes += childSize
+                    } else {
+                        hadErrors = true
+                    }
+                }
+
+                if (!torrentDir.exists() && !torrentDir.mkdirs()) {
+                    hadErrors = true
+                    Log.w(TAG, "Failed to recreate torrent storage directory at ${torrentDir.absolutePath}")
+                }
+
+                if (!legacySweepCompleted) {
+                    val (removed, freed) = cleanupLegacyTorrentStorage(context)
+                    legacyRemovedEntries = removed
+                    legacyFreedBytes = freed
+                    legacySweepCompleted = true
+                }
+            }
+
+            Log.i(
+                TAG,
+                "Torrent storage cleanup(reason=$reason): removed=$removedEntries freedBytes=$freedBytes legacyRemoved=$legacyRemovedEntries legacyFreedBytes=$legacyFreedBytes success=${!hadErrors}",
+            )
+            return !hadErrors
+        }
     }
     
     private val binder = TorrentBinder()
@@ -79,8 +220,6 @@ class TorrentService : Service() {
         super.onCreate()
         createNotificationChannel()
         logCleartextPolicy()
-        startServer()
-        initSession()
     }
 
     private fun logCleartextPolicy() {
@@ -113,9 +252,7 @@ class TorrentService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
         // Tear down engine resources.
         Thread { 
-            stopServer()
-            stopAll() 
-            stopSession() 
+            stopAll(clearStorage = true)
         }.start()
     }
 
@@ -389,9 +526,11 @@ class TorrentService : Service() {
             return true
         }
 
-        // Single-stream policy, but avoid hard-reset churn for repeated same-hash starts.
+        // Single-stream policy: always clean stale data before starting a new torrent.
         if (activeTorrents.isNotEmpty()) {
-            stopAll()
+            stopAll(clearStorage = true)
+        } else {
+            performStartupCleanup("start_info_hash:$hash")
         }
         
         if (sessionId != null) {
@@ -472,7 +611,7 @@ class TorrentService : Service() {
         }
     }
 
-    fun stopTorrent(infoHash: String) {
+    fun stopTorrent(infoHash: String, clearStorage: Boolean = true) {
         val hash = infoHash.lowercase()
         activeTorrents.remove(hash)
         
@@ -482,32 +621,29 @@ class TorrentService : Service() {
         // Clean up any pending metadata latch
         metadataLatches.remove(hash)?.countDown()
         
-        updateServiceState()
         getHandle(hash)?.let { sessionManager?.remove(it) }
+
+        if (activeTorrents.isEmpty()) {
+            stopServer()
+            stopSession()
+            activeSessionId = null
+            if (clearStorage) {
+                performStartupCleanup("stop_torrent:$hash")
+            }
+        }
+
+        updateServiceState()
     }
 
     fun deleteTorrentData(infoHash: String) {
-        val hash = infoHash.lowercase()
-        val handle = getHandle(hash)
-        var torrentName: String? = null
-        if (handle != null && handle.status().hasMetadata()) {
-            torrentName = handle.torrentFile()?.name()
-        }
-        stopTorrent(hash)
-        Thread {
-            try {
-                if (!torrentName.isNullOrEmpty()) {
-                    File(getDownloadDir(), torrentName).deleteRecursively()
-                }
-            } catch (e: Exception) {}
-        }.start()
+        stopTorrent(infoHash, clearStorage = true)
     }
 
     /**
      * Stop all active torrents for the current session.
      * @param onlyForSessionId If provided, only stops if the current active session matches this ID.
      */
-    fun stopAll(onlyForSessionId: String? = null) {
+    fun stopAll(onlyForSessionId: String? = null, clearStorage: Boolean = true) {
         if (onlyForSessionId != null && activeSessionId != null && onlyForSessionId != activeSessionId) {
             Log.d(TAG, "stopAll ignored: Session mismatch (Active: $activeSessionId, Request: $onlyForSessionId)")
             return
@@ -533,6 +669,13 @@ class TorrentService : Service() {
         metadataLatches.values.forEach { it.countDown() }
         metadataLatches.clear()
 
+        stopServer()
+        stopSession()
+
+        if (clearStorage) {
+            performStartupCleanup("stop_all")
+        }
+
         updateServiceState()
     }
     
@@ -540,20 +683,11 @@ class TorrentService : Service() {
      * Delete all files in the download directory.
      * Synchronous execution preferred for reliability during shutdown.
      */
-    fun performStartupCleanup() {
-        try {
-            val dir = getDownloadDir()
-            if (dir.exists()) {
-                val success = dir.deleteRecursively()
-                dir.mkdirs()
-                Log.d(TAG, "Cleanup: Wiped data at ${dir.absolutePath} (Success: $success)")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Cleanup Failed", e)
-        }
+    fun performStartupCleanup(reason: String = "manual"): Boolean {
+        return cleanupTorrentStorage(this, reason)
     }
 
-    fun getDownloadDir(): File = getExternalFilesDir(null) ?: filesDir
+    fun getDownloadDir(): File = getTorrentStorageDir(this)
 
     fun awaitServerReady(timeoutMs: Long = 3000L): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
