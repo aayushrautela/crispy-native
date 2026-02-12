@@ -38,8 +38,6 @@ export interface ResourceResponse<T> {
     [key: string]: T;
 }
 
-const STREAMING_SERVER_URL = 'http://127.0.0.1:11470';
-
 export class AddonService {
     static normalizeAddonUrl(url: string): string {
         const normalized = url.trim();

@@ -27,7 +27,6 @@ type FileStats = {
 };
 
 const PRIMARY_SERVER_ORIGIN = 'http://localhost:11470';
-const FALLBACK_SERVER_ORIGIN = 'http://127.0.0.1:11470';
 
 function normalizeInfoHash(input: string): string | null {
     const trimmed = input.trim();
@@ -86,26 +85,8 @@ export default function TorrentDebugScreen() {
     }, []);
 
     const fetchLocal = useCallback(async (path: string, init?: RequestInit) => {
-        const fallbackOrigin = serverOriginRef.current === PRIMARY_SERVER_ORIGIN
-            ? FALLBACK_SERVER_ORIGIN
-            : PRIMARY_SERVER_ORIGIN;
-        const origins = [serverOriginRef.current, fallbackOrigin];
-
-        let lastError: unknown = null;
-        for (const origin of origins) {
-            try {
-                const response = await fetch(`${origin}${path}`, init);
-                serverOriginRef.current = origin;
-                return response;
-            } catch (e) {
-                lastError = e;
-            }
-        }
-
-        if (lastError instanceof Error) {
-            throw lastError;
-        }
-        throw new Error('Local server request failed');
+        const response = await fetch(`${serverOriginRef.current}${path}`, init);
+        return response;
     }, []);
 
     const waitForServerReady = useCallback(async () => {
@@ -166,12 +147,7 @@ export default function TorrentDebugScreen() {
                 throw new Error('startStream returned no URL');
             }
 
-            try {
-                const parsed = new URL(url);
-                serverOriginRef.current = `${parsed.protocol}//${parsed.host}`;
-            } catch {
-                serverOriginRef.current = PRIMARY_SERVER_ORIGIN;
-            }
+            serverOriginRef.current = PRIMARY_SERVER_ORIGIN;
 
             const idxFromUrl = url?.match(/\/(\d+)$/)?.[1];
             const fileIdx = idxFromUrl ? Number.parseInt(idxFromUrl, 10) : null;

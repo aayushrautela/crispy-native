@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.security.NetworkSecurityPolicy
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.frostwire.jlibtorrent.*
@@ -46,6 +47,8 @@ class TorrentService : Service() {
         private const val LISTEN_PORT_MIN = 37000
         private const val LISTEN_PORT_MAX = 57000
         private const val LISTEN_BIND_RETRIES = 8
+        private const val LOCAL_SERVER_HOST = "localhost"
+        private const val LOCAL_SERVER_PORT = 11470
     }
     
     private val binder = TorrentBinder()
@@ -75,8 +78,26 @@ class TorrentService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        logCleartextPolicy()
         startServer()
         initSession()
+    }
+
+    private fun logCleartextPolicy() {
+        try {
+            val policy = NetworkSecurityPolicy.getInstance()
+            val globalAllowed = policy.isCleartextTrafficPermitted
+            val localhostAllowed = policy.isCleartextTrafficPermitted(LOCAL_SERVER_HOST)
+            Log.i(
+                TAG,
+                "Network policy: cleartextGlobal=$globalAllowed cleartext${LOCAL_SERVER_HOST.replaceFirstChar { it.uppercase() }}=$localhostAllowed"
+            )
+            if (!localhostAllowed) {
+                Log.e(TAG, "Cleartext HTTP to $LOCAL_SERVER_HOST is blocked by app policy (check network_security_config + manifest merge)")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to inspect cleartext policy", e)
+        }
     }
     
     override fun onBind(intent: Intent?): IBinder = binder
@@ -166,11 +187,11 @@ class TorrentService : Service() {
         
         try {
             val downloadDir = getDownloadDir()
-            server = CrispyServer(11470, downloadDir, this)
+            server = CrispyServer(LOCAL_SERVER_PORT, downloadDir, this)
             if (server?.safeStart() == true) {
-                Log.d(TAG, "CrispyServer started on port 11470")
+                Log.d(TAG, "CrispyServer started on $LOCAL_SERVER_HOST:$LOCAL_SERVER_PORT")
             } else {
-                Log.e(TAG, "Failed to start CrispyServer on port 11470")
+                Log.e(TAG, "Failed to start CrispyServer on $LOCAL_SERVER_HOST:$LOCAL_SERVER_PORT")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting CrispyServer", e)
@@ -539,8 +560,7 @@ class TorrentService : Service() {
         var attempts = 0
 
         val urls = listOf(
-            "http://127.0.0.1:11470/stats.json",
-            "http://localhost:11470/stats.json",
+            "http://$LOCAL_SERVER_HOST:$LOCAL_SERVER_PORT/stats.json",
         )
 
         var lastSummary: String? = null
@@ -627,7 +647,7 @@ class TorrentService : Service() {
         
         // Optimistic return - we don't wait for handle or metadata here.
         // The CrispyServer handles waiting/retrying when the player actually connects.
-        return "http://localhost:11470/$hash/$fileIdx"
+        return "http://$LOCAL_SERVER_HOST:$LOCAL_SERVER_PORT/$hash/$fileIdx"
     }
 
     fun getLargestFileIndex(infoHash: String): Int {

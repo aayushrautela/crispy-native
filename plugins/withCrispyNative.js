@@ -29,10 +29,13 @@ const withCrispyNative = (config) => {
     // 6. Add Audio Permissions & Media Receiver
     config = withAudioConfig(config);
 
-    // 7. Add ProGuard Rules
+    // 7. Enforce localhost-only cleartext policy for local streaming
+    config = withLocalhostCleartextPolicy(config);
+
+    // 8. Add ProGuard Rules
     config = withProGuardRules(config);
 
-    // 8. iOS Podfile Configuration (KSPlayer)
+    // 9. iOS Podfile Configuration (KSPlayer)
     config = withIosConfiguration(config);
 
     return config;
@@ -187,6 +190,45 @@ const withAudioConfig = (config) => {
 
         return config;
     });
+};
+
+/**
+ * Enforce deny-by-default cleartext policy and allow localhost only.
+ * This keeps local torrent HTTP streaming working while blocking other cleartext traffic.
+ */
+const withLocalhostCleartextPolicy = (config) => {
+    config = withAndroidManifest(config, (config) => {
+        const mainApplication = config.modResults.manifest.application?.[0];
+        if (mainApplication?.$) {
+            mainApplication.$['android:usesCleartextTraffic'] = 'false';
+            mainApplication.$['android:networkSecurityConfig'] = '@xml/network_security_config';
+        }
+        return config;
+    });
+
+    return withDangerousMod(config, [
+        'android',
+        async (config) => {
+            const xmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml');
+            const networkSecurityFile = path.join(xmlDir, 'network_security_config.xml');
+
+            const content = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
+`;
+
+            fs.mkdirSync(xmlDir, { recursive: true });
+            if (!fs.existsSync(networkSecurityFile) || fs.readFileSync(networkSecurityFile, 'utf8') !== content) {
+                fs.writeFileSync(networkSecurityFile, content);
+            }
+
+            return config;
+        },
+    ]);
 };
 
 /**

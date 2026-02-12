@@ -15,10 +15,10 @@ import java.net.BindException
  * - Full CORS support for local player compatibility
  */
 class CrispyServer(
-    port: Int,
+    private val serverPort: Int,
     private val downloadDir: File,
     private var torrentService: TorrentService? = null
-) : NanoHTTPD("127.0.0.1", port) {
+) : NanoHTTPD("localhost", serverPort) {
     
     companion object {
         private const val TAG = "CrispyServer"
@@ -32,7 +32,7 @@ class CrispyServer(
                 return true
             }
             start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
-            Log.i(TAG, "SERVER STARTED SUCCESSFULLY ON 127.0.0.1:11470")
+            Log.i(TAG, "SERVER STARTED SUCCESSFULLY ON localhost:$serverPort")
             true
         } catch (e: BindException) {
             Log.e(TAG, "Port already in use: ${e.message}")
