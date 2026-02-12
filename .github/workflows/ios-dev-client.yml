@@ -17,38 +17,38 @@ jobs:
       REQUIRED_EXPO_PUBLIC_VARS: EXPO_PUBLIC_SUPABASE_URL,EXPO_PUBLIC_SUPABASE_ANON_KEY
 
     steps:
-      - name: 🏗 Setup Repo
+      - name: Setup Repo
         uses: actions/checkout@v4
 
-      - name: 🏗 Setup Xcode
+      - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.0'
 
-      - name: 🏗 Setup Node
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: 📦 Install Dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: ✅ Validate required Expo env vars
+      - name: Validate required Expo env vars
         run: node ./scripts/validate-required-env.js
 
-      - name: ⚙️ Expo Prebuild
+      - name: Expo Prebuild
         run: npx expo prebuild --platform ios --no-install
 
-      - name: 🏗 Setup CocoaPods
+      - name: Setup CocoaPods
         uses: maxim-lobanov/setup-cocoapods@v1
         with:
           version: '1.16.2'
 
-      - name: 💎 Install xcpretty
+      - name: Install xcpretty
         run: gem install xcpretty
 
-      - name: 📦 Install Pods
+      - name: Install Pods
         working-directory: ./ios
         run: |
           pod repo update
@@ -58,7 +58,7 @@ jobs:
           COCOAPODS_DISABLE_STATS: 'true'
           CP_REPOSITORIES_NO_NETWORK: 'false'
 
-      - name: 🔨 Build iOS Debug (Simulator)
+      - name: Build iOS Debug (Simulator)
         working-directory: ./ios
         run: |
           set -o pipefail
@@ -79,7 +79,7 @@ jobs:
             SHOW_S_ENV=NO \
             build | xcpretty
 
-      - name: 📤 Upload Simulator App
+      - name: Upload Simulator App
         uses: actions/upload-artifact@v4
         with:
           name: crispy-native-ios-dev-simulator
@@ -87,7 +87,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: 📤 Upload Build Logs
+      - name: Upload Build Logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
