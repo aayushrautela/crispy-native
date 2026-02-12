@@ -32,7 +32,7 @@ class CrispyServer(
                 return true
             }
             start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
-            Log.e(TAG, "SERVER STARTED SUCCESSFULLY ON 127.0.0.1:11470")
+            Log.i(TAG, "SERVER STARTED SUCCESSFULLY ON 127.0.0.1:11470")
             true
         } catch (e: BindException) {
             Log.e(TAG, "Port already in use: ${e.message}")
@@ -61,7 +61,12 @@ class CrispyServer(
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
         
-        Log.d(TAG, "[REQUEST] ${session.method} $uri -> ${response.status}")
+        val isStreamRequest = uri.matches(Regex("^/[a-fA-F0-9]{40}/\\d+$"))
+        if (isStreamRequest) {
+            Log.i(TAG, "[STREAM_REQUEST] ${session.method} $uri -> ${response.status}")
+        } else {
+            Log.d(TAG, "[REQUEST] ${session.method} $uri -> ${response.status}")
+        }
         return response.withCorsHeaders()
     }
 
@@ -150,6 +155,9 @@ class CrispyServer(
             MIME_PLAINTEXT,
             "TorrentService not available"
         )
+
+        val rangeHeader = session.headers["range"] ?: "none"
+        Log.i(TAG, "[STREAM_OPEN] infoHash=$infoHash fileIdx=$fileIdx range=$rangeHeader")
 
         if (service.getTorrentStats(infoHash) == null) {
             Log.d(TAG, "Auto-starting torrent: $infoHash")
@@ -242,7 +250,7 @@ class CrispyServer(
             )
         }
 
-        Log.d(TAG, "Serving file: ${videoFile.name} (${videoFile.length()} bytes)")
+        Log.i(TAG, "[STREAM_READY] Serving file: ${videoFile.name} (${videoFile.length()} bytes)")
         return serveFile(session, videoFile)
     }
     

@@ -14,6 +14,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /**
  * Foreground service managing torrent downloads using jlibtorrent.
@@ -40,6 +41,9 @@ class TorrentService : Service() {
         private const val INSTANT_TIER_PIECES = 3
         private const val DEADLINE_INCREMENT_MS = 1000
         private const val PIECES_TO_BUFFER = 30
+        private const val LISTEN_PORT_MIN = 37000
+        private const val LISTEN_PORT_MAX = 57000
+        private const val LISTEN_BIND_RETRIES = 8
     }
     
     private val binder = TorrentBinder()
@@ -58,6 +62,9 @@ class TorrentService : Service() {
 
     @Volatile
     private var activeSessionId: String? = null
+
+    @Volatile
+    private var configuredListenPort: Int? = null
     
     inner class TorrentBinder : Binder() {
         fun getService(): TorrentService = this@TorrentService
@@ -104,7 +111,13 @@ class TorrentService : Service() {
             val notification = createNotification(notifText)
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                val serviceType = if (activeCount > 0) {
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                } else {
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                }
+                startForeground(NOTIFICATION_ID, notification, serviceType)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
@@ -172,122 +185,159 @@ class TorrentService : Service() {
         }
     }
     
-    private fun initSession() {
-        if (isSessionActive) return
-        
-        val settings = SettingsPack().apply {
-            connectionsLimit(100)
+    private fun pickListenPort(excluded: Set<Int>): Int {
+        var candidate = LISTEN_PORT_MIN
+        do {
+            candidate = Random.nextInt(LISTEN_PORT_MIN, LISTEN_PORT_MAX + 1)
+        } while (candidate in excluded)
+        return candidate
+    }
+
+    private fun createSessionSettings(listenPort: Int): SettingsPack {
+        return SettingsPack().apply {
+            connectionsLimit(200)
             maxPeerlistSize(500)
             activeDownloads(1)
             activeSeeds(0)
             activeLimit(3)
-            activeTrackerLimit(50)
-            activeDhtLimit(50)
-            activeLsdLimit(0)
             downloadRateLimit(0)
             uploadRateLimit(500 * 1024)
-            
-            // PRODUCTION FIX: Use fixed ports to avoid [enum_route] failures on Android 11+
-            // listenInterfaces("0.0.0.0:0") triggers a restricted route scan.
-            listenInterfaces("0.0.0.0:6881,[::]:6881")
-            
+
+            listenInterfaces("0.0.0.0:$listenPort,[::]:$listenPort")
+
             setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
-            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), false) // Restricted on Android 11+
-            // setBoolean(settings_pack.bool_types.dht_ignore_lan_peers.swigValue(), true) // UNRESOLVED: dht_ignore_lan_peers not found in jlibtorrent 2.0.12.7
-            
-            setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
-            
-            // Production grade connectivity settings
-            setString(settings_pack.string_types.user_agent.swigValue(), "qBittorrent/4.6.3")
-            
-            // Encryption: Enabled (Prefer) - allows both but prefers encryption
-            // 0=forced, 1=enabled, 2=disabled (Note: libtorrent enums vary, verifying standard: 1 is usually enabled/preferred)
-            setInteger(settings_pack.int_types.in_enc_policy.swigValue(), 1)
-            setInteger(settings_pack.int_types.out_enc_policy.swigValue(), 1)
-            setInteger(settings_pack.int_types.allowed_enc_level.swigValue(), 2) // Both plaintext and RC4 allowed
-            
-            setBoolean(settings_pack.bool_types.announce_to_all_trackers.swigValue(), true)
-            setBoolean(settings_pack.bool_types.announce_to_all_tiers.swigValue(), true)
-            setBoolean(settings_pack.bool_types.prefer_udp_trackers.swigValue(), true)
+            setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), false)
             setBoolean(settings_pack.bool_types.enable_outgoing_tcp.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_outgoing_utp.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_incoming_tcp.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_incoming_utp.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
             setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
-            setBoolean(settings_pack.bool_types.prioritize_partial_pieces.swigValue(), true)
-            setBoolean(settings_pack.bool_types.auto_sequential.swigValue(), true)
-            setInteger(settings_pack.int_types.tracker_completion_timeout.swigValue(), 15)
-            setInteger(settings_pack.int_types.tracker_receive_timeout.swigValue(), 15)
-            setInteger(settings_pack.int_types.peer_connect_timeout.swigValue(), 30)
-            setInteger(settings_pack.int_types.request_timeout.swigValue(), 60)
-            setInteger(settings_pack.int_types.inactivity_timeout.swigValue(), 120)
-            setInteger(settings_pack.int_types.min_reconnect_time.swigValue(), 2)
+
+            setDhtBootstrapNodes("router.bittorrent.com:6881,router.utorrent.com:6881,dht.transmissionbt.com:6881,router.opentrackr.org:1337")
+            setString(settings_pack.string_types.user_agent.swigValue(), "qBittorrent/4.6.3")
             alertQueueSize(2000)
         }
-        
-        sessionManager = SessionManager().apply {
-            start(SessionParams(settings))
-            addListener(object : AlertListener {
-                override fun types(): IntArray? = null
-                override fun alert(alert: Alert<*>) {
-                    when (alert.type()) {
-                        AlertType.ADD_TORRENT -> {
-                            val handle = (alert as AddTorrentAlert).handle()
-                            val infoHash = handle.infoHash().toHex()
-                            Log.d(TAG, "[ALERT] ADD_TORRENT: $infoHash")
-                            activeTorrents[infoHash] = true
-                            try { handle.setFlags(handle.flags().or_(TorrentFlags.SEQUENTIAL_DOWNLOAD)) } catch (e: Exception) {}
-                            updateServiceState()
+    }
+
+    private fun attachAlertListener(manager: SessionManager) {
+        manager.addListener(object : AlertListener {
+            override fun types(): IntArray? = null
+
+            override fun alert(alert: Alert<*>) {
+                when (alert.type()) {
+                    AlertType.ADD_TORRENT -> {
+                        val handle = (alert as AddTorrentAlert).handle()
+                        val infoHash = handle.infoHash().toHex()
+                        Log.d(TAG, "[ALERT] ADD_TORRENT: $infoHash")
+                        activeTorrents[infoHash] = true
+                        try {
+                            handle.setFlags(handle.flags().or_(TorrentFlags.SEQUENTIAL_DOWNLOAD))
+                        } catch (_: Exception) {
                         }
-                        AlertType.METADATA_RECEIVED -> {
-                            val handle = (alert as MetadataReceivedAlert).handle()
-                            val hash = handle.infoHash().toHex()
-                            Log.d(TAG, "[ALERT] METADATA_RECEIVED: $hash (${handle.torrentFile()?.name()})")
-                            // Signal any waiting startStream calls
-                            metadataLatches[hash]?.countDown()
-                        }
-                        AlertType.METADATA_FAILED -> {
-                            val handle = (alert as MetadataFailedAlert).handle()
-                            Log.w(TAG, "[ALERT] METADATA_FAILED: ${handle.infoHash().toHex()}")
-                        }
-                        AlertType.TORRENT_ERROR -> {
-                            val alertError = alert as TorrentErrorAlert
-                            Log.e(TAG, "[ALERT] TORRENT_ERROR: ${alertError.handle().infoHash().toHex()} -> ${alertError.message()}")
-                        }
-                        AlertType.TORRENT_FINISHED -> {
-                            val infoHash = (alert as TorrentFinishedAlert).handle().infoHash().toHex()
-                            Log.d(TAG, "[ALERT] TORRENT_FINISHED: $infoHash")
-                        }
-                        AlertType.TRACKER_REPLY -> {
-                            val alertTracker = alert as TrackerReplyAlert
-                            Log.d(TAG, "[ALERT] TRACKER_REPLY: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (${alertTracker.numPeers()} peers)")
-                        }
-                        AlertType.TRACKER_ERROR -> {
-                            val alertTracker = alert as TrackerErrorAlert
-                            Log.w(TAG, "[ALERT] TRACKER_ERROR: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (${alertTracker.errorMessage()})")
-                        }
-                        AlertType.PEER_CONNECT -> {
-                            val alertPeer = alert as PeerConnectAlert
-                            Log.d(TAG, "[ALERT] PEER_CONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.endpoint()}")
-                        }
-                        AlertType.PEER_DISCONNECTED -> {
-                            val alertPeer = alert as PeerDisconnectedAlert
-                            Log.d(TAG, "[ALERT] PEER_DISCONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.message()}")
-                        }
-                        else -> {
-                            // Optionally log type for untracked alerts
-                            // Log.v(TAG, "[ALERT] Other: ${alert.type()} - ${alert.message()}")
-                        }
+                        updateServiceState()
                     }
+
+                    AlertType.METADATA_RECEIVED -> {
+                        val handle = (alert as MetadataReceivedAlert).handle()
+                        val hash = handle.infoHash().toHex()
+                        Log.d(TAG, "[ALERT] METADATA_RECEIVED: $hash (${handle.torrentFile()?.name()})")
+                        metadataLatches[hash]?.countDown()
+                    }
+
+                    AlertType.METADATA_FAILED -> {
+                        val handle = (alert as MetadataFailedAlert).handle()
+                        Log.w(TAG, "[ALERT] METADATA_FAILED: ${handle.infoHash().toHex()}")
+                    }
+
+                    AlertType.TORRENT_ERROR -> {
+                        val alertError = alert as TorrentErrorAlert
+                        Log.e(TAG, "[ALERT] TORRENT_ERROR: ${alertError.handle().infoHash().toHex()} -> ${alertError.message()}")
+                    }
+
+                    AlertType.TORRENT_FINISHED -> {
+                        val infoHash = (alert as TorrentFinishedAlert).handle().infoHash().toHex()
+                        Log.d(TAG, "[ALERT] TORRENT_FINISHED: $infoHash")
+                    }
+
+                    AlertType.TRACKER_REPLY -> {
+                        val alertTracker = alert as TrackerReplyAlert
+                        Log.d(TAG, "[ALERT] TRACKER_REPLY: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (${alertTracker.numPeers()} peers)")
+                    }
+
+                    AlertType.TRACKER_ERROR -> {
+                        val alertTracker = alert as TrackerErrorAlert
+                        val reason = alertTracker.errorMessage().ifBlank { "unknown" }
+                        Log.w(
+                            TAG,
+                            "[ALERT] TRACKER_ERROR: ${alertTracker.handle().infoHash().toHex()} -> ${alertTracker.trackerUrl()} (reason=$reason, detail=${alertTracker.message()})"
+                        )
+                    }
+
+                    AlertType.PEER_CONNECT -> {
+                        val alertPeer = alert as PeerConnectAlert
+                        Log.d(TAG, "[ALERT] PEER_CONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.endpoint()}")
+                    }
+
+                    AlertType.PEER_DISCONNECTED -> {
+                        val alertPeer = alert as PeerDisconnectedAlert
+                        Log.d(TAG, "[ALERT] PEER_DISCONNECT: ${alertPeer.handle().infoHash().toHex()} -> ${alertPeer.message()}")
+                    }
+
                 }
-            })
+            }
+        })
+    }
+
+    private fun initSession() {
+        if (isSessionActive) return
+
+        val attemptedPorts = mutableSetOf<Int>()
+        var lastError: Exception? = null
+
+        repeat(LISTEN_BIND_RETRIES) { attemptIndex ->
+            val attempt = attemptIndex + 1
+            val listenPort = pickListenPort(attemptedPorts)
+            attemptedPorts.add(listenPort)
+
+            val manager = SessionManager()
+            try {
+                manager.start(SessionParams(createSessionSettings(listenPort)))
+                attachAlertListener(manager)
+
+                sessionManager = manager
+                configuredListenPort = listenPort
+                isSessionActive = true
+
+                Log.i(
+                    TAG,
+                    "[ALERT] LISTEN_SUCCEEDED: port=$listenPort attempt=$attempt/$LISTEN_BIND_RETRIES"
+                )
+                return
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(
+                    TAG,
+                    "[ALERT] LISTEN_FAILED: port=$listenPort attempt=$attempt/$LISTEN_BIND_RETRIES reason=${e.message}"
+                )
+                try {
+                    manager.stop()
+                } catch (_: Exception) {
+                }
+            }
         }
-        isSessionActive = true
+
+        configuredListenPort = null
+        Log.e(
+            TAG,
+            "Failed to initialize torrent session after $LISTEN_BIND_RETRIES attempts",
+            lastError
+        )
     }
     
     private fun stopSession() {
         isSessionActive = false
+        configuredListenPort = null
         priorityWindows.clear()
         val sm = sessionManager ?: return
         activeTorrents.keys.forEach { hash ->

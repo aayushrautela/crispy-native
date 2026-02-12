@@ -49,7 +49,8 @@ export default function PlayerScreenAndroid() {
 
     const infoHash = pickParam(params.infoHash) || '';
     const fileIdxParam = pickParam(params.fileIdx);
-    const fileIdx = fileIdxParam ? Number.parseInt(fileIdxParam, 10) : undefined;
+    const parsedFileIdx = fileIdxParam ? Number.parseInt(fileIdxParam, 10) : Number.NaN;
+    const fileIdx = Number.isFinite(parsedFileIdx) ? parsedFileIdx : undefined;
 
     const headers = useMemo(() => parseJsonParam<Record<string, string>>(pickParam(params.headers)), [params.headers]);
     const warmStreams = useMemo(() => parseJsonParam<unknown[]>(pickParam(params.streams)) ?? [], [params.streams]);
@@ -83,6 +84,7 @@ export default function PlayerScreenAndroid() {
         // If we have a resolved URL (meaning torrent is ready or HTTP is ready)
         if (state.resolvedUrl && (state.status === 'loading_media' || state.status === 'playing')) {
              launchedRef.current = true;
+             const nativeEngine = state.engine === 'exo' ? 'exoplayer' : 'vlc';
              
              // Create Session
              useNativePlayerSessionStore.getState().upsertSession({
@@ -97,7 +99,7 @@ export default function PlayerScreenAndroid() {
                  streams: warmStreams,
                  infoHash: infoHash || undefined,
                  fileIdx: fileIdx,
-                 engine: state.engine,
+                 engine: nativeEngine,
                  paused: false,
                  artist: type === 'movie' ? 'Movie' : title,
                  artworkUrl: poster,
@@ -105,12 +107,12 @@ export default function PlayerScreenAndroid() {
 
              // Launch Native Activity
              CrispyNativeCore.openPlayerActivity({
-                 sessionId,
-                 url: state.resolvedUrl,
-                 headers,
-                 engine: state.engine,
-                 paused: false,
-                 metadata: {
+                sessionId,
+                url: state.resolvedUrl,
+                headers,
+                 engine: nativeEngine,
+                paused: false,
+                metadata: {
                      title: episodeTitle || title || 'Now Playing',
                      subtitle: type === 'movie' ? 'Movie' : title || 'Series',
                      artworkUrl: poster || undefined,
