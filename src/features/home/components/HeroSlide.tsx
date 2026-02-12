@@ -68,7 +68,7 @@ const HeroSlideComponent = ({
 
     return (
         <View style={containerStyle}>
-            <Animated.View 
+            <Animated.View
                 renderToHardwareTextureAndroid={true} // Optimize GPU composition for opacity changes
                 style={[
                     styles.heroCard,
@@ -77,24 +77,27 @@ const HeroSlideComponent = ({
                 ]}
             >
                 <View style={styles.backgroundImage}>
-                    <ExpoImage
-                        recyclingKey={String(item.id)}
-                        source={{ uri: item.background }}
-                        style={StyleSheet.absoluteFill}
-                        contentFit="cover"
-                        transition={Platform.OS === 'android' ? 0 : 200}
-                        cachePolicy="memory-disk"
-                        priority={isFocused ? 'high' : 'normal'}
-                    />
+                    <View style={styles.imageContainer}>
+                        <ExpoImage
+                            recyclingKey={String(item.id)}
+                            source={{ uri: item.background }}
+                            style={StyleSheet.absoluteFill}
+                            contentFit="cover"
+                            transition={Platform.OS === 'android' ? 0 : 200}
+                            cachePolicy="memory-disk"
+                            priority={isFocused ? 'high' : 'normal'}
+                        />
+                    </View>
                     <LinearGradient
                         colors={[
-                            'rgba(0,0,0,0.5)',
+                            'rgba(0,0,0,0.45)',
+                            'rgba(0,0,0,0.15)',
                             'transparent',
-                            'transparent',
-                            'rgba(0,0,0,0.4)',
+                            'rgba(0,0,0,0.45)',
+                            themeColors.background,
                             themeColors.background
                         ]}
-                        locations={[0, 0.2, 0.5, 0.8, 1]}
+                        locations={[0, 0.2, 0.4, 0.62, 0.82, 1]}
                         style={styles.gradient}
                     >
                         <View style={styles.content}>
@@ -185,8 +188,12 @@ const styles = StyleSheet.create({
     backgroundImage: {
         flex: 1,
     },
+    imageContainer: {
+        height: '82%',
+        width: '100%',
+    },
     gradient: {
-        flex: 1,
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'flex-end',
         padding: 24,
         paddingBottom: 40,
@@ -224,6 +231,7 @@ const styles = StyleSheet.create({
         width: 160,
         height: 52,
         borderRadius: 100,
+        backgroundColor: '#FFFFFF',
     },
     infoBtn: {
         width: 52,
