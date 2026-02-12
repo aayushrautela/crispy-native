@@ -100,7 +100,7 @@ class TorrentService : Service() {
             }
         }
 
-        private fun cleanupLegacyTorrentStorage(context: Context): Pair<Int, Long> {
+        private fun cleanupLegacyTorrentStorage(context: Context): kotlin.Pair<Int, Long> {
             val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
             if (!baseDir.exists()) {
                 return 0 to 0L
@@ -836,10 +836,10 @@ class TorrentService : Service() {
 
     fun hasActiveTorrents(): Boolean = activeTorrents.isNotEmpty()
 
-    fun isHeaderReady(infoHash: String, fileIdx: Int): Pair<Boolean, Float> {
-        val handle = getHandle(infoHash) ?: return Pair(false, 0f)
-        if (!handle.isValid || !handle.status().hasMetadata()) return Pair(false, 0f)
-        val torrentInfo = handle.torrentFile() ?: return Pair(false, 0f)
+    fun isHeaderReady(infoHash: String, fileIdx: Int): kotlin.Pair<Boolean, Float> {
+        val handle = getHandle(infoHash) ?: return kotlin.Pair(false, 0f)
+        if (!handle.isValid || !handle.status().hasMetadata()) return kotlin.Pair(false, 0f)
+        val torrentInfo = handle.torrentFile() ?: return kotlin.Pair(false, 0f)
 
         val files = torrentInfo.files()
         val pieceLength = torrentInfo.pieceLength()
@@ -866,7 +866,7 @@ class TorrentService : Service() {
         }
         val progress = if (totalPieces > 0) (totalDownloaded.toFloat() / totalPieces * 100f) else 0f
 
-        return Pair(ready, progress)
+        return kotlin.Pair(ready, progress)
     }
 
     fun prioritizeHeader(infoHash: String, fileIdx: Int) {

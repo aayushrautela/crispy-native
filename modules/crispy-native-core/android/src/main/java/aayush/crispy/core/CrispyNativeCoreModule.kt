@@ -148,7 +148,10 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("clearCache") {
-      val context = appContext.reactContext ?: return@AsyncFunction
+      val context = appContext.reactContext
+      if (context == null) {
+        return@AsyncFunction null
+      }
       val service = torrentService
       if (service != null) {
         service.stopAll(clearStorage = true)
