@@ -25,7 +25,7 @@ class TorrentService : Service() {
         private const val TAG = "TorrentService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "torrent_service_channel"
-        private const val IDLE_TIMEOUT_MS = 1000L // 1 second idle timeout for strictly on-demand behavior
+        private const val IDLE_TIMEOUT_MS = 3 * 60 * 1000L // 3 minutes to avoid churn between short player transitions
         
         private val PUBLIC_TRACKERS = listOf(
             "udp://tracker.opentrackr.org:1337/announce",
@@ -81,7 +81,7 @@ class TorrentService : Service() {
         super.onDestroy()
         mainHandler.removeCallbacksAndMessages(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
-        // CRITICAL: Nuke everything on destroy
+        // Tear down engine resources.
         Thread { 
             stopServer()
             stopAll() 
@@ -90,7 +90,12 @@ class TorrentService : Service() {
     }
 
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val idleRunnable = Runnable { stopSelf() }
+    private val idleRunnable = Runnable {
+        if (activeTorrents.isEmpty()) {
+            Log.d(TAG, "Idle timeout reached (${IDLE_TIMEOUT_MS}ms), stopping TorrentService")
+            stopSelf()
+        }
+    }
     
     private fun updateServiceState() {
         mainHandler.post {
@@ -298,11 +303,20 @@ class TorrentService : Service() {
     }
 
     fun startInfoHash(infoHash: String, sessionId: String? = null): Boolean {
-        // Enforce single-stream policy: stop everything and wipe data before starting new
-        stopAll()
-
         val hash = infoHash.lowercase()
         Log.d(TAG, "startInfoHash: $hash (session: $sessionId)")
+
+        // Idempotent start: if this torrent is already active or being initialized,
+        // do not reset the session.
+        if (activeTorrents.containsKey(hash)) {
+            updateServiceState()
+            return true
+        }
+
+        // Single-stream policy, but avoid hard-reset churn for repeated same-hash starts.
+        if (activeTorrents.isNotEmpty()) {
+            stopAll()
+        }
         
         if (sessionId != null) {
             this.activeSessionId = sessionId
@@ -317,7 +331,6 @@ class TorrentService : Service() {
         
         try {
             val downloadDir = getDownloadDir()
-            // Directory is already cleaned by stopAll() -> performStartupCleanup()
             downloadDir.mkdirs()
 
             val trackerParams = PUBLIC_TRACKERS.joinToString("") { "&tr=${java.net.URLEncoder.encode(it, "UTF-8")}" }
@@ -415,7 +428,7 @@ class TorrentService : Service() {
     }
 
     /**
-     * Stop all active torrents and delete their data.
+     * Stop all active torrents for the current session.
      * @param onlyForSessionId If provided, only stops if the current active session matches this ID.
      */
     fun stopAll(onlyForSessionId: String? = null) {
@@ -424,7 +437,7 @@ class TorrentService : Service() {
             return
         }
         
-        Log.d(TAG, "Stopping all torrents and cleaning data...")
+        Log.d(TAG, "Stopping all torrents...")
         
         // Remove all torrents from session first
         val sm = sessionManager
@@ -443,10 +456,7 @@ class TorrentService : Service() {
         priorityWindows.clear()
         metadataLatches.values.forEach { it.countDown() }
         metadataLatches.clear()
-        
-        // PRODUCTION: Always wipe data when stopping all
-        performStartupCleanup()
-        
+
         updateServiceState()
     }
     

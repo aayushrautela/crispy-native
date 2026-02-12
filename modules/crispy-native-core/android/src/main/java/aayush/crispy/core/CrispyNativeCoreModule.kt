@@ -13,7 +13,6 @@ import android.os.Handler
 import com.facebook.react.bridge.ReactContext
 import aayush.crispy.core.pip.PipController
 import aayush.crispy.core.player.PlayerActivity
-import java.io.File
 import java.util.HashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -29,7 +28,6 @@ class CrispyNativeCoreModule : Module() {
     override fun onServiceConnected(className: android.content.ComponentName, service: IBinder) {
       val binder = service as TorrentService.TorrentBinder
       torrentService = binder.getService()
-      torrentService?.performStartupCleanup()
       isBound = true
       serviceLatch.countDown()
       Log.d("CrispyModule", "TorrentService connected")
@@ -47,18 +45,6 @@ class CrispyNativeCoreModule : Module() {
 
     OnCreate {
       val context = appContext.reactContext ?: return@OnCreate
-      val downloadDir = context.getExternalFilesDir(null) ?: context.filesDir
-
-      // PRODUCTION: Aggressive cleanup on app startup
-      try {
-          if (downloadDir.exists()) {
-              downloadDir.deleteRecursively()
-              downloadDir.mkdirs()
-              Log.d("CrispyModule", "Startup: Wiped download directory")
-          }
-      } catch (e: Exception) {
-          Log.e("CrispyModule", "Startup cleanup failed", e)
-      }
 
       val reactContext = context as? ReactContext
       if (reactContext != null) {
@@ -359,7 +345,11 @@ class CrispyNativeCoreModule : Module() {
           val context = appContext.reactContext ?: return null
           Log.d("CrispyModule", "Starting TorrentService lazily...")
           val intent = Intent(context, TorrentService::class.java)
-          context.startService(intent)
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+              context.startForegroundService(intent)
+          } else {
+              context.startService(intent)
+          }
           context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
       }
       
