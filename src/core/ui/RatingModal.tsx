@@ -3,9 +3,10 @@ import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { Typography } from '@/src/core/ui/Typography';
 import { Star } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface RatingModalProps {
     visible: boolean;
@@ -48,18 +49,42 @@ const RatingStar = ({ index, filled, onPress }: { index: number, filled: boolean
 export const RatingModal = ({ visible, onClose, title, initialRating, onRate, onRemoveRating }: RatingModalProps) => {
     const { theme } = useTheme();
     const sheetRef = useRef<BottomSheetRef>(null);
+    const { height: windowHeight } = useWindowDimensions();
+    const { bottom } = useSafeAreaInsets();
 
     // We maintain internal rating state for the UI interaction
     const [rating, setRating] = useState<number>(0);
 
+    const normalizedInitialRating = useMemo(() => {
+        if (!initialRating || initialRating <= 0) return 0;
+        return Math.max(0, Math.min(5, Math.round(initialRating / 2)));
+    }, [initialRating]);
+
+    const hasExistingRating = useMemo(() => {
+        return initialRating !== null && initialRating !== undefined && initialRating > 0;
+    }, [initialRating]);
+
+    const snapPoint = useMemo(() => {
+        const targetHeight = Math.round(windowHeight * 0.5);
+        return Math.max(340, Math.min(targetHeight, 460));
+    }, [windowHeight]);
+
+    const contentBottomPadding = useMemo(() => Math.max(bottom, 16), [bottom]);
+
+    useLayoutEffect(() => {
+        if (visible) {
+            setRating(normalizedInitialRating);
+        }
+    }, [visible, normalizedInitialRating]);
+
     useEffect(() => {
         if (visible) {
-            setRating(initialRating ? Math.round(initialRating / 2) : 0);
             sheetRef.current?.present();
-        } else {
-            sheetRef.current?.dismiss();
+            return;
         }
-    }, [visible, initialRating]);
+
+        sheetRef.current?.dismiss();
+    }, [visible]);
 
     const handleRate = () => {
         onRate(rating);
@@ -74,11 +99,12 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
     return (
         <CustomBottomSheet
             ref={sheetRef}
-            // Title handled custom inside content or title prop? 
-            // CustomBottomSheet title prop is "display-small", might be too big for "Rate 'Movie Title'"
-            // Let's use custom header
             onDismiss={onClose}
-            enableDynamicSizing={true}
+            enableDynamicSizing={false}
+            snapPoints={[snapPoint]}
+            scrollable={false}
+            contentPaddingHorizontal={0}
+            contentPaddingBottom={contentBottomPadding}
         >
             <View style={styles.container}>
                 {/* Header */}
@@ -105,7 +131,7 @@ export const RatingModal = ({ visible, onClose, title, initialRating, onRate, on
 
                 {/* Actions */}
                 <View style={styles.footer}>
-                    {initialRating !== null && initialRating !== undefined && (
+                    {hasExistingRating && (
                         <Pressable
                             onPress={handleRemove}
                             style={({ pressed }) => [

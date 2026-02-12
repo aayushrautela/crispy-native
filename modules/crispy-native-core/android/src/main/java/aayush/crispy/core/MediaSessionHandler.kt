@@ -128,6 +128,14 @@ class MediaSessionHandler(
             val request = ImageRequest.Builder(context)
                 .data(artworkUrl)
                 .allowHardware(false) 
+                .listener(
+                    onStart = { if (BuildConfig.DEBUG) android.util.Log.d(TAG, "Coil started: $artworkUrl") },
+                    onCancel = { if (BuildConfig.DEBUG) android.util.Log.d(TAG, "Coil cancelled: $artworkUrl") },
+                    onError = { _, result -> 
+                        if (BuildConfig.DEBUG) android.util.Log.e(TAG, "Coil error: $artworkUrl", result.throwable)
+                    },
+                    onSuccess = { _, _ -> if (BuildConfig.DEBUG) android.util.Log.d(TAG, "Coil success: $artworkUrl") }
+                )
                 .target(
                     onSuccess = { result ->
                         // Race condition check: Only apply if this is still the requested URL
@@ -137,9 +145,12 @@ class MediaSessionHandler(
                             }
                             if (result is BitmapDrawable) {
                                 currentArtwork = result.bitmap
+                                if (BuildConfig.DEBUG) {
+                                    android.util.Log.d(TAG, "Bitmap size: ${currentArtwork?.width}x${currentArtwork?.height}, byteCount: ${currentArtwork?.byteCount}")
+                                }
                             } else {
                                 if (BuildConfig.DEBUG) {
-                                    android.util.Log.w(TAG, "Image is not a BitmapDrawable")
+                                    android.util.Log.w(TAG, "Image is not a BitmapDrawable: ${result::class.java.simpleName}")
                                 }
                                 currentArtwork = null
                             }
@@ -228,7 +239,7 @@ class MediaSessionHandler(
 
     private fun updateNotification() {
         if (BuildConfig.DEBUG) {
-            android.util.Log.d(TAG, "updateNotification title='$currentTitle' playing=$isPlaying")
+            android.util.Log.d(TAG, "updateNotification title='$currentTitle' playing=$isPlaying hasArtwork=${currentArtwork != null}")
         }
         // We don't need the controller to check for updates, we have our local state values
         

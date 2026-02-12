@@ -3,12 +3,14 @@ import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useTheme } from '@/src/core/ThemeContext';
-import { Cpu, Info, RefreshCcw, Trash2 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Bug, Cpu, Info, RefreshCcw, Trash2 } from 'lucide-react-native';
 import React from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 
 export default function SystemScreen() {
     const { theme } = useTheme();
+    const router = useRouter();
 
     const handleClearCache = () => {
         Alert.alert(
@@ -61,6 +63,17 @@ export default function SystemScreen() {
                         showChevron={false}
                     />
                 </SettingsGroup>
+
+                {Platform.OS === 'android' ? (
+                    <SettingsGroup title="Diagnostics">
+                        <SettingsItem
+                            icon={Bug}
+                            label="Torrent Debug"
+                            description="Download-only engine diagnostics"
+                            onPress={() => router.push('/settings/torrent' as never)}
+                        />
+                    </SettingsGroup>
+                ) : null}
 
                 <View style={styles.footer}>
                     <Typography variant="label-small" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>

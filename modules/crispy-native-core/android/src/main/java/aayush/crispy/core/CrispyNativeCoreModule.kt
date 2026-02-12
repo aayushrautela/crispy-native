@@ -13,23 +13,22 @@ import android.os.Handler
 import com.facebook.react.bridge.ReactContext
 import aayush.crispy.core.pip.PipController
 import aayush.crispy.core.player.PlayerActivity
-import java.io.File
 import java.util.HashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class CrispyNativeCoreModule : Module() {
-  // CrispyServer is now owned exclusively by TorrentService (started in its onCreate).
+  // CrispyServer is owned exclusively by TorrentService and started on-demand.
   // This avoids EADDRINUSE when both Module and Service try to bind port 11470.
   private var torrentService: TorrentService? = null
   private var isBound = false
   private var serviceLatch = CountDownLatch(1)
+  private var startupCleanupLatch = CountDownLatch(0)
 
   private val connection = object : ServiceConnection {
     override fun onServiceConnected(className: android.content.ComponentName, service: IBinder) {
       val binder = service as TorrentService.TorrentBinder
       torrentService = binder.getService()
-      torrentService?.performStartupCleanup()
       isBound = true
       serviceLatch.countDown()
       Log.d("CrispyModule", "TorrentService connected")
@@ -47,18 +46,7 @@ class CrispyNativeCoreModule : Module() {
 
     OnCreate {
       val context = appContext.reactContext ?: return@OnCreate
-      val downloadDir = context.getExternalFilesDir(null) ?: context.filesDir
-
-      // PRODUCTION: Aggressive cleanup on app startup
-      try {
-          if (downloadDir.exists()) {
-              downloadDir.deleteRecursively()
-              downloadDir.mkdirs()
-              Log.d("CrispyModule", "Startup: Wiped download directory")
-          }
-      } catch (e: Exception) {
-          Log.e("CrispyModule", "Startup cleanup failed", e)
-      }
+      startupCleanupLatch = CountDownLatch(1)
 
       val reactContext = context as? ReactContext
       if (reactContext != null) {
@@ -66,6 +54,17 @@ class CrispyNativeCoreModule : Module() {
         val app = reactContext.applicationContext as? android.app.Application
         if (app != null) PipController.start(app, reactContext)
       }
+
+      Thread {
+        try {
+          TorrentService.cleanupTorrentStorage(context.applicationContext, "module_create")
+        } catch (e: Exception) {
+          Log.e("CrispyModule", "Startup torrent cleanup failed", e)
+        } finally {
+          startupCleanupLatch.countDown()
+        }
+      }.start()
+
       // TorrentService (with its CrispyServer) is started on-demand in ensureService()
     }
 
@@ -75,7 +74,7 @@ class CrispyNativeCoreModule : Module() {
       // Stop everything aggressively
       if (isBound) {
         try {
-          torrentService?.stopAll()
+          torrentService?.stopAll(clearStorage = true)
           context.unbindService(connection)
         } catch (e: Exception) {
           Log.e("CrispyModule", "Error during OnDestroy unbind", e)
@@ -88,10 +87,17 @@ class CrispyNativeCoreModule : Module() {
 
     AsyncFunction("startStream") { infoHash: String, fileIdx: Int, sessionId: String ->
       Log.d("CrispyModule", "[JS] startStream: $infoHash, index: $fileIdx, session: $sessionId")
+
+      waitForStartupCleanup()
       
       val service = ensureService()
       if (service == null) {
           Log.e("CrispyModule", "Failed to start stream: Service not bound (timeout)")
+          return@AsyncFunction null
+      }
+
+      if (!service.awaitServerReady()) {
+          Log.e("CrispyModule", "Failed to start stream: local server not ready")
           return@AsyncFunction null
       }
       
@@ -110,7 +116,15 @@ class CrispyNativeCoreModule : Module() {
 
     AsyncFunction("destroyStream") { sessionId: String ->
       Log.d("CrispyModule", "[JS] destroyStream: $sessionId")
-      torrentService?.stopAll(sessionId)
+      val service = torrentService ?: ensureService()
+      if (service != null) {
+          service.stopAll(sessionId, clearStorage = true)
+      } else {
+          val context = appContext.reactContext
+          if (context != null) {
+              TorrentService.cleanupTorrentStorage(context.applicationContext, "destroy_stream_unbound")
+          }
+      }
       
       // PRODUCTION: If no more active torrents, unbind to allow service to stop
       if (torrentService?.hasActiveTorrents() != true) {
@@ -134,7 +148,16 @@ class CrispyNativeCoreModule : Module() {
     }
 
     AsyncFunction("clearCache") {
-      torrentService?.performStartupCleanup()
+      val context = appContext.reactContext
+      if (context == null) {
+        return@AsyncFunction null
+      }
+      val service = torrentService
+      if (service != null) {
+        service.stopAll(clearStorage = true)
+      } else {
+        TorrentService.cleanupTorrentStorage(context.applicationContext, "clear_cache")
+      }
     }
 
     AsyncFunction("handleSeek") { infoHash: String, fileIdx: Int, position: Long ->
@@ -359,7 +382,11 @@ class CrispyNativeCoreModule : Module() {
           val context = appContext.reactContext ?: return null
           Log.d("CrispyModule", "Starting TorrentService lazily...")
           val intent = Intent(context, TorrentService::class.java)
-          context.startService(intent)
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+              context.startForegroundService(intent)
+          } else {
+              context.startService(intent)
+          }
           context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
       }
       
@@ -382,6 +409,17 @@ class CrispyNativeCoreModule : Module() {
       } catch (e: InterruptedException) {
           Log.e("CrispyModule", "Interrupted while waiting for service", e)
           return false
+      }
+  }
+
+  private fun waitForStartupCleanup(timeoutMs: Long = 60_000L) {
+      try {
+          val completed = startupCleanupLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+          if (!completed) {
+              Log.w("CrispyModule", "Startup torrent cleanup timed out after ${timeoutMs}ms; continuing")
+          }
+      } catch (e: InterruptedException) {
+          Log.e("CrispyModule", "Interrupted while waiting for startup cleanup", e)
       }
   }
 

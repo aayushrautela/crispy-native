@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, Text, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { ArrowLeft, Play, Pause, StepBack, StepForward, Headphones, Languages, Layers, Settings, Info } from 'lucide-react-native';
+import { ArrowLeft, Play, Pause, StepBack, StepForward, Headphones, Languages, Layers, Settings, Info, ClosedCaption } from 'lucide-react-native';
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
 import CrispyNativeCore from '@/modules/crispy-native-core';
@@ -220,7 +220,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     <View style={styles.actionsPill}>
                         {[
                             { icon: Headphones, key: 'audio' },
-                            { icon: Languages, key: 'subtitles' },
+                            { icon: ClosedCaption, key: 'subtitles' },
                             { icon: Layers, key: 'streams' },
                             { icon: Settings, key: 'settings' },
                             { icon: Info, key: 'info' },

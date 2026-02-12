@@ -6,7 +6,7 @@ import { playerReducer, initialPlayerState, type PlayerAction } from '../state/p
 import { normalizeLocalStreamUrl } from '../utils/streamUtils';
 
 const POLL_INTERVAL_MS = 750;
-const POLL_TIMEOUT_MS = 60_000;
+const POLL_TIMEOUT_MS = 180_000;
 
 export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: boolean }) {
     const [state, dispatch] = useReducer(playerReducer, initialPlayerState);
@@ -53,6 +53,11 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
                     const res = await fetch(state.pollingUrl!, { method: 'GET', headers: { Range: 'bytes=0-1' } });
                     if (res.status === 200 || res.status === 206) {
                         dispatch({ type: 'LOCALHOST_READY' });
+                        return;
+                    }
+
+                    if (res.status === 404 || (res.status >= 500 && res.status !== 503)) {
+                        dispatch({ type: 'ERROR', error: `Local stream returned HTTP ${res.status}` });
                     }
                 } catch (e) {
                     // Keep polling
