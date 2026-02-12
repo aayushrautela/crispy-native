@@ -18,6 +18,7 @@ export default function SettingsLayout() {
             <Stack.Screen name="appearance" />
             <Stack.Screen name="language" />
             <Stack.Screen name="system" />
+            <Stack.Screen name="torrent" />
             <Stack.Screen name="playback" />
             <Stack.Screen name="subtitles" />
             <Stack.Screen name="home" />
