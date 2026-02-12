@@ -122,7 +122,6 @@ export class AddonService {
         }
 
         const url = `${this.getRootUrl(baseUrl)}${path}.json`;
-        console.log(`[AddonService] Fetching catalog: ${url}`);
 
         try {
             const res = await axios.get<CatalogResponse>(url);
@@ -135,7 +134,6 @@ export class AddonService {
                 }));
             }
 
-            console.log(`[AddonService] Success ${url}, items: ${res.data?.metas?.length}`);
             return res.data;
         } catch (e) {
             console.error(`[AddonService] Failed ${url}`, e);
@@ -165,14 +163,9 @@ export class AddonService {
 
     static async getStreams(baseUrl: string, type: string, id: string): Promise<{ streams: any[] }> {
         const url = `${this.getRootUrl(baseUrl)}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
-        console.log(`[AddonService] getStreams URL: ${url}`);
         try {
             const res = await axios.get<{ streams: any[] }>(url);
-            console.log(`[AddonService] getStreams ${url} status: ${res.status}, count: ${res.data?.streams?.length || 0}`);
-            if (res.data && Array.isArray(res.data.streams)) {
-                return res.data;
-            }
-            return { streams: [] };
+            return res.data;
         } catch (e: any) {
             console.error(`[AddonService] getStreams failed for ${url}:`, e.message);
             return { streams: [] };
@@ -194,22 +187,15 @@ export class AddonService {
      * deduplicates by URL.
      */
     static async fetchAllSubtitles(addonUrls: string[], type: string, id: string): Promise<any[]> {
-        console.log(`[AddonService] fetchAllSubtitles START: ${type}/${id} from ${addonUrls.length} addons`);
-
         // 1. Fetch all manifests to see which ones support subtitles
         const manifestResults = await Promise.allSettled(
             addonUrls.map(url => this.fetchManifest(url).then(m => ({ manifest: m, baseUrl: url })))
         );
 
         const subtitleAddons = manifestResults
-            .filter((r): r is PromiseFulfilledResult<{ manifest: AddonManifest; baseUrl: string }> => {
-                if (r.status === 'rejected') {
-                    console.log(`[AddonService] Manifest fetch FAILED:`, r.reason);
-                }
-                return r.status === 'fulfilled';
-            })
+            .filter((r): r is PromiseFulfilledResult<{ manifest: AddonManifest; baseUrl: string }> => r.status === 'fulfilled')
             .map(r => (r as PromiseFulfilledResult<{ manifest: AddonManifest; baseUrl: string }>).value)
-            .filter(({ manifest, baseUrl }) => {
+            .filter(({ manifest }) => {
                 const hasSubResource = manifest.resources?.some(r => {
                     if (typeof r === 'string') return r === 'subtitles';
                     return r.name === 'subtitles';
@@ -219,26 +205,14 @@ export class AddonService {
                     typeof r !== 'string' && r.name === 'subtitles' && r.types?.includes(type)
                 );
 
-                if (!hasSubResource) {
-                    console.log(`[AddonService] Addon "${manifest.name}" skipped: No 'subtitles' resource`);
-                } else if (!supportsType) {
-                    console.log(`[AddonService] Addon "${manifest.name}" skipped: Does not support type '${type}'`);
-                } else {
-                    console.log(`[AddonService] Addon "${manifest.name}" matches! (${baseUrl})`);
-                }
-
                 return hasSubResource && supportsType;
             });
-
-        console.log(`[AddonService] Found ${subtitleAddons.length} qualifying subtitle addons`);
 
         // 2. Fetch subtitles from all qualifying addons in parallel
         const subtitleResults = await Promise.allSettled(
             subtitleAddons.map(async ({ manifest, baseUrl }) => {
                 try {
-                    console.log(`[AddonService] Requesting subtitles from "${manifest.name}"...`);
                     const data = await this.getSubtitles(baseUrl, type, id);
-                    console.log(`[AddonService] Got ${data.subtitles?.length || 0} subs from "${manifest.name}"`);
                     return (data.subtitles || []).map(sub => ({
                         ...sub,
                         addonId: manifest.id,
@@ -264,7 +238,6 @@ export class AddonService {
             return true;
         });
 
-        console.log(`[AddonService] fetchAllSubtitles DONE: ${deduped.length} unique subtitles found`);
         return deduped;
     }
 
