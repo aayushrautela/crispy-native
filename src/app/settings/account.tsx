@@ -7,7 +7,8 @@ import { SettingsItem } from '@/src/core/ui/SettingsItem';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { CheckCircle2, LogOut, RefreshCw, Users, ExternalLink } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { CheckCircle2, LogOut, RefreshCw, Users, ExternalLink, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, StyleSheet, View, Linking } from 'react-native';
 
@@ -61,7 +62,31 @@ export default function AccountScreen() {
         <SettingsSubpage title="Account">
             <View>
                 <SettingsGroup title="Status">
-                    <View style={styles.statusCard}>
+                    <View style={[styles.statusCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <View
+                            style={[
+                                styles.avatar,
+                                {
+                                    backgroundColor: activeProfile
+                                        ? theme.colors.primaryContainer
+                                        : theme.colors.surface,
+                                },
+                            ]}
+                        >
+                            {activeProfile?.avatar ? (
+                                <Image
+                                    source={{ uri: activeProfile.avatar }}
+                                    style={styles.avatarImage}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
+                            ) : (
+                                <User
+                                    size={20}
+                                    color={activeProfile ? theme.colors.onPrimaryContainer : theme.colors.onSurface}
+                                />
+                            )}
+                        </View>
                         <View style={styles.statusInfo}>
                             <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSurface }}>
                                 {profileTitle}
@@ -71,7 +96,6 @@ export default function AccountScreen() {
                             </Typography>
                         </View>
                     </View>
-
                     <SettingsItem
                         icon={Users}
                         label="Profiles"
@@ -133,5 +157,17 @@ const styles = StyleSheet.create({
     actions: {
         padding: 20,
         gap: 10,
+    },
+    avatar: {
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
     },
 });

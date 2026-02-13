@@ -6,6 +6,7 @@ import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { LogOut, User, UserCheck, ExternalLink } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View, Linking } from 'react-native';
@@ -110,7 +111,14 @@ export default function ProfilesScreen() {
                                             },
                                         ]}
                                     >
-                                        {isCurrent ? (
+                                        {profile.avatar ? (
+                                            <Image
+                                                source={{ uri: profile.avatar }}
+                                                style={styles.avatarImage}
+                                                contentFit="cover"
+                                                transition={200}
+                                            />
+                                        ) : isCurrent ? (
                                             <UserCheck size={20} color={theme.colors.onPrimaryContainer} />
                                         ) : (
                                             <User size={20} color={theme.colors.onSurfaceVariant} />
@@ -193,6 +201,11 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
     },
     profileMeta: {
         flex: 1,
