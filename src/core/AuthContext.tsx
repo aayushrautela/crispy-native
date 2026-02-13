@@ -1,5 +1,6 @@
 import { Session, User } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { supabase } from './services/supabase';
 import { StorageService } from './storage';
 
@@ -22,6 +23,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const syncSessionState = useCallback((nextSession: Session | null) => {
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
+
+        if (nextSession?.user?.id) {
+            StorageService.setActiveAccountId(nextSession.user.id);
+            return;
+        }
+
+        StorageService.setActiveAccountId(null);
+    }, []);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -31,17 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (error) throw error;
                 if (cancelled) return;
 
-                setSession(data.session);
-                setUser(data.session?.user ?? null);
-
-                if (data.session?.user?.id) {
-                    StorageService.setActiveAccountId(data.session.user.id);
-                } else {
-                    StorageService.setActiveAccountId(null);
-                }
+                syncSessionState(data.session);
             } catch (e) {
                 if (!cancelled) {
                     console.error('[AuthContext] Failed to load session:', e);
+                    syncSessionState(null);
                 }
             } finally {
                 if (!cancelled) {
@@ -53,20 +60,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void bootstrap();
 
         const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-            setSession(nextSession);
-            setUser(nextSession?.user ?? null);
-            setLoading(false);
-
-            if (nextSession?.user?.id) {
-                StorageService.setActiveAccountId(nextSession.user.id);
-            } else {
-                StorageService.setActiveAccountId(null);
+            if (cancelled) {
+                return;
             }
+
+            syncSessionState(nextSession);
+            setLoading(false);
         });
 
         return () => {
             cancelled = true;
             data.subscription.unsubscribe();
+        };
+    }, [syncSessionState]);
+
+    useEffect(() => {
+        const syncRefreshLifecycle = (state: string) => {
+            if (state === 'active') {
+                supabase.auth.startAutoRefresh();
+                return;
+            }
+
+            supabase.auth.stopAutoRefresh();
+        };
+
+        syncRefreshLifecycle(AppState.currentState);
+        const subscription = AppState.addEventListener('change', syncRefreshLifecycle);
+
+        return () => {
+            subscription.remove();
+            supabase.auth.stopAutoRefresh();
         };
     }, []);
 
