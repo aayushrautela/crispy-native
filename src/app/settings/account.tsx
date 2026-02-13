@@ -1,15 +1,17 @@
+import { useAuth } from '@/src/core/AuthContext';
+import { useProfiles } from '@/src/core/ProfileContext';
+import { useTheme } from '@/src/core/ThemeContext';
+import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { CheckCircle2, LogOut, RefreshCw, Users } from 'lucide-react-native';
+import { CheckCircle2, LogOut, RefreshCw, Users, ExternalLink } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
-import { useAuth } from '../../core/AuthContext';
-import { useProfiles } from '../../core/ProfileContext';
-import { useTheme } from '../../core/ThemeContext';
-import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
-import { SettingsGroup } from '../../core/ui/SettingsGroup';
-import { SettingsItem } from '../../core/ui/SettingsItem';
-import { Typography } from '../../core/ui/Typography';
-import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
+import { Alert, StyleSheet, View, Linking } from 'react-native';
+
+const ACCOUNT_WEB_URL = 'https://crispy-account-management.vercel.app/dashboard/account';
 
 export default function AccountScreen() {
     const { theme } = useTheme();
@@ -81,7 +83,7 @@ export default function AccountScreen() {
                 <SettingsGroup title="Actions">
                     <View style={styles.actions}>
                         <ExpressiveButton
-                            title="Manage Profiles"
+                            title="Switch Profile"
                             icon={Users}
                             onPress={() => router.push('/(auth)/profiles' as never)}
                             variant="primary"
@@ -93,6 +95,13 @@ export default function AccountScreen() {
                             onPress={handleLogout}
                             variant="outline"
                             isLoading={loadingAction === 'signout'}
+                        />
+
+                        <ExpressiveButton
+                            title="Manage on Web"
+                            icon={ExternalLink}
+                            onPress={() => Linking.openURL(ACCOUNT_WEB_URL)}
+                            variant="text"
                         />
                     </View>
                 </SettingsGroup>

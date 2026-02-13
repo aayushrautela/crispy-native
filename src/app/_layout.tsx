@@ -52,8 +52,19 @@ function AuthRouteGuard({ loaded }: { loaded: boolean }) {
     const inLoginScreen = inAuthGroup && authSegment === 'login';
     const inProfilesScreen = inAuthGroup && authSegment === 'profiles';
 
+    console.log('[AuthRouteGuard] Checking navigation:', {
+      inAuthGroup,
+      inLoginScreen,
+      inProfilesScreen,
+      authSegment,
+      segments,
+      user: !!user,
+      activeProfileId,
+    });
+
     if (!user) {
       if (!inLoginScreen) {
+        console.log('[AuthRouteGuard] No user, redirecting to login');
         router.replace('/(auth)/login');
       }
       return;
@@ -61,12 +72,16 @@ function AuthRouteGuard({ loaded }: { loaded: boolean }) {
 
     if (!activeProfileId) {
       if (!inProfilesScreen) {
+        console.log('[AuthRouteGuard] No active profile, redirecting to profiles');
         router.replace('/(auth)/profiles' as never);
       }
       return;
     }
 
-    if (inAuthGroup) {
+    // Allow users to explicitly navigate to profiles screen from settings
+    // Don't redirect if they're already on the profiles screen
+    if (inAuthGroup && !inProfilesScreen) {
+      console.log('[AuthRouteGuard] In auth group (not profiles), redirecting to tabs');
       router.replace('/(tabs)');
     }
   }, [activeProfileId, loaded, loading, profilesLoading, router, segments, user]);

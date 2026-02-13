@@ -6,9 +6,11 @@ import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { LogOut, Plus, User, UserCheck, UserMinus } from 'lucide-react-native';
+import { LogOut, User, UserCheck, ExternalLink } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View, Linking } from 'react-native';
+
+const PROFILES_WEB_URL = 'https://crispy-account-management.vercel.app/dashboard';
 
 export default function ProfilesScreen() {
     const { theme } = useTheme();
@@ -19,84 +21,30 @@ export default function ProfilesScreen() {
         profiles,
         activeProfileId,
         switchProfile,
-        createProfile,
-        deleteProfile,
     } = useProfiles();
 
     const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
-    const [removeLoadingId, setRemoveLoadingId] = useState<string | null>(null);
-    const [newProfileName, setNewProfileName] = useState('');
-    const [creating, setCreating] = useState(false);
     const [signingOut, setSigningOut] = useState(false);
 
     const canInteract = useMemo(() => {
-        return !loading && !creating && !signingOut && !pendingProfileId && !removeLoadingId;
-    }, [creating, loading, pendingProfileId, removeLoadingId, signingOut]);
+        return !loading && !signingOut && !pendingProfileId;
+    }, [loading, pendingProfileId, signingOut]);
 
     const handleProfilePress = async (profileId: string) => {
         if (!canInteract) return;
 
+        console.log('[ProfilesScreen] Profile pressed:', { profileId, currentActiveId: activeProfileId });
         setPendingProfileId(profileId);
         try {
             await switchProfile(profileId);
+            console.log('[ProfilesScreen] Profile switched successfully, navigating to tabs');
             router.replace('/(tabs)');
         } catch (error: any) {
+            console.error('[ProfilesScreen] Failed to switch profile:', error);
             Alert.alert('Unable to switch profile', error?.message || 'Please try again.');
         } finally {
             setPendingProfileId(null);
         }
-    };
-
-    const handleCreateProfile = async () => {
-        if (!canInteract) return;
-
-        const trimmed = newProfileName.trim();
-        if (!trimmed) {
-            Alert.alert('Profile name required', 'Please enter a profile name.');
-            return;
-        }
-
-        setCreating(true);
-        try {
-            const profile = await createProfile(trimmed);
-            setNewProfileName('');
-            await switchProfile(profile.id);
-            router.replace('/(tabs)');
-        } catch (error: any) {
-            Alert.alert('Unable to create profile', error?.message || 'Please try again.');
-        } finally {
-            setCreating(false);
-        }
-    };
-
-    const handleDeleteProfile = (profileId: string, label: string) => {
-        if (!canInteract) return;
-        if (profiles.length <= 1) {
-            Alert.alert('Cannot delete profile', 'Create another profile before deleting this one.');
-            return;
-        }
-
-        Alert.alert(
-            'Delete Profile',
-            `Delete ${label}? This removes local profile data on this device.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        setRemoveLoadingId(profileId);
-                        try {
-                            await deleteProfile(profileId);
-                        } catch (error: any) {
-                            Alert.alert('Unable to delete profile', error?.message || 'Please try again.');
-                        } finally {
-                            setRemoveLoadingId(null);
-                        }
-                    },
-                },
-            ]
-        );
     };
 
     const handleSignOut = () => {
@@ -141,13 +89,12 @@ export default function ProfilesScreen() {
                         profiles.map((profile) => {
                             const isCurrent = profile.id === activeProfileId;
                             const isSwitching = pendingProfileId === profile.id;
-                            const isRemoving = removeLoadingId === profile.id;
 
                             return (
                                 <Pressable
                                     key={profile.id}
                                     onPress={() => void handleProfilePress(profile.id)}
-                                    disabled={!canInteract || isSwitching || isRemoving}
+                                    disabled={!canInteract || isSwitching}
                                     style={({ pressed }) => [
                                         styles.profileRow,
                                         pressed && styles.profileRowPressed,
@@ -178,25 +125,6 @@ export default function ProfilesScreen() {
                                             {isCurrent ? 'Current profile' : 'Tap to switch'}
                                         </Typography>
                                     </View>
-
-                                    <View style={styles.profileActions}>
-                                        <Pressable
-                                            onPress={(event) => {
-                                                event.stopPropagation();
-                                                handleDeleteProfile(profile.id, profile.name);
-                                            }}
-                                            disabled={isRemoving || !canInteract}
-                                            style={({ pressed }) => [
-                                                styles.removeButton,
-                                                {
-                                                    backgroundColor: theme.colors.errorContainer,
-                                                    opacity: pressed ? 0.8 : 1,
-                                                },
-                                            ]}
-                                        >
-                                            <UserMinus size={16} color={theme.colors.onErrorContainer} />
-                                        </Pressable>
-                                    </View>
                                 </Pressable>
                             );
                         })
@@ -205,41 +133,26 @@ export default function ProfilesScreen() {
                             <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
                                 No profiles yet.
                             </Typography>
-                            <Typography variant="body-small" style={{ color: theme.colors.outline }}>
-                                Create your first profile to continue.
-                            </Typography>
+                            <ExpressiveButton
+                                title="Create Profile on Web"
+                                icon={ExternalLink}
+                                variant="primary"
+                                onPress={() => Linking.openURL(PROFILES_WEB_URL)}
+                                style={{ marginTop: 12 }}
+                            />
                         </View>
                     )}
                 </SettingsGroup>
 
-                <SettingsGroup title="Create Profile">
-                    <View style={styles.createRow}>
-                        <TextInput
-                            value={newProfileName}
-                            onChangeText={setNewProfileName}
-                            placeholder="Profile name"
-                            placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
-                            style={[
-                                styles.input,
-                                {
-                                    backgroundColor: theme.colors.elevation.level2,
-                                    color: theme.colors.onSurface,
-                                    borderColor: theme.colors.outlineVariant,
-                                },
-                            ]}
-                        />
-                        <ExpressiveButton
-                            title="Add"
-                            icon={Plus}
-                            onPress={handleCreateProfile}
-                            isLoading={creating}
-                            disabled={!canInteract}
-                            style={styles.createButton}
-                        />
-                    </View>
-                </SettingsGroup>
-
                 <View style={styles.footerActions}>
+                    <ExpressiveButton
+                        title="Manage Profiles on Web"
+                        icon={ExternalLink}
+                        variant="text"
+                        onPress={() => Linking.openURL(PROFILES_WEB_URL)}
+                        style={{ marginBottom: 12 }}
+                    />
+
                     <ExpressiveButton
                         title="Sign Out"
                         icon={LogOut}
