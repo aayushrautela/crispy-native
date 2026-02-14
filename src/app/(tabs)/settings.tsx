@@ -91,7 +91,7 @@ export default function SettingsScreen() {
                         <SettingsItem
                             label="Profiles"
                             icon={User}
-                            description="Switch accounts or continue as guest"
+                            description="Switch and manage viewing profiles"
                             onPress={() => router.push('/(auth)/profiles' as never)}
                         />
                         <SettingsItem

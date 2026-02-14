@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-modules-core/ios/Legacy/NativeModulesProxy/EXNativeModulesProxy.h b/node_modules/expo-modules-core/ios/Legacy/NativeModulesProxy/EXNativeModulesProxy.h
+index 9f2d042..3be43c5 100644
+--- a/node_modules/expo-modules-core/ios/Legacy/NativeModulesProxy/EXNativeModulesProxy.h
++++ b/node_modules/expo-modules-core/ios/Legacy/NativeModulesProxy/EXNativeModulesProxy.h
+@@ -5,6 +5,8 @@
+ #import <ExpoModulesCore/EXInternalModule.h>
+ #import <ExpoModulesCore/EXModuleRegistry.h>
+ 
++NS_ASSUME_NONNULL_BEGIN
++
+ // A convenience class, which acts as a store for the native modules proxy config
+ 
+ NS_SWIFT_NAME(ModulesProxyConfig)
+@@ -35,3 +37,5 @@ NS_SWIFT_NAME(LegacyNativeModulesProxy)
+ - (void)callMethod:(NSString *)moduleName methodNameOrKey:(id)methodNameOrKey arguments:(NSArray *)arguments resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
+ 
+ @end
++
++NS_ASSUME_NONNULL_END

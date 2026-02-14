@@ -3,9 +3,8 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
 import { useNativePlayerSessionStore, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
-import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 const pickParam = (v: string | string[] | undefined): string | undefined => {
@@ -57,88 +56,79 @@ export default function PlayerScreenAndroid() {
 
     const sessionId = useMemo(() => Math.random().toString(36).slice(2), []);
     const launchedRef = useRef(false);
+    const [launchError, setLaunchError] = useState<string | null>(null);
 
-    // Use machine to resolve stream (skip native load, as we launch Activity manually)
-    const { state, dispatch } = usePlayerLogic(sessionId, { skipNativeLoad: true });
-    
-    // Initial Load
-    useEffect(() => {
-        if (urlParam || infoHash) {
-            dispatch({
-                type: 'LOAD_STREAM',
-                stream: {
-                    url: urlParam,
-                    infoHash,
-                    fileIdx,
-                    behaviorHints: { headers }
-                },
-                engine: settings.videoPlayerEngine === 'vlc' ? 'vlc' : 'exo'
-            });
-        }
-    }, [urlParam, infoHash, fileIdx, headers, settings.videoPlayerEngine, dispatch]);
+    const nativeEngine = settings.videoPlayerEngine === 'vlc' ? 'vlc' : 'exoplayer';
+    const initialUrl = urlParam || '';
+    const hasStreamSource = Boolean(initialUrl) || Boolean(infoHash);
 
-    // Launch Activity when ready
+    // Open native player activity immediately; in-activity overlay handles all stream resolution states.
     useEffect(() => {
         if (launchedRef.current) return;
-        
-        // If we have a resolved URL (meaning torrent is ready or HTTP is ready)
-        if (state.resolvedUrl && (state.status === 'loading_media' || state.status === 'playing')) {
-             launchedRef.current = true;
-             const nativeEngine = state.engine === 'exo' ? 'exoplayer' : 'vlc';
-             
-             // Create Session
-             useNativePlayerSessionStore.getState().upsertSession({
-                 sessionId,
-                 id,
-                 type,
-                 title,
-                 poster,
-                 episodeTitle,
-                 url: state.resolvedUrl,
-                 headers,
-                 streams: warmStreams,
-                 infoHash: infoHash || undefined,
-                 fileIdx: fileIdx,
-                 engine: nativeEngine,
-                 paused: false,
-                 artist: type === 'movie' ? 'Movie' : title,
-                 artworkUrl: poster,
-             });
-
-             // Launch Native Activity
-             CrispyNativeCore.openPlayerActivity({
-                sessionId,
-                url: state.resolvedUrl,
-                headers,
-                 engine: nativeEngine,
-                paused: false,
-                metadata: {
-                     title: episodeTitle || title || 'Now Playing',
-                     subtitle: type === 'movie' ? 'Movie' : title || 'Series',
-                     artworkUrl: poster || undefined,
-                 },
-             }).then((ok) => {
-                 if (ok) {
-                     router.back();
-                 } else {
-                     // Fallback logic if needed, or dispatch error
-                     dispatch({ type: 'ERROR', error: 'Failed to open native player', fatal: true });
-                 }
-             });
+        if (!hasStreamSource) {
+            setLaunchError('Missing stream source.');
+            return;
         }
-    }, [state.resolvedUrl, state.status, state.engine, sessionId, id, type, title, poster, episodeTitle, headers, warmStreams, infoHash, fileIdx, router, dispatch]);
+        launchedRef.current = true;
+        setLaunchError(null);
+
+        const store = useNativePlayerSessionStore.getState();
+        store.upsertSession({
+            sessionId,
+            id,
+            type,
+            title,
+            poster,
+            episodeTitle,
+            url: initialUrl || undefined,
+            headers,
+            streams: warmStreams,
+            infoHash: infoHash || undefined,
+            fileIdx,
+            engine: nativeEngine,
+            playbackState: initialUrl ? 'loading' : 'resolving',
+            paused: false,
+            artist: type === 'movie' ? 'Movie' : title,
+            artworkUrl: poster,
+        });
+
+        CrispyNativeCore.openPlayerActivity({
+            sessionId,
+            url: initialUrl,
+            headers,
+            engine: nativeEngine,
+            paused: false,
+            metadata: {
+                title: episodeTitle || title || 'Now Playing',
+                subtitle: type === 'movie' ? 'Movie' : title || 'Series',
+                artworkUrl: poster || undefined,
+            },
+        })
+            .then((ok) => {
+                if (ok) {
+                    router.back();
+                    return;
+                }
+                store.removeSession(sessionId);
+                launchedRef.current = false;
+                setLaunchError('Failed to open native player.');
+            })
+            .catch((error) => {
+                store.removeSession(sessionId);
+                launchedRef.current = false;
+                const message = error instanceof Error ? error.message : 'Failed to open native player.';
+                setLaunchError(message);
+            });
+    }, [sessionId, id, type, title, poster, episodeTitle, headers, warmStreams, infoHash, fileIdx, nativeEngine, initialUrl, hasStreamSource, router]);
 
     return (
         <View style={styles.root}>
             <LoadingIndicator size="large" color="#fff" />
             <Typography variant="body" style={styles.text}>
-                {state.status === 'booting_torrent' ? 'Starting torrent stream...' :
-                 state.status === 'polling_localhost' ? 'Connecting to peers...' :
-                 state.error ? `Error: ${state.error}` :
-                 'Resolving stream...'}
+                {launchError ? `Error: ${launchError}` : 'Launching player...'}
             </Typography>
 
-            {state.status === 'error' && (
+            {launchError && (
                 <Pressable style={styles.backBtn} onPress={() => router.back()}>
                     <Typography variant="label" style={styles.backText}>
                         Back

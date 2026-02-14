@@ -1,57 +1,42 @@
 import { useTheme } from '@/src/core/ThemeContext';
-import { useAuth } from '@/src/core/AuthContext';
 import { supabase } from '@/src/core/services/supabase';
 import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
 import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
 import { SettingsItem } from '@/src/core/ui/SettingsItem';
-import { Typography } from '@/src/core/ui/Typography';
 import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Lock, LogIn, Mail, User as UserIcon, UserPlus } from 'lucide-react-native';
+import { Typography } from '@/src/core/ui/Typography';
+import { useRouter } from 'expo-router';
+import { Lock, LogIn, Mail, ExternalLink } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, Linking } from 'react-native';
+
+const ACCOUNT_WEB_URL = 'https://crispy-account-management.vercel.app/auth/signup';
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [name, setName] = useState('');
-    const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const { theme } = useTheme();
-    const { continueAsGuest } = useAuth();
     const router = useRouter();
-    const params = useLocalSearchParams<{ mode?: string | string[] }>();
-    const modeParam = Array.isArray(params.mode) ? params.mode[0] : params.mode;
-    const isAddAccountMode = modeParam === 'add-account';
 
     const handleAuth = async () => {
+        const normalizedEmail = email.trim().toLowerCase();
+
+        if (!normalizedEmail) {
+            alert('Email is required.');
+            return;
+        }
+
+        if (!password) {
+            alert('Password is required.');
+            return;
+        }
+
         setLoading(true);
         try {
-            if (isSignUp) {
-                const { data, error } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: {
-                        data: {
-                            name: name || email.split('@')[0],
-                            full_name: name || email.split('@')[0]
-                        }
-                    }
-                });
-                if (error) throw error;
-                if (!data.session) {
-                    alert('Please check your email for the confirmation link!');
-                    return;
-                }
-            } else {
-                const { error } = await supabase.auth.signInWithPassword({ email, password });
-                if (error) throw error;
-            }
-            if (isAddAccountMode) {
-                router.replace('/(auth)/profiles' as never);
-            } else {
-                router.replace('/(tabs)');
-            }
+            const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+            if (error) throw error;
+            router.replace('/(auth)/profiles' as never);
         } catch (e: any) {
             alert(e.message);
         } finally {
@@ -59,27 +44,9 @@ export default function LoginScreen() {
         }
     };
 
-    const handleGuest = async () => {
-        setLoading(true);
-        try {
-            await continueAsGuest();
-            router.replace('/(tabs)');
-        } catch (e: any) {
-            alert(e.message || 'Unable to continue as guest.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const toggleMode = () => {
-        setIsSignUp(!isSignUp);
-    };
-
     return (
         <SettingsSubpage
-            title={isAddAccountMode
-                ? (isSignUp ? 'Create & Add Account' : 'Add Account')
-                : (isSignUp ? 'Create Account' : 'Sign In')}
+            title="Sign In"
         >
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -89,25 +56,6 @@ export default function LoginScreen() {
 
 
                     <SettingsGroup title="Credentials">
-                        {isSignUp && (
-                            <>
-                                <SettingsItem
-                                    icon={UserIcon}
-                                    label="Full Name"
-                                    showChevron={false}
-                                />
-                                <View style={styles.inputWrapper}>
-                                    <TextInput
-                                        value={name}
-                                        onChangeText={setName}
-                                        placeholder="Your Name"
-                                        placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
-                                        style={[styles.input, { backgroundColor: theme.colors.elevation.level2, color: theme.colors.onSurface }]}
-                                    />
-                                </View>
-                            </>
-                        )}
-
                         <SettingsItem
                             icon={Mail}
                             label="Email Address"
@@ -144,47 +92,21 @@ export default function LoginScreen() {
 
                     <View style={styles.actionContainer}>
                         <ExpressiveButton
-                            title={isSignUp
-                                ? (isAddAccountMode ? 'Create & Add Account' : 'Sign Up')
-                                : (isAddAccountMode ? 'Add Account' : 'Sign In')}
+                            title="Sign In"
                             onPress={handleAuth}
                             isLoading={loading}
-                            icon={isSignUp ? UserPlus : LogIn}
+                            icon={LogIn}
                             style={styles.submitBtn}
                             size="lg"
                         />
 
                         <ExpressiveButton
-                            title={isSignUp
-                                ? 'Already have an account? Sign In'
-                                : (isAddAccountMode ? 'Need a new account? Sign Up' : "Don't have an account? Sign Up")}
+                            title="Create Account on Web"
+                            onPress={() => Linking.openURL(ACCOUNT_WEB_URL)}
+                            icon={ExternalLink}
                             variant="text"
-                            onPress={toggleMode}
-                            disabled={loading}
-                            style={styles.toggleBtn}
+                            style={{ marginTop: 12 }}
                         />
-
-                        {!isAddAccountMode && (
-                            <>
-                                <View style={styles.divider}>
-                                    <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
-                                    <Typography variant="label-small" style={{ color: theme.colors.outline, marginHorizontal: 16 }}>
-                                        OR
-                                    </Typography>
-                                    <View style={[styles.line, { backgroundColor: theme.colors.outlineVariant }]} />
-                                </View>
-
-                                <ExpressiveButton
-                                    title="Continue as Guest"
-                                    variant="tonal"
-                                    onPress={handleGuest}
-                                    size="md"
-                                    style={styles.guestBtn}
-                                    isLoading={loading}
-                                    disabled={loading}
-                                />
-                            </>
-                        )}
                     </View>
                 </View>
             </KeyboardAvoidingView>
@@ -218,18 +140,6 @@ const styles = StyleSheet.create({
     },
     toggleBtn: {
         marginTop: 12,
-        width: '100%',
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 32,
-    },
-    line: {
-        flex: 1,
-        height: 1,
-    },
-    guestBtn: {
         width: '100%',
     },
 });

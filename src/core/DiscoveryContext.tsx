@@ -6,6 +6,8 @@ import { AddonService } from './services/AddonService';
 import { storage } from './storage';
 import { useUserStore } from './stores/userStore';
 
+const DISCOVERY_CACHE_KEY = 'crispy-discovery-cache';
+
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
@@ -16,6 +18,7 @@ const queryClient = new QueryClient({
 });
 
 const persister = createSyncStoragePersister({
+    key: DISCOVERY_CACHE_KEY,
     storage: {
         getItem: (key) => storage.getString(key) ?? null,
         setItem: (key, value) => storage.set(key, value),
@@ -27,6 +30,11 @@ persistQueryClient({
     queryClient,
     persister,
 });
+
+export function clearDiscoveryCache() {
+    queryClient.clear();
+    storage.remove(DISCOVERY_CACHE_KEY);
+}
 
 interface DiscoveryContextValue {
     refreshAddons: () => Promise<void>;

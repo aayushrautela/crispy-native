@@ -193,8 +193,9 @@ const withAudioConfig = (config) => {
 };
 
 /**
- * Enforce deny-by-default cleartext policy and allow localhost only.
- * This keeps local torrent HTTP streaming working while blocking other cleartext traffic.
+ * Enforce deny-by-default cleartext policy for release and relax in debug only.
+ * Release keeps localhost-only cleartext for local torrent streaming.
+ * Debug allows cleartext globally so Metro/dev tooling can connect over HTTP.
  */
 const withLocalhostCleartextPolicy = (config) => {
     config = withAndroidManifest(config, (config) => {
@@ -209,10 +210,14 @@ const withLocalhostCleartextPolicy = (config) => {
     return withDangerousMod(config, [
         'android',
         async (config) => {
-            const xmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml');
-            const networkSecurityFile = path.join(xmlDir, 'network_security_config.xml');
+            const mainXmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/res/xml');
+            const mainNetworkSecurityFile = path.join(mainXmlDir, 'network_security_config.xml');
+            const debugXmlDir = path.join(config.modRequest.platformProjectRoot, 'app/src/debug/res/xml');
+            const debugNetworkSecurityFile = path.join(debugXmlDir, 'network_security_config_debug.xml');
+            const debugManifestDir = path.join(config.modRequest.platformProjectRoot, 'app/src/debug');
+            const debugManifestFile = path.join(debugManifestDir, 'AndroidManifest.xml');
 
-            const content = `<?xml version="1.0" encoding="utf-8"?>
+            const mainContent = `<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
     <domain-config cleartextTrafficPermitted="true">
@@ -221,9 +226,34 @@ const withLocalhostCleartextPolicy = (config) => {
 </network-security-config>
 `;
 
-            fs.mkdirSync(xmlDir, { recursive: true });
-            if (!fs.existsSync(networkSecurityFile) || fs.readFileSync(networkSecurityFile, 'utf8') !== content) {
-                fs.writeFileSync(networkSecurityFile, content);
+            const debugContent = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+`;
+
+            const debugManifestContent = `<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config_debug"
+        tools:replace="android:usesCleartextTraffic,android:networkSecurityConfig" />
+</manifest>
+`;
+
+            fs.mkdirSync(mainXmlDir, { recursive: true });
+            fs.mkdirSync(debugXmlDir, { recursive: true });
+            fs.mkdirSync(debugManifestDir, { recursive: true });
+
+            if (!fs.existsSync(mainNetworkSecurityFile) || fs.readFileSync(mainNetworkSecurityFile, 'utf8') !== mainContent) {
+                fs.writeFileSync(mainNetworkSecurityFile, mainContent);
+            }
+
+            if (!fs.existsSync(debugNetworkSecurityFile) || fs.readFileSync(debugNetworkSecurityFile, 'utf8') !== debugContent) {
+                fs.writeFileSync(debugNetworkSecurityFile, debugContent);
+            }
+
+            if (!fs.existsSync(debugManifestFile) || fs.readFileSync(debugManifestFile, 'utf8') !== debugManifestContent) {
+                fs.writeFileSync(debugManifestFile, debugManifestContent);
             }
 
             return config;

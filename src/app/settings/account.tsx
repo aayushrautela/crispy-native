@@ -1,51 +1,42 @@
+import { useAuth } from '@/src/core/AuthContext';
+import { useProfiles } from '@/src/core/ProfileContext';
+import { useTheme } from '@/src/core/ThemeContext';
+import { ExpressiveButton } from '@/src/core/ui/ExpressiveButton';
+import { SettingsGroup } from '@/src/core/ui/SettingsGroup';
+import { SettingsItem } from '@/src/core/ui/SettingsItem';
+import { Typography } from '@/src/core/ui/Typography';
+import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import { useRouter } from 'expo-router';
-import { CheckCircle2, LogIn, LogOut, Plus, RefreshCw, Users } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { CheckCircle2, LogOut, RefreshCw, Users, ExternalLink, User } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
-import { useAuth } from '../../core/AuthContext';
-import { useTheme } from '../../core/ThemeContext';
-import { ExpressiveButton } from '../../core/ui/ExpressiveButton';
-import { SettingsGroup } from '../../core/ui/SettingsGroup';
-import { SettingsItem } from '../../core/ui/SettingsItem';
-import { Typography } from '../../core/ui/Typography';
-import { SettingsSubpage } from '../../core/ui/layout/SettingsSubpage';
+import { Alert, StyleSheet, View, Linking } from 'react-native';
+
+const ACCOUNT_WEB_URL = 'https://crispy-account-management.vercel.app/dashboard/account';
 
 export default function AccountScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const auth = useAuth();
+    const { profiles, activeProfile } = useProfiles();
     const user = auth.user;
-    const [loadingAction, setLoadingAction] = useState<'guest' | 'signout' | null>(null);
+    const [loadingAction, setLoadingAction] = useState<'signout' | null>(null);
 
-    const isSupabaseAuthenticated = auth.mode === 'account' && !!user;
-    const profileCount = auth.knownAccounts.length;
+    const isAuthenticated = !!user;
+    const profileCount = profiles.length;
 
-    const profileTitle = isSupabaseAuthenticated
-        ? (user?.user_metadata?.name || auth.activeAccount?.name || 'Crispy User')
-        : (auth.mode === 'guest' ? 'Guest Profile' : 'Not Signed In');
+    const profileTitle = isAuthenticated
+        ? (user?.user_metadata?.name || 'Crispy User')
+        : 'Not Signed In';
 
-    const profileSubtitle = isSupabaseAuthenticated
-        ? (user?.email || auth.activeAccount?.email || 'Signed in with Supabase')
-        : (auth.mode === 'guest'
-            ? 'Local profile, cloud sync disabled'
-            : 'Add an account to enable cloud sync');
-
-    const handleContinueAsGuest = async () => {
-        setLoadingAction('guest');
-        try {
-            await auth.continueAsGuest();
-            router.replace('/(tabs)');
-        } catch (error: any) {
-            Alert.alert('Error', error?.message || 'Unable to switch to guest mode.');
-        } finally {
-            setLoadingAction(null);
-        }
-    };
+    const profileSubtitle = isAuthenticated
+        ? (user?.email || 'Signed in with Supabase')
+        : 'Sign in to enable cloud sync';
 
     const handleLogout = async () => {
         Alert.alert(
-            'Sign Out This Account',
-            'This removes the account from this device. You can add it again later.',
+            'Sign Out',
+            'Sign out of this account on this device?',
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -54,7 +45,8 @@ export default function AccountScreen() {
                     onPress: async () => {
                         setLoadingAction('signout');
                         try {
-                            await auth.signOut({ removeAccount: true, fallbackMode: 'anonymous' });
+                            await auth.signOut();
+                            router.replace('/(auth)/login');
                         } catch (e: any) {
                             Alert.alert('Error', e.message);
                         } finally {
@@ -70,7 +62,31 @@ export default function AccountScreen() {
         <SettingsSubpage title="Account">
             <View>
                 <SettingsGroup title="Status">
-                    <View style={styles.statusCard}>
+                    <View style={[styles.statusCard, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <View
+                            style={[
+                                styles.avatar,
+                                {
+                                    backgroundColor: activeProfile
+                                        ? theme.colors.primaryContainer
+                                        : theme.colors.surface,
+                                },
+                            ]}
+                        >
+                            {activeProfile?.avatar ? (
+                                <Image
+                                    source={{ uri: activeProfile.avatar }}
+                                    style={styles.avatarImage}
+                                    contentFit="cover"
+                                    transition={200}
+                                />
+                            ) : (
+                                <User
+                                    size={20}
+                                    color={activeProfile ? theme.colors.onPrimaryContainer : theme.colors.onSurface}
+                                />
+                            )}
+                        </View>
                         <View style={styles.statusInfo}>
                             <Typography variant="title-medium" weight="bold" style={{ color: theme.colors.onSurface }}>
                                 {profileTitle}
@@ -80,11 +96,10 @@ export default function AccountScreen() {
                             </Typography>
                         </View>
                     </View>
-
                     <SettingsItem
                         icon={Users}
-                        label="Saved Profiles"
-                        description={`${profileCount} available on this device`}
+                        label="Profiles"
+                        description={activeProfile ? `${profileCount} total, active: ${activeProfile.name}` : `${profileCount} available`}
                         showChevron={false}
                     />
                 </SettingsGroup>
@@ -98,35 +113,20 @@ export default function AccountScreen() {
                             variant="primary"
                         />
 
-                        {isSupabaseAuthenticated ? (
-                            <>
-                                <ExpressiveButton
-                                    title="Continue as Guest"
-                                    icon={LogIn}
-                                    onPress={handleContinueAsGuest}
-                                    variant="tonal"
-                                    isLoading={loadingAction === 'guest'}
-                                    disabled={loadingAction === 'signout'}
-                                />
+                        <ExpressiveButton
+                            title="Sign Out"
+                            icon={LogOut}
+                            onPress={handleLogout}
+                            variant="outline"
+                            isLoading={loadingAction === 'signout'}
+                        />
 
-                                <ExpressiveButton
-                                    title="Sign Out & Remove"
-                                    icon={LogOut}
-                                    onPress={handleLogout}
-                                    variant="outline"
-                                    isLoading={loadingAction === 'signout'}
-                                    disabled={loadingAction === 'guest'}
-                                />
-                            </>
-                        ) : (
-                            <ExpressiveButton
-                                title="Add Account"
-                                icon={Plus}
-                                onPress={() => router.push('/(auth)/login?mode=add-account')}
-                                variant="tonal"
-                                disabled={loadingAction === 'guest'}
-                            />
-                        )}
+                        <ExpressiveButton
+                            title="Manage on Web"
+                            icon={ExternalLink}
+                            onPress={() => Linking.openURL(ACCOUNT_WEB_URL)}
+                            variant="text"
+                        />
                     </View>
                 </SettingsGroup>
 
@@ -134,9 +134,9 @@ export default function AccountScreen() {
                     <SettingsItem
                         icon={RefreshCw}
                         label="Cloud Sync"
-                        description="Sync addons, catalogs and settings across multiple devices"
+                        description="Sync household addons and profile preferences across devices"
                         showChevron={false}
-                        rightElement={<CheckCircle2 size={20} color={isSupabaseAuthenticated ? theme.colors.primary : theme.colors.onSurfaceVariant + '40'} />}
+                        rightElement={<CheckCircle2 size={20} color={isAuthenticated ? theme.colors.primary : theme.colors.onSurfaceVariant + '40'} />}
                     />
                 </SettingsGroup>
             </View>
@@ -157,5 +157,17 @@ const styles = StyleSheet.create({
     actions: {
         padding: 20,
         gap: 10,
+    },
+    avatar: {
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
     },
 });

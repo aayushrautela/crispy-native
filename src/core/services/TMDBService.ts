@@ -44,6 +44,19 @@ export interface TMDBMeta {
     genres?: string[];
     runtime?: string;
     runtimeMinutes?: number;
+    tagline?: string;
+    status?: string;
+    releaseDate?: string;
+    firstAirDate?: string;
+    lastAirDate?: string;
+    numberOfSeasons?: number;
+    numberOfEpisodes?: number;
+    episodeRunTime?: number[];
+    budget?: number;
+    revenue?: number;
+    originCountry?: string[];
+    originalLanguage?: string;
+    createdBy?: string[];
     description?: string;
     type?: 'movie' | 'series'; // Made optional as it's not always present in Partial<TMDBMeta>
     director?: string;
@@ -318,6 +331,19 @@ export class TMDBService {
                 rating: data.vote_average?.toFixed(1) || '0.0',
                 maturityRating,
                 genres: data.genres?.map((g: any) => g.name) || [],
+                tagline: data.tagline || undefined,
+                status: data.status || undefined,
+                releaseDate: data.release_date || undefined,
+                firstAirDate: data.first_air_date || undefined,
+                lastAirDate: data.last_air_date || undefined,
+                numberOfSeasons: data.number_of_seasons || undefined,
+                numberOfEpisodes: data.number_of_episodes || undefined,
+                episodeRunTime: Array.isArray(data.episode_run_time) ? data.episode_run_time : [],
+                budget: typeof data.budget === 'number' ? data.budget : undefined,
+                revenue: typeof data.revenue === 'number' ? data.revenue : undefined,
+                originCountry: Array.isArray(data.origin_country) ? data.origin_country : undefined,
+                originalLanguage: data.original_language || undefined,
+                createdBy: Array.isArray(data.created_by) ? data.created_by.map((creator: any) => creator?.name).filter(Boolean) : [],
                 description: data.overview || '',
                 director,
                 cast,

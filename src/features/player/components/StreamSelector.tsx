@@ -144,7 +144,30 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         );
     };
 
-    if (isLoading || !isVisible) {
+    const renderLoadingState = () => {
+        if (!isLoading) return null;
+        return (
+            <View style={styles.loading}>
+                <LoadingIndicator size={48} color={theme.colors.primary} />
+                <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
+                    Searching for streams...
+                </Typography>
+            </View>
+        );
+    };
+
+    const renderEmptyState = () => {
+        if (isLoading) return null;
+        return (
+            <View style={styles.empty}>
+                <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+                    No streams found for this content. Try adding more addons in Settings.
+                </Typography>
+            </View>
+        );
+    };
+
+    if (!isVisible) {
         return (
             <View style={styles.loading}>
                 <LoadingIndicator size={48} color={theme.colors.primary} />
@@ -164,13 +187,8 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 ListHeaderComponent={renderHeader}
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
                 style={{ flex: 1 }}
-                ListEmptyComponent={
-                    <View style={styles.empty}>
-                        <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
-                            No streams found for this content. Try adding more addons in Settings.
-                        </Typography>
-                    </View>
-                }
+                ListEmptyComponent={renderEmptyState}
+                ListFooterComponent={renderLoadingState}
                 contentContainerStyle={contentContainerStyle}
                 removeClippedSubviews
             />

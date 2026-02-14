@@ -1,311 +1,458 @@
 import debounce from 'lodash.debounce';
-import type { User } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
+
+import type { Json } from '@crispy-streaming/supabase-contract';
 import { useAuth } from '../AuthContext';
-import { AppSettings, TraktAuth, UserState, useUserStore } from '../stores/userStore';
+import { useHousehold } from '../HouseholdContext';
+import { useProfiles } from '../ProfileContext';
+import {
+    Addon,
+    AppSettings,
+    CatalogPreferences,
+    TraktAuth,
+    UserState,
+    useUserStore,
+} from '../stores/userStore';
 import { TraktService } from './TraktService';
 import { supabase } from './supabase';
 
+interface ProfileSyncSnapshot {
+    settings: AppSettings;
+    catalogPrefs: CatalogPreferences;
+    traktAuth: TraktAuth;
+}
+
+function getProfileSnapshot(state: UserState): ProfileSyncSnapshot {
+    return {
+        settings: state.settings,
+        catalogPrefs: state.catalogPrefs,
+        traktAuth: state.traktAuth,
+    };
+}
+
+function normalizeAddons(addons: Addon[]): Addon[] {
+    const normalized = addons
+        .filter((addon) => typeof addon?.url === 'string')
+        .map((addon) => {
+            const url = addon.url.trim();
+            return {
+                url,
+                enabled: Boolean(addon.enabled),
+                ...(typeof addon.name === 'string' && addon.name.trim().length > 0 ? { name: addon.name.trim() } : {}),
+            } satisfies Addon;
+        })
+        .filter((addon) => addon.url.length > 0)
+        .sort((a, b) => a.url.localeCompare(b.url));
+
+    return normalized;
+}
+
+function addonsFingerprint(addons: Addon[]): string {
+    return JSON.stringify(normalizeAddons(addons));
+}
+
+function parseRemoteAddons(payload: unknown): Addon[] | null {
+    if (!Array.isArray(payload)) return null;
+
+    const out: Addon[] = [];
+    for (const item of payload) {
+        if (!item || typeof item !== 'object') continue;
+        const obj = item as Record<string, unknown>;
+
+        const url = typeof obj.url === 'string' ? obj.url.trim() : '';
+        if (!url) continue;
+
+        const enabled = typeof obj.enabled === 'boolean' ? obj.enabled : true;
+        const name = typeof obj.name === 'string' && obj.name.trim().length > 0 ? obj.name.trim() : undefined;
+
+        out.push({ url, enabled, ...(name ? { name } : {}) });
+    }
+
+    return normalizeAddons(out);
+}
+
 export function SyncService() {
     const { user } = useAuth();
-    const userRef = useRef<User | null>(null);
-    userRef.current = user;
-
+    const { householdId, role } = useHousehold();
+    const { activeProfileId } = useProfiles();
     const hydrate = useUserStore((state) => state.hydrate);
-    const reset = useUserStore((state) => state.reset);
-    const initialLoadDone = useRef<string | null>(null);
-    const lastSynced = useRef<Pick<UserState, 'settings' | 'addons' | 'catalogPrefs' | 'traktAuth'> | null>(null);
-    const lastCloudUpdatedAt = useRef<string | null>(null);
+
+    const userRef = useRef(user);
+    const activeProfileIdRef = useRef<string | null>(null);
+    const householdIdRef = useRef<string | null>(null);
+    const householdRoleRef = useRef<typeof role>(null);
+
+    userRef.current = user;
+    activeProfileIdRef.current = activeProfileId;
+    householdIdRef.current = householdId;
+    householdRoleRef.current = role;
+
+    const householdReadyRef = useRef<string | null>(null);
+    const profileReadyRef = useRef<string | null>(null);
+
+    const lastSyncedAddonsFingerprintRef = useRef<string | null>(null);
+    const lastSyncedProfile = useRef<ProfileSyncSnapshot | null>(null);
+
+    const lastProfileCloudUpdatedAt = useRef<string | null>(null);
+
     const isApplyingRemote = useRef(false);
-    const fetchRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const hasUnsyncedLocalChanges = useRef(false);
+    const hasUnsyncedHouseholdChanges = useRef(false);
+    const hasUnsyncedProfileChanges = useRef(false);
 
-    // Save data on change (debounced)
-    const saveData = useRef(debounce(async (newState: UserState) => {
-        const currentUser = userRef.current;
-        if (!currentUser || initialLoadDone.current !== currentUser.id || isApplyingRemote.current) {
-            console.log('[SyncService] ⏳ Skipping sync (not yet hydrated)');
-            return;
-        }
+    const householdRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const profileRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-        const prev = lastSynced.current;
+    const saveHouseholdAddons = useRef(
+        debounce(async (addons: Addon[], forHouseholdId: string) => {
+            const currentHouseholdId = householdIdRef.current;
+            if (!currentHouseholdId || currentHouseholdId !== forHouseholdId) return;
+            if (householdReadyRef.current !== currentHouseholdId || isApplyingRemote.current) return;
+            if (householdRoleRef.current !== 'owner') return;
 
-        const updates: Record<string, any> = {};
-        if (!prev || prev.addons !== newState.addons) updates.addons = newState.addons;
-        if (!prev || prev.catalogPrefs !== newState.catalogPrefs) updates.catalog_prefs = newState.catalogPrefs;
-        if (!prev || prev.traktAuth !== newState.traktAuth) updates.trakt_auth = newState.traktAuth;
-        if (!prev || prev.settings !== newState.settings) updates.settings = newState.settings;
+            const normalized = normalizeAddons(addons);
+            const fp = JSON.stringify(normalized);
+            if (lastSyncedAddonsFingerprintRef.current === fp) return;
 
-        const keys = Object.keys(updates);
-        if (keys.length === 0) return;
-
-        console.log('[SyncService] ☁️ Sync to Supabase:', keys.join(', '));
-        hasUnsyncedLocalChanges.current = true;
-
-        const nowIso = new Date().toISOString();
-        const payload = {
-            user_id: currentUser.id,
-            updated_at: nowIso,
-            ...updates
-        };
-
-        const { error } = await supabase
-            .from('user_data')
-            .upsert(payload, { onConflict: 'user_id' });
-
-        if (error) {
-            console.error('[SyncService] Sync failed:', error);
-        } else {
-            console.log('[SyncService] Sync successful');
-            lastSynced.current = {
-                addons: newState.addons,
-                catalogPrefs: newState.catalogPrefs,
-                traktAuth: newState.traktAuth,
-                settings: newState.settings,
-            };
-            lastCloudUpdatedAt.current = nowIso;
-            hasUnsyncedLocalChanges.current = false;
-        }
-    }, 2000)).current;
-
-    const refreshFromCloud = useCallback(async () => {
-        const currentUser = userRef.current;
-        if (!currentUser || initialLoadDone.current !== currentUser.id) return;
-        if (isApplyingRemote.current) return;
-        if (hasUnsyncedLocalChanges.current) {
-            // Try pushing local changes first; do not pull remote over unsynced state.
-            saveData(useUserStore.getState());
-            if (saveData.flush) saveData.flush();
-            return;
-        }
-
-        const { data: profile, error } = await supabase
-            .from('user_data')
-            .select('*')
-            .eq('user_id', currentUser.id)
-            .maybeSingle();
-
-        if (error) {
-            console.error('[SyncService] Refresh failed:', error);
-            return;
-        }
-
-        if (!profile) {
-            // Cloud row missing; recreate it from local state.
-            const localState = useUserStore.getState();
-            const nowIso = new Date().toISOString();
-            const seed = {
-                user_id: currentUser.id,
-                addons: localState.addons,
-                catalog_prefs: localState.catalogPrefs,
-                trakt_auth: localState.traktAuth,
-                settings: localState.settings,
-                updated_at: nowIso,
-            };
-
-            const { error: seedError } = await supabase
-                .from('user_data')
-                .upsert(seed, { onConflict: 'user_id' });
-
-            if (seedError) {
-                console.error('[SyncService] Failed to recreate cloud row:', seedError);
+            hasUnsyncedHouseholdChanges.current = true;
+            const { error } = await supabase.rpc('replace_household_addons', { p_addons: normalized as unknown as Json });
+            if (error) {
+                console.error('[SyncService] Failed syncing household addons:', error);
                 return;
             }
 
-            lastCloudUpdatedAt.current = nowIso;
-            lastSynced.current = {
-                addons: localState.addons,
-                catalogPrefs: localState.catalogPrefs,
-                traktAuth: localState.traktAuth,
-                settings: localState.settings,
-            };
-            return;
-        }
+            lastSyncedAddonsFingerprintRef.current = fp;
+            hasUnsyncedHouseholdChanges.current = false;
+        }, 2000)
+    ).current;
 
-        const remoteUpdatedAt = typeof profile.updated_at === 'string' ? profile.updated_at : null;
-        if (remoteUpdatedAt && lastCloudUpdatedAt.current === remoteUpdatedAt) return;
+    const saveProfile = useRef(
+        debounce(async (snapshot: ProfileSyncSnapshot, profileId: string) => {
+            const currentProfileId = activeProfileIdRef.current;
 
+            if (!currentProfileId || isApplyingRemote.current) {
+                return;
+            }
+
+            if (profileReadyRef.current !== currentProfileId || profileId !== currentProfileId) {
+                return;
+            }
+
+            const previous = lastSyncedProfile.current;
+            if (
+                previous &&
+                previous.settings === snapshot.settings &&
+                previous.catalogPrefs === snapshot.catalogPrefs &&
+                previous.traktAuth === snapshot.traktAuth
+            ) {
+                return;
+            }
+
+            hasUnsyncedProfileChanges.current = true;
+            const { error } = await supabase.rpc('upsert_profile_data', {
+                p_profile_id: profileId,
+                p_settings: snapshot.settings as unknown as Json,
+                p_catalog_prefs: snapshot.catalogPrefs as unknown as Json,
+                p_trakt_auth: snapshot.traktAuth as unknown as Json,
+            });
+
+            if (error) {
+                console.error('[SyncService] Failed syncing profile data:', error);
+                return;
+            }
+
+            lastSyncedProfile.current = snapshot;
+            lastProfileCloudUpdatedAt.current = null;
+            hasUnsyncedProfileChanges.current = false;
+        }, 2000)
+    ).current;
+
+    const resetSyncRefs = useCallback(() => {
+        householdReadyRef.current = null;
+        profileReadyRef.current = null;
+        lastSyncedAddonsFingerprintRef.current = null;
+        lastSyncedProfile.current = null;
+        lastProfileCloudUpdatedAt.current = null;
+        hasUnsyncedHouseholdChanges.current = false;
+        hasUnsyncedProfileChanges.current = false;
+    }, []);
+
+    const applyRemoteProfilePayload = useCallback((payload: Partial<UserState>) => {
         isApplyingRemote.current = true;
         try {
-            const payload: Partial<UserState> = {};
-            if (profile.settings !== undefined && profile.settings !== null) payload.settings = profile.settings as AppSettings;
-            if (Array.isArray(profile.addons)) payload.addons = profile.addons;
-            if (profile.trakt_auth !== undefined && profile.trakt_auth !== null) payload.traktAuth = profile.trakt_auth as TraktAuth;
-            if (profile.catalog_prefs !== undefined && profile.catalog_prefs !== null) payload.catalogPrefs = profile.catalog_prefs;
-
             hydrate(payload);
             TraktService.getInstance().reset();
-
-            const stateAfterHydrate = useUserStore.getState();
-            lastSynced.current = {
-                addons: stateAfterHydrate.addons,
-                catalogPrefs: stateAfterHydrate.catalogPrefs,
-                traktAuth: stateAfterHydrate.traktAuth,
-                settings: stateAfterHydrate.settings,
-            };
-            lastCloudUpdatedAt.current = remoteUpdatedAt;
         } finally {
             isApplyingRemote.current = false;
         }
-    }, [hydrate, saveData]);
+    }, [hydrate]);
 
-    // Load data when user becomes available
-    useEffect(() => {
-        if (fetchRetryTimer.current) {
-            clearTimeout(fetchRetryTimer.current);
-            fetchRetryTimer.current = null;
+    const applyRemoteAddons = useCallback((remoteAddons: Addon[]) => {
+        isApplyingRemote.current = true;
+        try {
+            hydrate({ addons: remoteAddons });
+        } finally {
+            isApplyingRemote.current = false;
+        }
+    }, [hydrate]);
+
+    const loadHouseholdAddons = useCallback(async (activeHouseholdId: string) => {
+        const { data, error } = await supabase.rpc('get_household_addons');
+        if (error) throw error;
+
+        const remoteAddons = parseRemoteAddons(data);
+        if (remoteAddons) {
+            applyRemoteAddons(remoteAddons);
         }
 
-        if (!user) {
-            initialLoadDone.current = null;
-            lastSynced.current = null;
-            lastCloudUpdatedAt.current = null;
-            hasUnsyncedLocalChanges.current = false;
+        const state = useUserStore.getState();
+        lastSyncedAddonsFingerprintRef.current = addonsFingerprint(state.addons);
+        householdReadyRef.current = activeHouseholdId;
+        hasUnsyncedHouseholdChanges.current = false;
+    }, [applyRemoteAddons]);
+
+    const loadProfileData = useCallback(async (profileId: string) => {
+        const localState = useUserStore.getState();
+
+        const { data, error } = await supabase
+            .from('profile_data')
+            .select('*')
+            .eq('profile_id', profileId)
+            .maybeSingle();
+
+        if (error) {
+            throw error;
+        }
+
+        if (!data) {
+            const snapshot = getProfileSnapshot(localState);
+            const { error: seedError } = await supabase.rpc('upsert_profile_data', {
+                p_profile_id: profileId,
+                p_settings: snapshot.settings as unknown as Json,
+                p_catalog_prefs: snapshot.catalogPrefs as unknown as Json,
+                p_trakt_auth: snapshot.traktAuth as unknown as Json,
+            });
+
+            if (seedError) {
+                throw seedError;
+            }
+
+            lastSyncedProfile.current = snapshot;
+            lastProfileCloudUpdatedAt.current = null;
+            profileReadyRef.current = profileId;
+            hasUnsyncedProfileChanges.current = false;
             return;
         }
-        if (initialLoadDone.current === user.id) return;
 
-        const loadUserData = async () => {
-            console.log('[SyncService] 🔄 Fetching profile for:', user.email);
+        const payload: Partial<UserState> = {};
+        if (data.settings !== undefined && data.settings !== null) {
+            payload.settings = data.settings as unknown as AppSettings;
+        }
+        if (data.catalog_prefs !== undefined && data.catalog_prefs !== null) {
+            payload.catalogPrefs = data.catalog_prefs as unknown as CatalogPreferences;
+        }
+        if (data.trakt_auth !== undefined && data.trakt_auth !== null) {
+            payload.traktAuth = data.trakt_auth as unknown as TraktAuth;
+        }
 
-            // Ensure local store is scoped to the active user before applying cloud.
-            reset();
-            lastSynced.current = null;
-            lastCloudUpdatedAt.current = null;
-            hasUnsyncedLocalChanges.current = false;
+        if (Object.keys(payload).length > 0) {
+            applyRemoteProfilePayload(payload);
+        }
 
-            // Fetch profile
-            const { data: profile, error } = await supabase
-                .from('user_data')
-                .select('*')
-                .eq('user_id', user.id)
-                .maybeSingle();
+        const state = useUserStore.getState();
+        lastSyncedProfile.current = getProfileSnapshot(state);
+        lastProfileCloudUpdatedAt.current = typeof data.updated_at === 'string' ? data.updated_at : null;
+        profileReadyRef.current = profileId;
+        hasUnsyncedProfileChanges.current = false;
+    }, [applyRemoteProfilePayload]);
 
-            if (error) {
-                console.error('[SyncService] Fetch failed:', error);
-                // Do not start syncing if we couldn't read the cloud state.
-                fetchRetryTimer.current = setTimeout(() => {
-                    if (initialLoadDone.current !== user.id) {
-                        loadUserData();
+    const refreshHouseholdFromCloud = useCallback(async () => {
+        const currentHouseholdId = householdIdRef.current;
+        if (!currentHouseholdId || householdReadyRef.current !== currentHouseholdId || isApplyingRemote.current) {
+            return;
+        }
+
+        if (hasUnsyncedHouseholdChanges.current) {
+            saveHouseholdAddons(useUserStore.getState().addons, currentHouseholdId);
+            if (saveHouseholdAddons.flush) saveHouseholdAddons.flush();
+            return;
+        }
+
+        const { data, error } = await supabase.rpc('get_household_addons');
+        if (error) {
+            console.error('[SyncService] Failed refreshing household addons:', error);
+            return;
+        }
+
+        const remoteAddons = parseRemoteAddons(data);
+        if (!remoteAddons) return;
+
+        const remoteFp = JSON.stringify(remoteAddons);
+        if (remoteFp === lastSyncedAddonsFingerprintRef.current) return;
+
+        applyRemoteAddons(remoteAddons);
+        lastSyncedAddonsFingerprintRef.current = addonsFingerprint(useUserStore.getState().addons);
+    }, [applyRemoteAddons, saveHouseholdAddons]);
+
+    const refreshProfileFromCloud = useCallback(async () => {
+        const profileId = activeProfileIdRef.current;
+        if (!profileId || profileReadyRef.current !== profileId || isApplyingRemote.current) {
+            return;
+        }
+
+        if (hasUnsyncedProfileChanges.current) {
+            saveProfile(getProfileSnapshot(useUserStore.getState()), profileId);
+            if (saveProfile.flush) saveProfile.flush();
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('profile_data')
+            .select('*')
+            .eq('profile_id', profileId)
+            .maybeSingle();
+
+        if (error) {
+            console.error('[SyncService] Failed refreshing profile data:', error);
+            return;
+        }
+
+        if (!data) {
+            await loadProfileData(profileId);
+            return;
+        }
+
+        const remoteUpdatedAt = typeof data.updated_at === 'string' ? data.updated_at : null;
+        if (remoteUpdatedAt && remoteUpdatedAt === lastProfileCloudUpdatedAt.current) {
+            return;
+        }
+
+        const payload: Partial<UserState> = {};
+        if (data.settings !== undefined && data.settings !== null) {
+            payload.settings = data.settings as unknown as AppSettings;
+        }
+        if (data.catalog_prefs !== undefined && data.catalog_prefs !== null) {
+            payload.catalogPrefs = data.catalog_prefs as unknown as CatalogPreferences;
+        }
+        if (data.trakt_auth !== undefined && data.trakt_auth !== null) {
+            payload.traktAuth = data.trakt_auth as unknown as TraktAuth;
+        }
+
+        if (Object.keys(payload).length > 0) {
+            applyRemoteProfilePayload(payload);
+        }
+
+        lastSyncedProfile.current = getProfileSnapshot(useUserStore.getState());
+        lastProfileCloudUpdatedAt.current = remoteUpdatedAt;
+    }, [applyRemoteProfilePayload, loadProfileData, saveProfile]);
+
+    useEffect(() => {
+        if (householdRetryTimer.current) {
+            clearTimeout(householdRetryTimer.current);
+            householdRetryTimer.current = null;
+        }
+
+        if (!user || !householdId) {
+            resetSyncRefs();
+            return;
+        }
+
+        if (householdReadyRef.current === householdId) {
+            return;
+        }
+
+        const load = async () => {
+            try {
+                await loadHouseholdAddons(householdId);
+            } catch (error) {
+                console.error('[SyncService] Failed loading household addons:', error);
+                householdRetryTimer.current = setTimeout(() => {
+                    if (householdIdRef.current === householdId && householdReadyRef.current !== householdId) {
+                        void load();
                     }
                 }, 5000);
-                return;
             }
-
-            if (!profile) {
-                console.log('[SyncService] 🧱 No cloud row. Seeding Supabase with local state...');
-                const localState = useUserStore.getState();
-                const nowIso = new Date().toISOString();
-
-                const seed = {
-                    user_id: user.id,
-                    addons: localState.addons,
-                    catalog_prefs: localState.catalogPrefs,
-                    trakt_auth: localState.traktAuth,
-                    settings: localState.settings,
-                    updated_at: nowIso
-                };
-
-                const { error: seedError } = await supabase
-                    .from('user_data')
-                    .upsert(seed, { onConflict: 'user_id' });
-
-                if (seedError) {
-                    console.error('[SyncService] Seed failed:', seedError);
-                    fetchRetryTimer.current = setTimeout(() => {
-                        if (initialLoadDone.current !== user.id) {
-                            loadUserData();
-                        }
-                    }, 5000);
-                    return;
-                }
-
-                lastSynced.current = {
-                    addons: localState.addons,
-                    catalogPrefs: localState.catalogPrefs,
-                    traktAuth: localState.traktAuth,
-                    settings: localState.settings,
-                };
-                lastCloudUpdatedAt.current = nowIso;
-                TraktService.getInstance().reset();
-                initialLoadDone.current = user.id;
-                return;
-            }
-
-            if (profile) {
-                console.log('[SyncService] 🔄 Hydrating store from cloud...');
-
-                // Construct hydration payload
-                isApplyingRemote.current = true;
-                try {
-                    const payload: Partial<UserState> = {};
-
-                    // Cloud wins when the key exists (including explicit empty values)
-                    if (profile.settings !== undefined && profile.settings !== null) payload.settings = profile.settings as AppSettings;
-                    if (Array.isArray(profile.addons)) payload.addons = profile.addons;
-                    if (profile.trakt_auth !== undefined && profile.trakt_auth !== null) payload.traktAuth = profile.trakt_auth as TraktAuth;
-                    if (profile.catalog_prefs !== undefined && profile.catalog_prefs !== null) payload.catalogPrefs = profile.catalog_prefs;
-
-                    // Hydrate the store
-                    hydrate(payload);
-
-                    // Reset TraktService to re-read tokens from namespaced storage
-                    TraktService.getInstance().reset();
-                } finally {
-                    isApplyingRemote.current = false;
-                }
-            }
-
-            initialLoadDone.current = user.id;
-
-            const stateAfterHydrate = useUserStore.getState();
-            lastSynced.current = {
-                addons: stateAfterHydrate.addons,
-                catalogPrefs: stateAfterHydrate.catalogPrefs,
-                traktAuth: stateAfterHydrate.traktAuth,
-                settings: stateAfterHydrate.settings,
-            };
-            lastCloudUpdatedAt.current = typeof profile.updated_at === 'string' ? profile.updated_at : null;
         };
 
-        loadUserData();
-    }, [user, hydrate, reset]);
+        void load();
+    }, [householdId, loadHouseholdAddons, resetSyncRefs, user]);
 
-    // Flush pending sync on app background; refresh on resume.
+    useEffect(() => {
+        if (profileRetryTimer.current) {
+            clearTimeout(profileRetryTimer.current);
+            profileRetryTimer.current = null;
+        }
+
+        if (!user || !activeProfileId) {
+            profileReadyRef.current = null;
+            lastSyncedProfile.current = null;
+            lastProfileCloudUpdatedAt.current = null;
+            hasUnsyncedProfileChanges.current = false;
+            return;
+        }
+
+        if (profileReadyRef.current === activeProfileId) {
+            return;
+        }
+
+        const load = async () => {
+            try {
+                await loadProfileData(activeProfileId);
+            } catch (error) {
+                console.error('[SyncService] Failed loading profile data:', error);
+                profileRetryTimer.current = setTimeout(() => {
+                    if (activeProfileIdRef.current === activeProfileId && profileReadyRef.current !== activeProfileId) {
+                        void load();
+                    }
+                }, 5000);
+            }
+        };
+
+        void load();
+    }, [activeProfileId, loadProfileData, user]);
+
     useEffect(() => {
         const sub = AppState.addEventListener('change', (state) => {
             if (state === 'active') {
-                refreshFromCloud().catch((e) => console.error('[SyncService] Refresh crashed:', e));
+                void refreshHouseholdFromCloud();
+                void refreshProfileFromCloud();
                 return;
             }
-            if (saveData.flush) {
-                saveData.flush();
-            }
+
+            if (saveHouseholdAddons.flush) saveHouseholdAddons.flush();
+            if (saveProfile.flush) saveProfile.flush();
         });
 
         return () => {
             sub.remove();
         };
-    }, [refreshFromCloud, saveData]);
+    }, [refreshHouseholdFromCloud, refreshProfileFromCloud, saveHouseholdAddons, saveProfile]);
 
-    // Listen to store changes
     useEffect(() => {
-        const unsub = useUserStore.subscribe((state) => {
+        const unsubscribe = useUserStore.subscribe((state) => {
             if (isApplyingRemote.current) return;
-            if (user && initialLoadDone.current === user.id) {
-                saveData(state);
+
+            const currentHouseholdId = householdIdRef.current;
+            if (currentHouseholdId && householdReadyRef.current === currentHouseholdId && householdRoleRef.current === 'owner') {
+                saveHouseholdAddons(state.addons, currentHouseholdId);
+            }
+
+            const profileId = activeProfileIdRef.current;
+            if (profileId && profileReadyRef.current === profileId) {
+                saveProfile(getProfileSnapshot(state), profileId);
             }
         });
 
         return () => {
-            unsub();
-            if (saveData.flush) {
-                saveData.flush();
-            }
-            saveData.cancel();
+            unsubscribe();
+            if (saveHouseholdAddons.flush) saveHouseholdAddons.flush();
+            if (saveProfile.flush) saveProfile.flush();
+            saveHouseholdAddons.cancel();
+            saveProfile.cancel();
+            if (householdRetryTimer.current) clearTimeout(householdRetryTimer.current);
+            if (profileRetryTimer.current) clearTimeout(profileRetryTimer.current);
         };
-    }, [user, saveData]);
+    }, [saveHouseholdAddons, saveProfile]);
 
     return null;
 }
