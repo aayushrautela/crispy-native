@@ -31,6 +31,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // No hardcoded DARK_BASE
 
+const formatLongDate = (value?: string) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+};
+
+const formatRuntimeMinutes = (minutes?: number) => {
+    if (!minutes || minutes <= 0) return null;
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
+};
+
+const formatCurrency = (value?: number) => {
+    if (!value || value <= 0) return null;
+    return `$${value.toLocaleString('en-US')}`;
+};
+
 export default function MetaDetailsScreen() {
     const { id, type, debugColors } = useLocalSearchParams();
     const { theme, amoledMode } = useTheme();
@@ -382,6 +406,67 @@ export default function MetaDetailsScreen() {
         };
     }, [enriched, meta, selectedEpisode, isSeries, activeSeason]);
 
+    const detailsRows = useMemo(() => {
+        const rows: Array<{ label: string; value: string }> = [];
+
+        if (isSeries) {
+            if (enriched.status) rows.push({ label: 'STATUS', value: enriched.status });
+
+            const firstAirDate = formatLongDate(enriched.firstAirDate);
+            if (firstAirDate) rows.push({ label: 'FIRST AIR DATE', value: firstAirDate });
+
+            const lastAirDate = formatLongDate(enriched.lastAirDate);
+            if (lastAirDate) rows.push({ label: 'LAST AIR DATE', value: lastAirDate });
+
+            if (enriched.numberOfSeasons) rows.push({ label: 'SEASONS', value: `${enriched.numberOfSeasons}` });
+            if (enriched.numberOfEpisodes) rows.push({ label: 'EPISODES', value: `${enriched.numberOfEpisodes}` });
+
+            const episodeRunTime = enriched.episodeRunTime?.filter((m) => typeof m === 'number' && m > 0) || [];
+            if (episodeRunTime.length > 0) {
+                rows.push({ label: 'EPISODE RUNTIME', value: `${episodeRunTime.join(' - ')} min` });
+            }
+
+            if (enriched.originCountry && enriched.originCountry.length > 0) {
+                rows.push({ label: 'ORIGIN COUNTRY', value: enriched.originCountry.join(', ') });
+            }
+
+            if (enriched.originalLanguage) {
+                rows.push({ label: 'ORIGINAL LANGUAGE', value: enriched.originalLanguage.toUpperCase() });
+            }
+
+            if (enriched.createdBy && enriched.createdBy.length > 0) {
+                rows.push({ label: 'CREATED BY', value: enriched.createdBy.join(', ') });
+            }
+
+            return rows;
+        }
+
+        if (enriched.tagline) rows.push({ label: 'TAGLINE', value: `"${enriched.tagline}"` });
+        if (enriched.status) rows.push({ label: 'STATUS', value: enriched.status });
+
+        const releaseDate = formatLongDate(enriched.releaseDate);
+        if (releaseDate) rows.push({ label: 'RELEASE DATE', value: releaseDate });
+
+        const runtime = formatRuntimeMinutes(enriched.runtimeMinutes) || enriched.runtime;
+        if (runtime) rows.push({ label: 'RUNTIME', value: runtime });
+
+        const budget = formatCurrency(enriched.budget);
+        if (budget) rows.push({ label: 'BUDGET', value: budget });
+
+        const revenue = formatCurrency(enriched.revenue);
+        if (revenue) rows.push({ label: 'REVENUE', value: revenue });
+
+        if (enriched.originCountry && enriched.originCountry.length > 0) {
+            rows.push({ label: 'ORIGIN COUNTRY', value: enriched.originCountry.join(', ') });
+        }
+
+        if (enriched.originalLanguage) {
+            rows.push({ label: 'ORIGINAL LANGUAGE', value: enriched.originalLanguage.toUpperCase() });
+        }
+
+        return rows;
+    }, [isSeries, enriched]);
+
     if (isLoading) return <MetaDetailsSkeleton />;
 
     if (error) {
@@ -428,7 +513,7 @@ export default function MetaDetailsScreen() {
                     </View>
                 </View>
 
-                {false && showExtractedColors && colorExtraction && colorDebugKeys && colorDebugKeys.length > 0 && (
+                {false && showExtractedColors && colorExtraction && (colorDebugKeys?.length || 0) > 0 && (
                     <View
                         style={[
                             styles.colorDebug,
@@ -441,18 +526,18 @@ export default function MetaDetailsScreen() {
                     >
                         <View style={styles.colorDebugHeader}>
                             <Typography variant="label" weight="bold" style={{ color: scopedTheme.colors.onSurface }}>
-                                Extracted: {colorExtraction.source}
+                                Extracted: {colorExtraction?.source}
                             </Typography>
                             <Typography variant="label" style={{ color: scopedTheme.colors.onSurfaceVariant }}>
-                                Seed: {colorExtraction.seedKey ? `${colorExtraction.seedKey} ` : ''}{colorExtraction.seedColor || '-'}
-                                {colorExtraction.accepted ? '' : ' (default theme)'}
+                                Seed: {colorExtraction?.seedKey ? `${colorExtraction?.seedKey} ` : ''}{colorExtraction?.seedColor || '-'}
+                                {colorExtraction?.accepted ? '' : ' (default theme)'}
                             </Typography>
                         </View>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorDebugRow}>
-                            {colorDebugKeys.map((key) => {
-                                const value = colorExtraction.swatches[key];
+                            {(colorDebugKeys || []).map((key) => {
+                                const value = colorExtraction?.swatches[key];
                                 if (!value) return null;
-                                const isSeed = key === colorExtraction.seedKey;
+                                const isSeed = key === colorExtraction?.seedKey;
                                 return (
                                     <View key={key} style={styles.colorSwatchItem}>
                                         <View
@@ -586,6 +671,44 @@ export default function MetaDetailsScreen() {
                                 <CatalogRow title="More Like This" items={(enriched.similar as any) || []} textColor={scopedTheme.colors.onSurface} hideAction={true} />
                             </View>
                         )}
+
+                        {detailsRows.length > 0 && (
+                            <View
+                                style={[
+                                    styles.metaDetailsSection,
+                                    {
+                                        backgroundColor: (scopedTheme.colors as any).surfaceContainerLow || scopedTheme.colors.surfaceVariant,
+                                        borderColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
+                                    },
+                                ]}
+                            >
+                                <Typography variant="label" weight="black" style={[styles.metaDetailsHeader, { color: scopedTheme.colors.onSurfaceVariant }]}>
+                                    {isSeries ? 'SHOW DETAILS' : 'MOVIE DETAILS'}
+                                </Typography>
+
+                                {detailsRows.map((row, index) => (
+                                    <View
+                                        key={`${row.label}-${index}`}
+                                        style={[
+                                            styles.metaDetailsRow,
+                                            index > 0
+                                                ? {
+                                                    borderTopWidth: StyleSheet.hairlineWidth,
+                                                    borderTopColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
+                                                }
+                                                : null,
+                                        ]}
+                                    >
+                                        <Typography variant="label" weight="black" style={[styles.metaDetailsLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>
+                                            {row.label}
+                                        </Typography>
+                                        <Typography variant="label" weight="bold" style={[styles.metaDetailsValue, { color: scopedTheme.colors.onSurface }]}>
+                                            {row.value}
+                                        </Typography>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
                     </View>
                 </Animated.ScrollView>
 
@@ -649,5 +772,35 @@ const styles = StyleSheet.create({
     colorSwatch: { width: 56, height: 28, borderRadius: 8, marginBottom: 6 },
     body: { flex: 1 },
     subLabel: { opacity: 0.7, fontSize: 10 },
+    metaDetailsSection: {
+        marginTop: 24,
+        borderRadius: 16,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    metaDetailsHeader: {
+        paddingHorizontal: 14,
+        paddingTop: 14,
+        paddingBottom: 10,
+        fontSize: 10,
+        opacity: 0.8,
+    },
+    metaDetailsRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+    },
+    metaDetailsLabel: {
+        fontSize: 10,
+        opacity: 0.8,
+        minWidth: 110,
+    },
+    metaDetailsValue: {
+        flex: 1,
+        textAlign: 'right',
+    },
     sectionTitle: { color: 'white', marginBottom: 16 },
 });
