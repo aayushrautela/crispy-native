@@ -20,6 +20,7 @@ import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/features/player/components/VideoSurface';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
+import CrispyNativeCore from '@/modules/crispy-native-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
@@ -595,6 +596,8 @@ export default function PlayerScreen() {
     const feedbackAnimatedStyle = useAnimatedStyle(() => ({
         opacity: withTiming(seekAccumulation.direction ? 1 : 0, { duration: 150 }),
     }));
+
+    const useExoPlayer = playerState.engine !== 'vlc';
 
     // Handle codec errors - switch to MPV
     const handleCodecError = () => {

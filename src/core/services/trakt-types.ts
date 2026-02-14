@@ -40,17 +40,24 @@ export type TraktMediaItem = {
         slug?: string;
         imdb?: string;
         tmdb?: number;
+        tvdb?: number;
     };
     images?: TraktImages;
 };
 
+export interface TraktImageVariant {
+    full?: string;
+    medium?: string;
+    thumb?: string;
+}
+
 export interface TraktImages {
-    fanart?: string[];
-    poster?: string[];
-    logo?: string[];
-    clearart?: string[];
-    banner?: string[];
-    thumb?: string[];
+    poster?: TraktImageVariant[];
+    fanart?: TraktImageVariant[];
+    logo?: TraktImageVariant[];
+    clearart?: TraktImageVariant[];
+    banner?: TraktImageVariant[];
+    thumb?: TraktImageVariant[];
 }
 
 export interface TraktPlaybackItem {
@@ -159,7 +166,12 @@ export interface TraktRatingItem {
         season: number;
         number: number;
         title: string;
-        ids: any;
+        ids: {
+            trakt?: number;
+            tvdb?: number | null;
+            imdb?: string | null;
+            tmdb?: number | null;
+        };
     };
 }
 

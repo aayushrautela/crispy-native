@@ -1,8 +1,9 @@
 import { StorageService } from '../storage';
 import { TraktAuth, useUserStore } from '../stores/userStore';
-
-// Helper to safely get IDs
-const media_ids = (item: any) => item?.ids || {};
+import {
+    normalizeTraktItem,
+    type TraktWrappedItem,
+} from '@crispy-streaming/media-core';
 
 // Storage keys - persisted in active profile scope
 const TRAKT_AUTH_KEY = 'crispy-trakt-auth';
@@ -272,70 +273,41 @@ export class TraktService {
     private normalize(item: any): any {
         if (!item) return item;
 
-        // Handle various shapes (Trakt {movie: {...}}, or direct Meta like)
-        const media = item.movie || item.show || item.episode || item;
-        let type = item.type || (item.movie ? 'movie' : item.show ? 'series' : item.episode ? 'episode' : undefined);
+        const core = normalizeTraktItem(item as TraktWrappedItem);
+        if (!core) return item;
 
-        // Normalize 'show' to 'series' for internal consistency
-        if (type === 'show') type = 'series';
+        const pausedAt: string | undefined = item.paused_at || core.pausedAt;
 
-        if (!media) return item;
-
-        // Hoist IDs for direct access but KEEP the original ids object
-        const ids = media.ids || item.ids || {};
-
-        // Robust Image Parsing (WebUI logic)
-        // Trakt 'extended=images' returns arrays of paths or full URLs
-        const getUrl = (paths: string[] | string | undefined) => {
-            if (!paths) return undefined;
-            const path = Array.isArray(paths) ? paths[0] : paths;
-            if (!path) return undefined;
-            // Ensure Trakt relative paths get https://
-            return path.startsWith('http') ? path : `https://${path}`;
-        };
-
-        const poster =
-            getUrl(media.images?.poster) ||
-            media.images?.poster?.medium ||
-            media.images?.poster?.full ||
-            media.poster;
-
-        const background =
-            getUrl(media.images?.fanart) ||
-            media.images?.fanart?.medium ||
-            media.images?.fanart?.full ||
-            media.background || media.backdrop;
-
-        const logo =
-            getUrl(media.images?.logo) ||
-            media.images?.logo?.full ||
-            media.logo;
-
-        // Episode specific metadata (for Continue Watching)
-        const isEpisode = !!item.episode;
-        const episodeInfo = isEpisode ? {
-            episodeTitle: item.episode.title,
-            season: item.episode.season,
-            episodeNumber: item.episode.number,
-            showTitle: item.show?.title,
-            airDate: item.episode.first_aired
+        const episodeInfo = core.episode ? {
+            episodeTitle: core.episode.title,
+            season: core.episode.season,
+            episodeNumber: core.episode.episode,
+            showTitle: core.showTitle,
+            airDate: core.episode.releaseDate,
         } : {};
 
-        // Augment instead of Transform
+        const progressPercent =
+            (typeof core.playbackProgress === 'number' ? core.playbackProgress : undefined) ??
+            (typeof item.progress === 'number' ? item.progress : undefined);
+
+        // Augment instead of transform: keep the original Trakt payload (movie/show/episode)
         return {
             ...item,
             ...episodeInfo,
-            ids: ids, // Universal ID access
-            id: ids.imdb || (ids.tmdb ? `tmdb:${ids.tmdb}` : (ids.trakt ? `trakt:${ids.trakt}` : item.id)),
-            name: media.title || media.name || (item.show?.title ? `${item.show.title} - ${media.title}` : 'Unknown'),
-            type: (type === 'show' || type === 'episode') ? 'series' : (type || 'movie'),
-            year: media.year?.toString() || media.releaseInfo || '',
-            poster: poster,
-            backdrop: background,
-            logo: logo,
-            description: media.overview || media.description,
-            genres: media.genres,
-            posterShape: item.posterShape || (item.paused_at ? 'landscape' : (type === 'landscape' ? 'landscape' : 'poster')),
+            ids: core.ids,
+            id: core.id,
+            name: core.showTitle || core.title,
+            type: core.type,
+            year: core.year ? String(core.year) : '',
+            poster: core.images.poster,
+            backdrop: core.images.backdrop || core.images.fanart,
+            logo: core.images.logo,
+            description: core.description,
+            genres: core.genres,
+            rating: typeof core.rating === 'number' ? core.rating.toFixed(1) : undefined,
+            numericRating: core.rating,
+            progressPercent,
+            posterShape: item.posterShape || (pausedAt ? 'landscape' : 'poster'),
         };
     }
 

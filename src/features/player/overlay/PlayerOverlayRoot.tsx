@@ -611,7 +611,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                         <Text style={styles.vlcDebugLine}>surface={formatDebugSize(vlcDebugSnapshot?.surfaceViewWidth, vlcDebugSnapshot?.surfaceViewHeight)} holder={formatDebugSize(vlcDebugSnapshot?.holderFrameWidth, vlcDebugSnapshot?.holderFrameHeight)}</Text>
                         <Text style={styles.vlcDebugLine}>target={formatDebugSize(vlcDebugSnapshot?.targetWidth, vlcDebugSnapshot?.targetHeight)} retries={Math.round(toFiniteNumber(vlcDebugSnapshot?.surfaceAttachRetryCount))}</Text>
                         {vlcEngineSnapshot && (
-                            <Text style={styles.vlcDebugLine}>engineState={String(vlcEngineSnapshot.state || '-')} engineMode={String(vlcEngineSnapshot.resizeMode || '-')} scaleType={String(vlcEngineSnapshot.lastAppliedScaleType || '-')}</Text>
+                            <Text style={styles.vlcDebugLine}>engineState={String(vlcEngineSnapshot?.state || '-')} engineMode={String(vlcEngineSnapshot?.resizeMode || '-')} scaleType={String(vlcEngineSnapshot?.lastAppliedScaleType || '-')}</Text>
                         )}
                         <Text style={styles.vlcDebugLog}>{vlcDebugLines.join('\n') || 'waiting for vlc-debug events...'}</Text>
                     </View>

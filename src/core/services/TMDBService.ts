@@ -1,5 +1,11 @@
 import axios from 'axios';
 import { StorageService } from '../storage';
+import {
+    normalizeTmdbDetails,
+    type MediaType,
+    type TMDBDetail,
+    type TMDBImagesResponse,
+} from '@crispy-streaming/media-core';
 
 const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
 const BASE_URL = 'https://api.themoviedb.org/3';
@@ -175,10 +181,12 @@ export class TMDBService {
             let backdropFallback: string | undefined;
             let allBackdrops: string[] = [];
             let allPosters: string[] = [];
+            let imagesData: TMDBImagesResponse | undefined;
             try {
                 // Fetch images with a broader language filter to ensure we get a gallery (Nuvio-style)
                 const imagesUrl = `${BASE_URL}/${findPath}/${foundTmdbId}/images?api_key=${API_KEY}&include_image_language=en,null,fr,de,es,it,ja,ko,zh`;
                 const imagesRes = await axios.get(imagesUrl);
+                imagesData = imagesRes.data as TMDBImagesResponse;
                 const logos = imagesRes.data.logos || [];
 
                 if (logos.length > 0) {
@@ -222,37 +230,11 @@ export class TMDBService {
                 }
             }
 
-            // Robust Certification Logic (Nuvio-style priority: US > GB > Any)
-            let maturityRating: string | undefined;
-            if (findPath === 'movie') {
-                const releaseDates = data.release_dates?.results || [];
-                const usRelease = releaseDates.find((r: any) => r.iso_3166_1 === 'US');
-                const gbRelease = releaseDates.find((r: any) => r.iso_3166_1 === 'GB');
-                const prioritized = [usRelease, gbRelease, ...releaseDates.filter((r: any) => r.iso_3166_1 !== 'US' && r.iso_3166_1 !== 'GB')];
+            const mediaType: MediaType = findPath === 'tv' ? 'series' : 'movie';
+            const core = normalizeTmdbDetails(data as TMDBDetail, mediaType, imagesData);
 
-                for (const rel of prioritized) {
-                    const cert = rel?.release_dates?.find((d: any) => d.certification)?.certification;
-                    if (cert) {
-                        maturityRating = cert;
-                        break;
-                    }
-                }
-            } else {
-                const contentRatings = data.content_ratings?.results || [];
-                const usRating = contentRatings.find((r: any) => r.iso_3166_1 === 'US');
-                const gbRating = contentRatings.find((r: any) => r.iso_3166_1 === 'GB');
-                const prioritized = [usRating, gbRating, ...contentRatings.filter((r: any) => r.iso_3166_1 !== 'US' && r.iso_3166_1 !== 'GB')];
-
-                for (const rat of prioritized) {
-                    if (rat?.rating) {
-                        maturityRating = rat.rating;
-                        break;
-                    }
-                }
-            }
-
-            // Find Director
-            const director = data.credits?.crew?.find((c: any) => c.job === 'Director')?.name;
+            const maturityRating = core.certification;
+            const director = core.director || data.credits?.crew?.find((c: any) => c.job === 'Director')?.name;
 
             // Map Cast (with original sizing/path logic if preferred, keeping existing for now as it's fine)
             const cast: TMDBCast[] = data.credits?.cast?.slice(0, 10).map((c: any) => ({
@@ -305,32 +287,32 @@ export class TMDBService {
 
             const enriched: Partial<TMDBMeta> = {
                 id: idStr,
-                tmdbId: Number(foundTmdbId),
-                imdbId: data.external_ids?.imdb_id || (data.imdb_id),
-                type: findPath === 'tv' ? 'series' : 'movie',
+                tmdbId: core.ids.tmdb || Number(foundTmdbId),
+                imdbId: core.ids.imdb || data.external_ids?.imdb_id || (data.imdb_id),
+                type: mediaType,
             };
             console.log(`[TMDBService] Resolved meta for ${idStr}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);
 
             Object.assign(enriched, {
-                title: data.title || data.name,
-                logo: logo ? `${IMAGE_BASE}/w500${logo}` : undefined,
-                backdrop: (data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/w780${data.backdrop_path || backdropFallback}` : undefined,
-                backdrops: allBackdrops,
-                poster: data.poster_path ? `${IMAGE_BASE}/w500${data.poster_path}` : undefined,
-                posters: allPosters,
-                year: (data.release_date || data.first_air_date || '').split('-')[0],
-                runtimeMinutes: data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0,
+                title: core.title || data.title || data.name,
+                logo: core.images.logo || (logo ? `${IMAGE_BASE}/w500${logo}` : undefined),
+                backdrop: core.images.backdrop || ((data.backdrop_path || backdropFallback) ? `${IMAGE_BASE}/w780${data.backdrop_path || backdropFallback}` : undefined),
+                backdrops: core.images.backdrops?.length ? core.images.backdrops : allBackdrops,
+                poster: core.images.poster || (data.poster_path ? `${IMAGE_BASE}/w500${data.poster_path}` : undefined),
+                posters: core.images.posters?.length ? core.images.posters : allPosters,
+                year: core.year ? String(core.year) : (data.release_date || data.first_air_date || '').split('-')[0],
+                runtimeMinutes: typeof core.runtimeMinutes === 'number' ? core.runtimeMinutes : (data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0),
                 runtime: (() => {
-                    const minutes = data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0;
+                    const minutes = typeof core.runtimeMinutes === 'number' ? core.runtimeMinutes : (data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0);
                     if (!minutes) return undefined;
                     const hrs = Math.floor(minutes / 60);
                     const mins = minutes % 60;
                     if (hrs > 0) return `${hrs} hr ${mins} min`;
                     return `${mins} min`;
                 })(),
-                rating: data.vote_average?.toFixed(1) || '0.0',
+                rating: (typeof core.rating === 'number' ? core.rating.toFixed(1) : undefined) || data.vote_average?.toFixed(1) || '0.0',
                 maturityRating,
-                genres: data.genres?.map((g: any) => g.name) || [],
+                genres: core.genres?.length ? core.genres : (data.genres?.map((g: any) => g.name) || []),
                 tagline: data.tagline || undefined,
                 status: data.status || undefined,
                 releaseDate: data.release_date || undefined,
@@ -344,7 +326,7 @@ export class TMDBService {
                 originCountry: Array.isArray(data.origin_country) ? data.origin_country : undefined,
                 originalLanguage: data.original_language || undefined,
                 createdBy: Array.isArray(data.created_by) ? data.created_by.map((creator: any) => creator?.name).filter(Boolean) : [],
-                description: data.overview || '',
+                description: core.description || data.overview || '',
                 director,
                 cast,
                 reviews,

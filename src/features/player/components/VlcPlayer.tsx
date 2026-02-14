@@ -25,6 +25,8 @@ export interface VlcPlayerProps {
     volume?: number;
     rate?: number;
     resizeMode?: 'contain' | 'cover' | 'original';
+    decoderMode?: import('@/modules/crispy-native-core').CrispyDecoderMode;
+    gpuMode?: import('@/modules/crispy-native-core').CrispyGpuMode;
     style?: any;
     onLoad?: (data: { duration: number; width: number; height: number }) => void;
     onProgress?: (data: { currentTime: number; duration: number }) => void;
@@ -141,6 +143,8 @@ const VlcPlayer = forwardRef<VlcPlayerRef, VlcPlayerProps>((props, ref) => {
             headers={props.headers}
             paused={props.paused ?? true}
             resizeMode={props.resizeMode ?? 'contain'}
+            decoderMode={props.decoderMode}
+            gpuMode={props.gpuMode}
             metadata={props.metadata}
             playInBackground={props.playInBackground ?? false}
             onLoad={handleLoad}
