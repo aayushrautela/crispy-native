@@ -2,6 +2,8 @@ import axios from 'axios';
 import { StorageService } from '../storage';
 import {
     normalizeTmdbDetails,
+    resolveTmdbId,
+    normalizeMediaType,
     type MediaType,
     type TMDBDetail,
     type TMDBImagesResponse,
@@ -128,32 +130,26 @@ export class TMDBService {
         }
 
         try {
-            const findPath = type === 'movie' ? 'movie' : 'tv';
-            let foundTmdbId: string | number = 0;
+            if (!API_KEY) {
+                console.warn('[TMDBService] Missing EXPO_PUBLIC_TMDB_API_KEY');
+                return {};
+            }
+
+            const mediaType = normalizeMediaType(type);
+            if (!mediaType) {
+                console.warn('[TMDBService] Unsupported media type:', type);
+                return {};
+            }
+
+            const findPath = mediaType === 'movie' ? 'movie' : 'tv';
+            const resolved = await resolveTmdbId(idStr, mediaType, { apiKey: API_KEY });
+            const foundTmdbId = resolved.tmdbId;
 
             console.log(`[TMDBService] Enriching ${idStr} (${type})`);
 
-            if (idStr.startsWith('tmdb:')) {
-                foundTmdbId = idStr.split(':')[1];
-            } else if (idStr.startsWith('tt')) {
-                // 1. Find TMDB ID from External ID (IMDB)
-                const findUrl = `${BASE_URL}/find/${idStr}?api_key=${API_KEY}&external_source=imdb_id`;
-                const findRes = await axios.get(findUrl);
-                const result = findPath === 'movie' ? findRes.data.movie_results[0] : findRes.data.tv_results[0];
-                if (!result) {
-                    console.warn(`[TMDBService] No TMDB results for ${idStr}`);
-                    return {};
-                }
-                foundTmdbId = result.id;
-            } else {
-                // Fallback: If it's a plain number, assume it's a TMDB ID (like Web UI)
-                const n = Number(idStr);
-                if (!isNaN(n)) {
-                    foundTmdbId = n;
-                } else {
-                    console.warn('[TMDBService] Unsupported ID format:', idStr);
-                    return {};
-                }
+            if (!foundTmdbId) {
+                console.warn('[TMDBService] Unable to resolve TMDB id:', idStr);
+                return {};
             }
 
             // 2. Get Full Details & Credits & content_ratings/release_dates & Similar & External IDs & Reviews & Keywords
@@ -230,7 +226,6 @@ export class TMDBService {
                 }
             }
 
-            const mediaType: MediaType = findPath === 'tv' ? 'series' : 'movie';
             const core = normalizeTmdbDetails(data as TMDBDetail, mediaType, imagesData);
 
             const maturityRating = core.certification;
@@ -288,7 +283,7 @@ export class TMDBService {
             const enriched: Partial<TMDBMeta> = {
                 id: idStr,
                 tmdbId: core.ids.tmdb || Number(foundTmdbId),
-                imdbId: core.ids.imdb || data.external_ids?.imdb_id || (data.imdb_id),
+                imdbId: core.ids.imdb || resolved.imdbId || data.external_ids?.imdb_id || (data.imdb_id),
                 type: mediaType,
             };
             console.log(`[TMDBService] Resolved meta for ${idStr}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);

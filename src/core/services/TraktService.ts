@@ -3,6 +3,12 @@ import { TraktAuth, useUserStore } from '../stores/userStore';
 import {
     normalizeTraktItem,
     type TraktWrappedItem,
+    buildWatchingKey,
+    getTraktIdsObject,
+    isValidTraktIdsObject,
+    parseEpisodeIdSuffix,
+    tryBuildTraktRatingPayloadFromId,
+    tryBuildTraktSyncPayloadFromId,
 } from '@crispy-streaming/media-core';
 
 // Storage keys - persisted in active profile scope
@@ -24,16 +30,6 @@ class TraktApiError extends Error {
         this.status = status;
         this.bodyText = bodyText;
     }
-}
-
-export interface TraktPlaybackItem {
-    progress: number;
-    paused_at: string;
-    id: number;
-    type: 'movie' | 'episode';
-    movie?: any;
-    episode?: any;
-    show?: any;
 }
 
 export class TraktService {
@@ -390,40 +386,6 @@ export class TraktService {
         }
     }
 
-    private normalizeIdForKey(id: string): string {
-        const raw = String(id || '').trim();
-        if (!raw) return '';
-        if (raw.startsWith('tmdb:') || raw.startsWith('trakt:')) return raw;
-        if (raw.startsWith('imdb:')) {
-            const imdb = raw.replace('imdb:', '').trim();
-            if (!imdb) return '';
-            return imdb.startsWith('tt') ? imdb : `tt${imdb}`;
-        }
-        if (raw.startsWith('tt')) return raw;
-        if (!isNaN(Number(raw))) return `tmdb:${parseInt(raw, 10)}`;
-        return raw;
-    }
-
-    private getWatchingKey(type: 'movie' | 'series', id: string, season?: number, episode?: number): string {
-        if (type === 'series' && season !== undefined && episode !== undefined) {
-            return `episode:${this.normalizeIdForKey(id)}:${season}:${episode}`;
-        }
-        if (type === 'series') {
-            return `episode:${this.normalizeIdForKey(id)}`;
-        }
-        return `movie:${this.normalizeIdForKey(id)}`;
-    }
-
-    private isValidIdsObject(ids: any): boolean {
-        if (!ids || typeof ids !== 'object') return false;
-        if (typeof ids.trakt === 'number' && !Number.isNaN(ids.trakt)) return true;
-        if (typeof ids.tmdb === 'number' && !Number.isNaN(ids.tmdb)) return true;
-        if (typeof ids.tvdb === 'number' && !Number.isNaN(ids.tvdb)) return true;
-        if (typeof ids.imdb === 'string' && ids.imdb.trim().startsWith('tt')) return true;
-        if (typeof ids.slug === 'string' && ids.slug.trim().length > 0) return true;
-        return false;
-    }
-
     private cleanupOldScrobbleState() {
         const now = Date.now();
 
@@ -551,12 +513,16 @@ export class TraktService {
     
     // Cleaner Public API for Scrobbling that handles ID resolution internally
     public async startScrobble(id: string, type: 'movie' | 'episode', progress: number) {
-         const ids = this.getIdsObject(id);
+         const ids = getTraktIdsObject(id);
+         if (!isValidTraktIdsObject(ids)) {
+             console.warn('[TraktService] Invalid IDs for startScrobble', { id, ids });
+             return null;
+         }
          const body: any = {
-             progress: Math.min(100, Math.max(0, progress)),
-             app_version: '1.0.0',
-             date: new Date().toISOString()
-         };
+              progress: Math.min(100, Math.max(0, progress)),
+              app_version: '1.0.0',
+              date: new Date().toISOString()
+          };
          
          if (type === 'movie') body.movie = { ids };
          else body.episode = { ids }; // For episodes, we really need the specific episode ID, or we need to pass S/E. 
@@ -586,21 +552,15 @@ export class TraktService {
         let s = season;
         let e = episode;
         if (isEpisode) {
-            const parts = String(id || '').split(':');
-            if (parts.length >= 3) {
-                const maybeEpisode = parseInt(parts[parts.length - 1], 10);
-                const maybeSeason = parseInt(parts[parts.length - 2], 10);
-                if (!Number.isNaN(maybeSeason) && !Number.isNaN(maybeEpisode)) {
-                    showId = parts.slice(0, -2).join(':');
-                    if (s === undefined) s = maybeSeason;
-                    if (e === undefined) e = maybeEpisode;
-                }
-            }
+            const parsed = parseEpisodeIdSuffix(String(id || ''));
+            showId = parsed.baseId;
+            if (s === undefined) s = parsed.season;
+            if (e === undefined) e = parsed.episode;
         }
 
         const watchingKey = isEpisode
-            ? this.getWatchingKey('series', showId, s, e)
-            : this.getWatchingKey('movie', id);
+            ? buildWatchingKey('series', showId, s, e)
+            : buildWatchingKey('movie', id);
 
         // Backoff after failures to prevent tight retry loops (e.g. 422 invalid payload)
         const lastErr = this.lastScrobbleErrorTimes.get(watchingKey) || 0;
@@ -667,14 +627,14 @@ export class TraktService {
             // Let's rely on `TraktService` finding the ID if needed, OR just send what we have.
             // Constructing the best possible payload:
             
-            if (s !== undefined && e !== undefined) {
-                 // We have S/E. We likely have the SHOW ID.
-                 const showIds = this.getIdsObject(showId);
-                 if (!this.isValidIdsObject(showIds) || s <= 0 || e <= 0) {
-                     this.lastScrobbleErrorTimes.set(watchingKey, now);
-                     console.warn('[TraktService] Invalid episode scrobble params', { id, showId, season: s, episode: e, showIds });
-                     return null;
-                 }
+             if (s !== undefined && e !== undefined) {
+                  // We have S/E. We likely have the SHOW ID.
+                  const showIds = getTraktIdsObject(showId);
+                  if (!isValidTraktIdsObject(showIds) || s <= 0 || e <= 0) {
+                      this.lastScrobbleErrorTimes.set(watchingKey, now);
+                      console.warn('[TraktService] Invalid episode scrobble params', { id, showId, season: s, episode: e, showIds });
+                      return null;
+                  }
                  body.episode = {
                      season: s,
                      number: e,
@@ -721,26 +681,26 @@ export class TraktService {
                  body.show = {
                      ids: showIds
                  };
-            } else {
-                // Assume ID is for the episode itself
-                const episodeIds = this.getIdsObject(id);
-                if (!this.isValidIdsObject(episodeIds)) {
-                    this.lastScrobbleErrorTimes.set(watchingKey, now);
-                    console.warn('[TraktService] Invalid episode IDs for scrobble', { id, episodeIds });
-                    return null;
-                }
-                body.episode = { ids: episodeIds };
-            }
-        } else {
-            // Movie
-            const movieIds = this.getIdsObject(id);
-            if (!this.isValidIdsObject(movieIds)) {
-                this.lastScrobbleErrorTimes.set(watchingKey, now);
-                console.warn('[TraktService] Invalid movie IDs for scrobble', { id, movieIds });
-                return null;
-            }
-            body.movie = { ids: movieIds };
-        }
+             } else {
+                 // Assume ID is for the episode itself
+                 const episodeIds = getTraktIdsObject(id);
+                 if (!isValidTraktIdsObject(episodeIds)) {
+                     this.lastScrobbleErrorTimes.set(watchingKey, now);
+                     console.warn('[TraktService] Invalid episode IDs for scrobble', { id, episodeIds });
+                     return null;
+                 }
+                 body.episode = { ids: episodeIds };
+             }
+         } else {
+             // Movie
+            const movieIds = getTraktIdsObject(id);
+            if (!isValidTraktIdsObject(movieIds)) {
+                 this.lastScrobbleErrorTimes.set(watchingKey, now);
+                 console.warn('[TraktService] Invalid movie IDs for scrobble', { id, movieIds });
+                 return null;
+             }
+             body.movie = { ids: movieIds };
+         }
 
         // Nuvio-style: use /scrobble/stop for both pause + stop (Trakt infers pause vs scrobble by progress)
         const endpointAction = action === 'pause' ? 'stop' : action;
@@ -777,89 +737,76 @@ export class TraktService {
         return this.apiRequest('/scrobble/stop', 'POST', item);
     }
 
-    private getIdsObject(id: string) {
-        const raw = String(id || '').trim();
-        if (!raw) return {};
-        if (raw.startsWith('tmdb:')) return { tmdb: parseInt(raw.replace('tmdb:', ''), 10) };
-        if (raw.startsWith('trakt:')) return { trakt: parseInt(raw.replace('trakt:', ''), 10) };
-        if (raw.startsWith('imdb:')) {
-            const imdb = raw.replace('imdb:', '').trim();
-            if (!imdb) return {};
-            return { imdb: imdb.startsWith('tt') ? imdb : `tt${imdb}` };
-        }
-        if (raw.startsWith('tt')) return { imdb: raw };
-        // Fallback for numeric strings that might be raw TMDB IDs (common in our app)
-        if (!isNaN(Number(raw))) return { tmdb: parseInt(raw, 10) };
-        // Fallback for everything else
-        return { imdb: raw.replace('imdb:', '') };
-    }
-
     public async addToWatchlist(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/watchlist', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for addToWatchlist', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/watchlist', 'POST', payload);
     }
 
     public async removeFromWatchlist(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/watchlist/remove', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for removeFromWatchlist', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/watchlist/remove', 'POST', payload);
     }
 
     public async addToCollection(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/collection', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for addToCollection', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/collection', 'POST', payload);
     }
 
     public async removeFromCollection(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/collection/remove', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for removeFromCollection', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/collection/remove', 'POST', payload);
     }
 
     public async addRating(id: string, type: 'movie' | 'show' | 'episode', rating: number) {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ rating, ids }] }
-            : type === 'show'
-                ? { shows: [{ rating, ids }] }
-                : { episodes: [{ rating, ids }] };
-        return this.apiRequest('/sync/ratings', 'POST', body);
+        const payload = tryBuildTraktRatingPayloadFromId(type, id, rating);
+        if (!payload) {
+            console.warn('[TraktService] Invalid params for addRating', { id, type, rating });
+            return null;
+        }
+        return this.apiRequest('/sync/ratings', 'POST', payload);
     }
 
     public async removeRating(id: string, type: 'movie' | 'show' | 'episode') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : type === 'show'
-                ? { shows: [{ ids }] }
-                : { episodes: [{ ids }] };
-        return this.apiRequest('/sync/ratings/remove', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for removeRating', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/ratings/remove', 'POST', payload);
     }
 
     public async addToHistory(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/history', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for addToHistory', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/history', 'POST', payload);
     }
 
     public async removeFromHistory(id: string, type: 'movie' | 'show') {
-        const ids = this.getIdsObject(id);
-        const body = type === 'movie'
-            ? { movies: [{ ids }] }
-            : { shows: [{ ids }] };
-        return this.apiRequest('/sync/history/remove', 'POST', body);
+        const payload = tryBuildTraktSyncPayloadFromId(type, id);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for removeFromHistory', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/history/remove', 'POST', payload);
     }
 
     public async getWatchlist() {

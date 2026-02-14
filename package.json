@@ -13,7 +13,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
-    "@crispy-streaming/media-core": "^0.1.1",
+    "@crispy-streaming/media-core": "^0.1.2",
     "@crispy-streaming/supabase-contract": "^0.2.4",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.2.8",
