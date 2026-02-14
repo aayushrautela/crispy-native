@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../core/AuthContext';
 import { clearDiscoveryCache, DiscoveryProvider } from '../core/DiscoveryContext';
+import { HouseholdProvider } from '../core/HouseholdContext';
 import { ProfileProvider, useProfiles } from '../core/ProfileContext';
 import { SyncService } from '../core/services/SyncService';
 import { TraktService } from '../core/services/TraktService';
@@ -173,16 +174,18 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>
           <AuthProvider>
-            <ProfileProvider>
-              <SyncService />
-              <ThemeProvider>
-                <DiscoveryProvider>
-                  <TraktProvider>
-                    <RootLayoutNav />
-                  </TraktProvider>
-                </DiscoveryProvider>
-              </ThemeProvider>
-            </ProfileProvider>
+            <HouseholdProvider>
+              <ProfileProvider>
+                <SyncService />
+                <ThemeProvider>
+                  <DiscoveryProvider>
+                    <TraktProvider>
+                      <RootLayoutNav />
+                    </TraktProvider>
+                  </DiscoveryProvider>
+                </ThemeProvider>
+              </ProfileProvider>
+            </HouseholdProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

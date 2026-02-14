@@ -1,19 +1,13 @@
-import type { User } from '@supabase/supabase-js';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import type { ProfileRow } from '@crispy-streaming/supabase-contract';
+
 import { supabase } from './services/supabase';
 import { StorageService } from './storage';
 import { useAuth } from './AuthContext';
+import { useHousehold } from './HouseholdContext';
 
-export interface Profile {
-    id: string;
-    account_id: string;
-    name: string;
-    avatar: string | null;
-    order_index: number;
-    last_active_at: string | null;
-    created_at: string;
-    updated_at: string;
-}
+export type Profile = ProfileRow;
 
 interface ProfileContextValue {
     loading: boolean;
@@ -33,11 +27,11 @@ const ProfileContext = createContext<ProfileContextValue>({
     switchProfile: async () => { },
 });
 
-async function touchLastActive(accountId: string, profileId: string): Promise<void> {
+async function touchLastActive(householdId: string, profileId: string): Promise<void> {
     const { error } = await supabase
         .from('profiles')
         .update({ last_active_at: new Date().toISOString() })
-        .eq('account_id', accountId)
+        .eq('household_id', householdId)
         .eq('id', profileId);
 
     if (error) {
@@ -47,6 +41,7 @@ async function touchLastActive(accountId: string, profileId: string): Promise<vo
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
+    const { householdId, loading: householdLoading } = useHousehold();
     const [loading, setLoading] = useState(true);
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -56,7 +51,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         StorageService.setActiveProfileId(profileId);
     }, []);
 
-    const syncActiveProfile = useCallback((items: Profile[], account: User | null) => {
+    const syncActiveProfile = useCallback((items: Profile[], activeHouseholdId: string) => {
         const storedActiveProfileId = StorageService.getActiveProfileId();
 
         if (storedActiveProfileId && items.some((profile) => profile.id === storedActiveProfileId)) {
@@ -67,9 +62,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         if (items.length > 0) {
             const nextId = items[0].id;
             setActiveProfile(nextId);
-            if (account) {
-                void touchLastActive(account.id, nextId);
-            }
+            void touchLastActive(activeHouseholdId, nextId);
             return;
         }
 
@@ -84,11 +77,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             return;
         }
 
+        if (!householdId) {
+            // Membership not ready (or failed). Avoid querying with an unknown household id.
+            setProfiles([]);
+            setActiveProfile(null);
+            setLoading(householdLoading);
+            return;
+        }
+
         setLoading(true);
         const { data, error } = await supabase
             .from('profiles')
             .select('*')
-            .eq('account_id', user.id)
+            .eq('household_id', householdId)
             .order('order_index', { ascending: true })
             .order('created_at', { ascending: true });
 
@@ -97,16 +98,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             throw error;
         }
 
-        const nextProfiles = (data ?? []) as Profile[];
+        const nextProfiles = data ?? [];
         setProfiles(nextProfiles);
-        syncActiveProfile(nextProfiles, user);
+        syncActiveProfile(nextProfiles, householdId);
         setLoading(false);
-    }, [setActiveProfile, syncActiveProfile, user]);
+    }, [householdId, householdLoading, setActiveProfile, syncActiveProfile, user]);
 
     const switchProfile = useCallback(async (profileId: string) => {
-        if (!user) return;
+        if (!user || !householdId) return;
         setActiveProfile(profileId);
-    }, [setActiveProfile, user]);
+        void touchLastActive(householdId, profileId);
+    }, [householdId, setActiveProfile, user]);
 
     useEffect(() => {
         if (!user) {
@@ -117,11 +119,19 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         }
 
         StorageService.setActiveAccountId(user.id);
+
+        if (!householdId) {
+            setProfiles([]);
+            setActiveProfile(null);
+            setLoading(householdLoading);
+            return;
+        }
+
         void refreshProfiles().catch((error) => {
             console.error('[ProfileContext] Failed to refresh profiles:', error);
             setLoading(false);
         });
-    }, [refreshProfiles, setActiveProfile, user]);
+    }, [householdId, householdLoading, refreshProfiles, setActiveProfile, user]);
 
     const activeProfile = useMemo(() => {
         if (!activeProfileId) return null;
