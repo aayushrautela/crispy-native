@@ -61,7 +61,7 @@ export const HomeHeader = memo(HomeHeaderComponent);
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 12,
+        marginBottom: 4,
     },
     emptyPrompt: {
         paddingTop: 0,

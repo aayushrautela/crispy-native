@@ -2,6 +2,7 @@ import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { ThemeOverrideProvider, useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
+import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
 import { hexToRgba } from '@/src/core/utils/colors';
@@ -673,40 +674,24 @@ export default function MetaDetailsScreen() {
                         )}
 
                         {detailsRows.length > 0 && (
-                            <View
-                                style={[
-                                    styles.metaDetailsSection,
-                                    {
-                                        backgroundColor: (scopedTheme.colors as any).surfaceContainerLow || scopedTheme.colors.surfaceVariant,
-                                        borderColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
-                                    },
-                                ]}
-                            >
-                                <Typography variant="label" weight="black" style={[styles.metaDetailsHeader, { color: scopedTheme.colors.onSurfaceVariant }]}>
-                                    {isSeries ? 'SHOW DETAILS' : 'MOVIE DETAILS'}
-                                </Typography>
-
-                                {detailsRows.map((row, index) => (
-                                    <View
-                                        key={`${row.label}-${index}`}
-                                        style={[
-                                            styles.metaDetailsRow,
-                                            index > 0
-                                                ? {
-                                                    borderTopWidth: StyleSheet.hairlineWidth,
-                                                    borderTopColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
-                                                }
-                                                : null,
-                                        ]}
-                                    >
-                                        <Typography variant="label" weight="black" style={[styles.metaDetailsLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>
-                                            {row.label}
-                                        </Typography>
-                                        <Typography variant="label" weight="bold" style={[styles.metaDetailsValue, { color: scopedTheme.colors.onSurface }]}>
-                                            {row.value}
-                                        </Typography>
-                                    </View>
-                                ))}
+                            <View style={{ marginTop: 24, marginHorizontal: -20 }}>
+                                <SectionHeader
+                                    title={isSeries ? 'Show Details' : 'Movie Details'}
+                                    hideAction
+                                    style={{ paddingHorizontal: 20 }}
+                                />
+                                <View style={styles.metaDetailsList}>
+                                    {detailsRows.map((row, index) => (
+                                        <View key={`${row.label}-${index}`} style={styles.metaDetailsRow}>
+                                            <Typography variant="label" weight="black" style={[styles.metaDetailsLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>
+                                                {row.label}
+                                            </Typography>
+                                            <Typography variant="label" weight="bold" style={[styles.metaDetailsValue, { color: scopedTheme.colors.onSurface }]}>
+                                                {row.value}
+                                            </Typography>
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
                         )}
                     </View>
@@ -772,31 +757,20 @@ const styles = StyleSheet.create({
     colorSwatch: { width: 56, height: 28, borderRadius: 8, marginBottom: 6 },
     body: { flex: 1 },
     subLabel: { opacity: 0.7, fontSize: 10 },
-    metaDetailsSection: {
-        marginTop: 24,
-        borderRadius: 16,
-        borderWidth: 1,
-        overflow: 'hidden',
-    },
-    metaDetailsHeader: {
-        paddingHorizontal: 14,
-        paddingTop: 14,
-        paddingBottom: 10,
-        fontSize: 10,
-        opacity: 0.8,
+    metaDetailsList: {
+        paddingHorizontal: 20,
+        marginTop: 12,
     },
     metaDetailsRow: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
+        alignItems: 'flex-start',
+        paddingVertical: 6,
     },
     metaDetailsLabel: {
         fontSize: 10,
-        opacity: 0.8,
-        minWidth: 110,
+        opacity: 0.7,
+        minWidth: 100,
     },
     metaDetailsValue: {
         flex: 1,

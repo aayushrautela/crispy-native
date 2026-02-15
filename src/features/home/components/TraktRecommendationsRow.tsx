@@ -55,7 +55,7 @@ const keyExtractor = (item: any, index: number) => `trakt-rec-${item.id}-${index
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 8,
+        paddingVertical: 2,
     },
     header: {
         paddingHorizontal: 24
