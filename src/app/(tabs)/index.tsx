@@ -1,3 +1,4 @@
+import { useProfiles } from '@/src/core/ProfileContext';
 import { useCatalog } from '@/src/core/hooks/useDiscovery';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -5,10 +6,11 @@ import { Typography } from '@/src/core/ui/Typography';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { HomeHeader } from '@/src/features/home/components/HomeHeader';
 import { getCatalogKey, useCatalogPreferences } from '@/src/hooks/useCatalogPreferences';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { CircleUser } from 'lucide-react-native';
 import React, { useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, ViewToken } from 'react-native';
+import { Pressable, StyleSheet, View, ViewToken } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedScrollHandler,
@@ -23,6 +25,7 @@ export default function HomeScreen() {
   const manifests = useUserStore((state) => state.manifests);
   const { preferences, sortCatalogsByPreferences } = useCatalogPreferences();
   const router = useRouter();
+  const { activeProfile } = useProfiles();
 
   const [enabledRowCount, setEnabledRowCount] = useState(3);
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 40, minimumViewTime: 150 }).current;
@@ -137,12 +140,24 @@ export default function HomeScreen() {
         </View>
         <View style={styles.headerActions}>
           <Animated.View style={{ opacity: 0.9 }}>
-            <CircleUser
-              size={34}
-              color="white"
-              strokeWidth={1.5}
-              onPress={() => router.push('/(tabs)/settings')}
-            />
+            <Pressable
+              onPress={() => router.push('/(auth)/profiles' as never)}
+              style={styles.profileButton}
+            >
+              {activeProfile?.avatar ? (
+                <Image
+                  source={{ uri: activeProfile.avatar }}
+                  style={styles.profileAvatar}
+                  contentFit="cover"
+                />
+              ) : (
+                <CircleUser
+                  size={34}
+                  color="white"
+                  strokeWidth={1.5}
+                />
+              )}
+            </Pressable>
           </Animated.View>
         </View>
       </Animated.View>
@@ -220,5 +235,18 @@ const styles = StyleSheet.create({
   },
   emptyPrompt: {
     paddingTop: 0,
+  },
+  profileButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
   }
 });
