@@ -7,6 +7,7 @@ import { TMDBService } from '@/src/core/services/TMDBService';
 import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { makeEpisodeId, parseAppEpisodeSuffix, toImdbIdForExternalLookup, toStrictMediaId } from '@/src/core/ids/mediaIds';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { SideSheet } from '@/src/core/ui/SideSheet';
 import { Typography } from '@/src/core/ui/Typography';
@@ -178,17 +179,20 @@ export default function PlayerScreen() {
     }, [id, type]);
 
     // Info Tab State (Meta Aggregator)
-    const baseId = useMemo(() => {
-        if (!id) return '';
-        const parts = String(id).split(':');
-        return parts[0];
-    }, [id]);
+    const strictId = useMemo(() => {
+        const raw = String(id || '');
+        const strict = toStrictMediaId(raw, String(type || 'movie'));
+        return strict || raw;
+    }, [id, type]);
+
+    const parsedId = useMemo(() => parseAppEpisodeSuffix(strictId), [strictId]);
+
+    const baseId = useMemo(() => parsedId.baseId, [parsedId.baseId]);
 
     const currentSeason = useMemo(() => {
         if (!id || type === 'movie') return 1;
-        const parts = String(id).split(':');
-        return parts.length > 1 ? parseInt(parts[1]) : 1;
-    }, [id, type]);
+        return typeof parsedId.season === 'number' ? parsedId.season : 1;
+    }, [id, parsedId.season, type]);
 
     const [activeSeason, setActiveSeason] = useState(currentSeason);
 
@@ -207,14 +211,13 @@ export default function PlayerScreen() {
             }
             
             // Extract season and episode from ID (e.g. tt12345:1:2 or tmdb:12345:1:2)
-            const parts = String(id).split(':');
-            if (parts.length < 3) return;
-            
-            const season = parseInt(parts[1], 10);
-            const episode = parseInt(parts[2], 10);
+            const season = typeof parsedId.season === 'number' ? parsedId.season : null;
+            const episode = typeof parsedId.episode === 'number' ? parsedId.episode : null;
             
             // Prefer IMDB ID if available in enriched meta
-            const imdbId = enriched.imdbId || (parts[0].startsWith('tt') ? parts[0] : null);
+            const imdbId =
+                (typeof enriched.imdbId === 'string' && enriched.imdbId.startsWith('tt') ? enriched.imdbId : null) ||
+                toImdbIdForExternalLookup(baseId, 'series');
             
             if (imdbId && season && episode) {
                 const timestamps = await IntroService.getIntroTimestamps(imdbId, season, episode);
@@ -228,32 +231,16 @@ export default function PlayerScreen() {
         };
         
         fetchIntro();
-    }, [id, type, enriched.imdbId]);
+    }, [baseId, enriched.imdbId, id, parsedId.episode, parsedId.season, type]);
 
     // --- Trakt Scrobbling Integration ---
     const { scrobbleId, scrobbleSeason, scrobbleEpisode } = useMemo(() => {
-        const parts = String(id).split(':');
-        // Handle tmdb:123:1:2 vs tt123:1:2 vs 123:1:2
-        let realId = parts[0];
-        let s: number | undefined;
-        let e: number | undefined;
-        
-        if (parts[0] === 'tmdb' || parts[0] === 'trakt') {
-             // Format: tmdb:123:1:2
-             realId = `${parts[0]}:${parts[1]}`;
-             if (type === 'series' && parts.length >= 4) {
-                 s = parseInt(parts[2], 10);
-                 e = parseInt(parts[3], 10);
-             }
-        } else {
-             // Format: tt123:1:2 or 123:1:2
-             if (type === 'series' && parts.length >= 3) {
-                 s = parseInt(parts[1], 10);
-                 e = parseInt(parts[2], 10);
-             }
-        }
-        return { scrobbleId: realId, scrobbleSeason: s, scrobbleEpisode: e };
-    }, [id, type]);
+        return {
+            scrobbleId: baseId,
+            scrobbleSeason: typeof parsedId.season === 'number' ? parsedId.season : undefined,
+            scrobbleEpisode: typeof parsedId.episode === 'number' ? parsedId.episode : undefined,
+        };
+    }, [baseId, parsedId.episode, parsedId.season]);
 
     useTraktScrobbler({
         id: scrobbleId,
@@ -340,7 +327,7 @@ export default function PlayerScreen() {
             else if ((meta as any)?.name) displaySubtitle = (meta as any).name;
 
             // Upgrade Episode Name (Title) & Artwork
-            const episodeId = String(id).split(':')[2];
+            const episodeId = typeof parsedId.episode === 'number' ? String(parsedId.episode) : undefined;
             if (episodeId && seasonEpisodes?.length > 0) {
                 const ep = seasonEpisodes.find((e: any) => {
                     const num = e?.episode ?? e?.number ?? e?.episodeNumber;
@@ -417,7 +404,7 @@ export default function PlayerScreen() {
         let cancelled = false;
         setStreamsLoading(true);
 
-        getStreams(type, id)
+        getStreams(type, strictId)
             .then((streams) => {
                 if (!cancelled) setAvailableStreams(streams);
             })
@@ -434,7 +421,7 @@ export default function PlayerScreen() {
         return () => {
             cancelled = true;
         };
-    }, [getStreams, id, type, pendingEpisode]);
+    }, [getStreams, id, strictId, type, pendingEpisode]);
 
     const manifests = useUserStore((state) => state.manifests);
 
@@ -800,11 +787,12 @@ export default function PlayerScreen() {
                                 style={[styles.upNextActionBtn, { backgroundColor: theme.colors.primary, flex: 2 }]}
                                 onPress={() => {
                                     // Trigger next episode flow via Info tab's selection logic
-                                    const nextEpNum = Number(id.toString().split(':')[2]) + 1;
+                                    const currentEp = typeof parsedId.episode === 'number' ? parsedId.episode : null;
+                                    const nextEpNum = currentEp ? currentEp + 1 : 1;
                                     const nextEp = seasonEpisodes.find(e => Number(e.episode) === nextEpNum);
                                     if (nextEp) {
                                         // Use existing onSelectEpisode-like logic
-                                        const videoId = `${baseId}:${activeSeason}:${nextEpNum}`;
+                                        const videoId = makeEpisodeId(baseId, activeSeason, nextEpNum);
                                         setPendingEpisode({
                                             videoId,
                                             season: activeSeason,
@@ -1133,7 +1121,7 @@ export default function PlayerScreen() {
                                 seasonEpisodes={seasonEpisodes}
                                 activeSeason={activeSeason}
                                 onSeasonChange={setActiveSeason}
-                                currentEpisodeId={String(id).split(':')[2]}
+                                currentEpisodeId={typeof parsedId.episode === 'number' ? String(parsedId.episode) : undefined}
                                 onSelectEpisode={(ep) => {
                                     console.log('[Player] Selected episode:', ep);
 
@@ -1141,13 +1129,13 @@ export default function PlayerScreen() {
                                     const episodeNum = Number(ep?.episode ?? ep?.number ?? ep?.episodeNumber);
                                     if (!baseId || !seasonNum || !episodeNum) return;
 
-                                    const videoId = `${baseId}:${seasonNum}:${episodeNum}`;
+                                    const videoId = makeEpisodeId(baseId, seasonNum, episodeNum);
 
                                     // If user taps the currently-playing episode, treat it as a stream switch (no navigation).
-                                    if (videoId === id) {
+                                    if (videoId === strictId) {
                                         setPendingEpisode(null);
                                         setActiveTab('streams');
-                                        loadStreamsFor(type, id);
+                                        loadStreamsFor(type, strictId);
                                         return;
                                     }
 

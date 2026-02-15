@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EnrichmentCache } from '../core/services/EnrichmentCache';
 import { TMDBService } from '../core/services/TMDBService';
+import { toStrictMediaId } from '../core/ids/mediaIds';
 
 export function useTraktEnrichment(item: any, skip: boolean = false) {
     // 1. Stable Key Generation
@@ -62,15 +63,19 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
                 await EnrichmentCache.getOrFetch(newKey, async () => {
 
                     const ids = item.ids || {};
-                    const idToUse = ids.tmdb ? `tmdb:${ids.tmdb}` : ids.imdb;
-
-                    // Fallback to item.id if it looks like a valid ID string
-                    const finalId = idToUse ||
-                        ((typeof item.id === 'string' && (item.id.startsWith('tmdb:') || item.id.startsWith('tt'))) ? item.id : null);
-
-                    if (!finalId) return null;
+                    const candidateId =
+                        ids.tmdb
+                            ? `tmdb:${ids.tmdb}`
+                            : ids.imdb
+                                ? `imdb:${ids.imdb}`
+                                : ids.trakt
+                                    ? `trakt:${ids.trakt}`
+                                    : item.id;
 
                     const type = item.type === 'movie' ? 'movie' : 'series';
+                    const finalId = candidateId ? toStrictMediaId(candidateId, type) : null;
+
+                    if (!finalId) return null;
                     const enrichedMeta = await TMDBService.getEnrichedMeta(finalId, type);
 
                     // Episode Logic

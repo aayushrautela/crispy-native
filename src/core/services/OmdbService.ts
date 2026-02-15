@@ -1,4 +1,5 @@
 import { useUserStore } from '@/src/core/stores/userStore';
+import { toImdbIdForExternalLookup } from '../ids/mediaIds';
 
 export interface OmdbRating {
     Source: string;
@@ -21,10 +22,12 @@ export class OmdbService {
         if (!key || !imdbId) return null;
 
         try {
-            // Strict check: OMDb only supports IMDb IDs (tt...)
-            // If we get "12345" or "tmdb:12345", it's invalid for OMDb lookup
-            const cleanId = imdbId.split(':')[0]; // Remove :1:1 etc
-            if (!cleanId.startsWith('tt')) return null;
+            // OMDb only supports IMDb IDs (tt...). Accept strict ids and episode-suffixed ids.
+            const cleanId =
+                toImdbIdForExternalLookup(imdbId, 'movie') ||
+                toImdbIdForExternalLookup(imdbId, 'series') ||
+                (imdbId.startsWith('tt') ? imdbId : null);
+            if (!cleanId || !cleanId.startsWith('tt')) return null;
 
             const response = await fetch(`https://www.omdbapi.com/?i=${cleanId}&apikey=${key}`);
             if (!response.ok) return null;

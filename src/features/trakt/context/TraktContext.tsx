@@ -1,5 +1,6 @@
 import { useTraktStore } from '@/src/core/stores/traktStore';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { isStrictMediaId, parseAppEpisodeSuffix, toStrictBaseMediaId, toStrictMediaId } from '@/src/core/ids/mediaIds';
 import debounce from 'lodash.debounce';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -34,23 +35,23 @@ interface TraktContextProps {
     loadAllCollections: (force?: boolean) => Promise<void>;
 
     // Status Checks
-    isMovieWatched: (imdbId: string) => boolean;
-    isEpisodeWatched: (imdbId: string, season: number, episode: number) => boolean;
-    isInWatchlist: (imdbId: string, type: 'movie' | 'series') => boolean;
-    isInCollection: (imdbId: string, type: 'movie' | 'series') => boolean;
-    getUserRating: (imdbId: string, type: 'movie' | 'series') => number | null;
-    getWatchState: (imdbId: string, type: 'movie' | 'series') => { state: 'watch' | 'continue' | 'rewatch'; progress?: number; episode?: any };
+    isMovieWatched: (id: string) => boolean;
+    isEpisodeWatched: (showId: string, season: number, episode: number) => boolean;
+    isInWatchlist: (id: string, type: 'movie' | 'series') => boolean;
+    isInCollection: (id: string, type: 'movie' | 'series') => boolean;
+    getUserRating: (id: string, type: 'movie' | 'series') => number | null;
+    getWatchState: (id: string, type: 'movie' | 'series') => { state: 'watch' | 'continue' | 'rewatch'; progress?: number; episode?: any };
 
     // Write Actions
-    markMovieAsWatched: (imdbId: string, watchedAt?: Date) => Promise<boolean>;
-    removeMovieFromHistory: (imdbId: string) => Promise<boolean>;
-    markEpisodeAsWatched: (imdbId: string, season: number, episode: number, watchedAt?: Date) => Promise<boolean>;
-    addToWatchlist: (imdbId: string, type: 'movie' | 'series') => Promise<boolean>;
-    removeFromWatchlist: (imdbId: string, type: 'movie' | 'series') => Promise<boolean>;
-    addToCollection: (imdbId: string, type: 'movie' | 'series') => Promise<boolean>;
-    removeFromCollection: (imdbId: string, type: 'movie' | 'series') => Promise<boolean>;
-    rateContent: (imdbId: string, type: 'movie' | 'series' | 'episode', rating: number) => Promise<boolean>;
-    removeContentRating: (imdbId: string, type: 'movie' | 'series' | 'episode') => Promise<boolean>;
+    markMovieAsWatched: (id: string, watchedAt?: Date) => Promise<boolean>;
+    removeMovieFromHistory: (id: string) => Promise<boolean>;
+    markEpisodeAsWatched: (showId: string, season: number, episode: number, watchedAt?: Date) => Promise<boolean>;
+    addToWatchlist: (id: string, type: 'movie' | 'series') => Promise<boolean>;
+    removeFromWatchlist: (id: string, type: 'movie' | 'series') => Promise<boolean>;
+    addToCollection: (id: string, type: 'movie' | 'series') => Promise<boolean>;
+    removeFromCollection: (id: string, type: 'movie' | 'series') => Promise<boolean>;
+    rateContent: (id: string, type: 'movie' | 'series' | 'episode', rating: number) => Promise<boolean>;
+    removeContentRating: (id: string, type: 'movie' | 'series' | 'episode') => Promise<boolean>;
     
     // Scrobble
     scrobble: (action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) => Promise<any>;
@@ -156,98 +157,71 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
 
 
+    const toStrictKey = useCallback((id: string, typeHint?: 'movie' | 'series'): string | null => {
+        const parsed = parseAppEpisodeSuffix(id);
+        if (isStrictMediaId(parsed.baseId)) return parsed.baseId;
+
+        if (typeHint) {
+            return toStrictBaseMediaId(id, typeHint) || null;
+        }
+        return toStrictBaseMediaId(id, 'movie') || toStrictBaseMediaId(id, 'series');
+    }, []);
+
+    const getItemKey = useCallback((item: any): string | null => {
+        const media = item?.movie || item?.show || item?.episode || item;
+        const candidate = media?.id || item?.id
+            || (media?.ids?.imdb ? `imdb:${media.ids.imdb}` : null)
+            || (media?.ids?.tmdb ? `tmdb:${media.ids.tmdb}` : null)
+            || (media?.ids?.trakt ? `trakt:${media.ids.trakt}` : null)
+            || (item?.ids?.imdb ? `imdb:${item.ids.imdb}` : null)
+            || (item?.ids?.tmdb ? `tmdb:${item.ids.tmdb}` : null)
+            || (item?.ids?.trakt ? `trakt:${item.ids.trakt}` : null);
+
+        if (!candidate) return null;
+        const parsed = parseAppEpisodeSuffix(String(candidate));
+        if (typeof candidate === 'string' && isStrictMediaId(parsed.baseId)) return parsed.baseId;
+        return toStrictBaseMediaId(String(candidate), 'movie') || toStrictBaseMediaId(String(candidate), 'series');
+    }, []);
+
     // --- Status Checks ---
 
-    const isMovieWatched = useCallback((imdbId: string) => {
-        const idStr = String(imdbId);
-        if (storeIsWatched(idStr)) return true;
-        if (storeIsWatched(`imdb:${idStr}`)) return true;
-
-        // Raw Numeric -> Check ALL numeric types
-        if (!isNaN(Number(idStr))) {
-            return storeIsWatched(`tmdb:${idStr}`) || storeIsWatched(`trakt:${idStr}`);
-        }
-        return false;
+    const isMovieWatched = useCallback((id: string) => {
+        return storeIsWatched(id);
     }, [storeIsWatched]);
 
-    const isEpisodeWatched = useCallback((imdbId: string, season: number, episode: number) => {
-        return storeIsEpisodeWatched(imdbId, season, episode);
+    const isEpisodeWatched = useCallback((showId: string, season: number, episode: number) => {
+        return storeIsEpisodeWatched(showId, season, episode);
     }, [storeIsEpisodeWatched]);
 
-    const isInWatchlist = useCallback((id: string | number, type: 'movie' | 'series') => {
-        const idStr = String(id);
-
-        // 1. Exact match (already prefixed)
-        if (storeIsInWatchlist(idStr)) return true;
-
-        // 2. Prefix-based normalization
-        if (idStr.startsWith('tt')) return storeIsInWatchlist(`imdb:${idStr}`);
-        if (idStr.startsWith('tmdb:')) return storeIsInWatchlist(`tmdb:${idStr.replace('tmdb:', '')}`);
-        if (idStr.startsWith('trakt:')) return storeIsInWatchlist(`trakt:${idStr.replace('trakt:', '')}`);
-
-        // 3. Raw Numeric -> Check ALL numeric types
-        if (!isNaN(Number(idStr))) {
-            return storeIsInWatchlist(`tmdb:${idStr}`) || storeIsInWatchlist(`trakt:${idStr}`);
-        }
-
-        // 4. Default Fallback
-        return storeIsInWatchlist(`${type}:${idStr}`);
+    const isInWatchlist = useCallback((id: string, _type: 'movie' | 'series') => {
+        return storeIsInWatchlist(id);
     }, [storeIsInWatchlist]);
 
-    const isInCollection = useCallback((id: string | number, type: 'movie' | 'series') => {
-        const idStr = String(id);
-
-        // 1. Exact match (already prefixed)
-        if (storeIsInCollection(idStr)) return true;
-
-        // 2. Prefix-based normalization
-        if (idStr.startsWith('tt')) return storeIsInCollection(`imdb:${idStr}`);
-        if (idStr.startsWith('tmdb:')) return storeIsInCollection(`tmdb:${idStr.replace('tmdb:', '')}`);
-        if (idStr.startsWith('trakt:')) return storeIsInCollection(`trakt:${idStr.replace('trakt:', '')}`);
-
-        // 3. Raw Numeric -> Check ALL numeric types
-        if (!isNaN(Number(idStr))) {
-            return storeIsInCollection(`tmdb:${idStr}`) || storeIsInCollection(`trakt:${idStr}`);
-        }
-
-        // 4. Default Fallback
-        return storeIsInCollection(`${type}:${idStr}`);
+    const isInCollection = useCallback((id: string, _type: 'movie' | 'series') => {
+        return storeIsInCollection(id);
     }, [storeIsInCollection]);
 
-    const getUserRating = useCallback((id: string | number, type: 'movie' | 'series'): number | null => {
-        const idStr = String(id);
+    const getUserRating = useCallback((id: string, type: 'movie' | 'series'): number | null => {
+        const targetKey = toStrictKey(id, type);
+        if (!targetKey) return null;
+
         const item = ratedContent.find(r => {
             const media = type === 'movie' ? r.movie : r.show;
-            if (!media) return false;
-
-            // Fast Pre-checks
-            if (idStr.startsWith('tt') && media.ids.imdb === idStr) return true;
-            if (idStr.startsWith('tmdb:') && media.ids.tmdb === parseInt(idStr.replace('tmdb:', ''), 10)) return true;
-            if (idStr.startsWith('trakt:') && media.ids.trakt === parseInt(idStr.replace('trakt:', ''), 10)) return true;
-
-            // Raw Check
-            const cleanId = idStr.replace(/^(imdb:|tmdb:|trakt:)/, '');
-            if (media.ids.imdb === cleanId) return true;
-            if (media.ids.tmdb === parseInt(cleanId, 10)) return true;
-            if (media.ids.trakt === parseInt(cleanId, 10)) return true;
-
-            return false;
+            const key = getItemKey(media || r);
+            return !!key && key === targetKey;
         });
-        return item ? Math.round(item.rating / 2) : null; // 10 -> 5 scale
-    }, [ratedContent]);
 
-    const getWatchState = useCallback((id: string | number, type: 'movie' | 'series') => {
-        const idStr = String(id);
-        // 1. Check Continue Watching
+        return item ? Math.round(item.rating / 2) : null; // 10 -> 5 scale
+    }, [getItemKey, ratedContent, toStrictKey]);
+
+    const getWatchState = useCallback((id: string, type: 'movie' | 'series') => {
+        const targetKey = toStrictKey(id, type);
+        if (!targetKey) return { state: 'watch' as const };
+
         const playbackItem = continueWatching.find(item => {
             const media = item.movie || item.show;
-            if (!media) return false;
-
-            if (idStr.startsWith('tt')) return media.ids.imdb === idStr;
-            if (idStr.startsWith('tmdb:')) return media.ids.tmdb === parseInt(idStr.replace('tmdb:', ''), 10);
-            if (idStr.startsWith('trakt:')) return media.ids.trakt === parseInt(idStr.replace('trakt:', ''), 10);
-
-            return media.ids.tmdb === parseInt(idStr, 10) || media.ids.trakt === parseInt(idStr, 10);
+            const key = getItemKey(media || item);
+            return !!key && key === targetKey;
         });
 
         if (playbackItem) {
@@ -258,13 +232,12 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             };
         }
 
-        // 2. Check Watched
-        if (isMovieWatched(idStr)) {
+        if (type === 'movie' && isMovieWatched(targetKey)) {
             return { state: 'rewatch' as const };
         }
 
         return { state: 'watch' as const };
-    }, [continueWatching, isMovieWatched]);
+    }, [continueWatching, getItemKey, isMovieWatched, toStrictKey]);
 
 
     // --- Actions ---
@@ -275,23 +248,24 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
+        const strictBaseId = toStrictKey(id, type);
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for addToWatchlist', { id, type });
+            return false;
+        }
+
         // Optimistic Add
-        const idStr = String(id);
-        const numericId = parseInt(idStr.replace(/^(tmdb:|trakt:|imdb:)/, ''), 10);
         const optimisticItem: any = {
+            id: strictBaseId,
             type: serviceType,
             movie: type === 'movie' ? {
-                ids: {
-                    imdb: idStr.startsWith('tt') ? idStr : undefined,
-                    tmdb: !isNaN(numericId) ? numericId : undefined
-                },
+                id: strictBaseId,
+                ids: {},
                 title: ''
             } : undefined,
             show: type === 'series' ? {
-                ids: {
-                    imdb: idStr.startsWith('tt') ? idStr : undefined,
-                    tmdb: !isNaN(numericId) ? numericId : undefined
-                },
+                id: strictBaseId,
+                ids: {},
                 title: ''
             } : undefined,
             listed_at: new Date().toISOString()
@@ -299,7 +273,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         setWatchlist([...watchlist, optimisticItem]);
 
-        const success = await TraktService.addToWatchlist(id, serviceType);
+        const success = await TraktService.addToWatchlist(strictBaseId, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -308,30 +282,22 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             setWatchlist(watchlist); // Reset to previous state handled by closure
             return false;
         }
-    }, [isAuthenticated, debouncedSync, watchlist, setWatchlist]);
+    }, [isAuthenticated, debouncedSync, setWatchlist, toStrictKey, watchlist]);
 
     const removeFromWatchlist = useCallback(async (id: string, type: 'movie' | 'series') => {
         const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
+        const strictBaseId = toStrictKey(id, type);
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for removeFromWatchlist', { id, type });
+            return false;
+        }
+
         // Optimistic Remove
-        const idStr = String(id);
-        setWatchlist(watchlist.filter(i => {
-            const media = i.movie || i.show;
-            if (!media) return false;
+        setWatchlist(watchlist.filter(i => getItemKey(i) !== strictBaseId));
 
-            if (idStr.startsWith('tt')) return media.ids.imdb !== idStr;
-            if (idStr.startsWith('tmdb:')) return media.ids.tmdb !== parseInt(idStr.replace('tmdb:', ''), 10);
-            if (idStr.startsWith('trakt:')) return media.ids.trakt !== parseInt(idStr.replace('trakt:', ''), 10);
-
-            // Raw check
-            const cleanId = idStr.replace(/^(imdb:)/, '');
-            if (media.ids.imdb === cleanId) return true; // keep if not match, so return false if match
-            if (media.ids.tmdb === parseInt(cleanId, 10)) return false;
-            return true;
-        }));
-
-        const success = await TraktService.removeFromWatchlist(id, serviceType);
+        const success = await TraktService.removeFromWatchlist(strictBaseId, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -340,29 +306,30 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             debouncedSync();
             return false;
         }
-    }, [isAuthenticated, debouncedSync, watchlist, setWatchlist]);
+    }, [getItemKey, isAuthenticated, debouncedSync, setWatchlist, toStrictKey, watchlist]);
 
     const addToCollection = useCallback(async (id: string, type: 'movie' | 'series') => {
         const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
+        const strictBaseId = toStrictKey(id, type);
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for addToCollection', { id, type });
+            return false;
+        }
+
         // Optimistic Add
-        const idStr = String(id);
-        const numericId = parseInt(idStr.replace(/^(tmdb:|trakt:|imdb:)/, ''), 10);
         const optimisticItem: any = {
+            id: strictBaseId,
             type: serviceType,
             movie: type === 'movie' ? {
-                ids: {
-                    imdb: idStr.startsWith('tt') ? idStr : undefined,
-                    tmdb: !isNaN(numericId) ? numericId : undefined
-                },
+                id: strictBaseId,
+                ids: {},
                 title: ''
             } : undefined,
             show: type === 'series' ? {
-                ids: {
-                    imdb: idStr.startsWith('tt') ? idStr : undefined,
-                    tmdb: !isNaN(numericId) ? numericId : undefined
-                },
+                id: strictBaseId,
+                ids: {},
                 title: ''
             } : undefined,
             collected_at: new Date().toISOString()
@@ -370,7 +337,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         setCollection([...collection, optimisticItem]);
 
-        const success = await TraktService.addToCollection(id, serviceType);
+        const success = await TraktService.addToCollection(strictBaseId, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -378,28 +345,22 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             setCollection(collection);
             return false;
         }
-    }, [isAuthenticated, debouncedSync, collection, setCollection]);
+    }, [isAuthenticated, debouncedSync, collection, setCollection, toStrictKey]);
 
     const removeFromCollection = useCallback(async (id: string, type: 'movie' | 'series') => {
         const serviceType = type === 'series' ? 'show' : 'movie';
         if (!isAuthenticated) return false;
 
+        const strictBaseId = toStrictKey(id, type);
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for removeFromCollection', { id, type });
+            return false;
+        }
+
         // Optimistic Remove
-        const idStr = String(id);
-        setCollection(collection.filter(i => {
-            const media = i.movie || i.show;
-            if (!media) return false;
+        setCollection(collection.filter(i => getItemKey(i) !== strictBaseId));
 
-            if (idStr.startsWith('tt')) return media.ids.imdb !== idStr;
-            if (idStr.startsWith('tmdb:')) return media.ids.tmdb !== parseInt(idStr.replace('tmdb:', ''), 10);
-
-            const cleanId = idStr.replace(/^(imdb:)/, '');
-            if (media.ids.imdb === cleanId) return true; // keep if not match
-            if (media.ids.tmdb === parseInt(cleanId, 10)) return false;
-            return true;
-        }));
-
-        const success = await TraktService.removeFromCollection(id, serviceType);
+        const success = await TraktService.removeFromCollection(strictBaseId, serviceType);
         if (success) {
             debouncedSync();
             return true;
@@ -407,7 +368,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
             debouncedSync();
             return false;
         }
-    }, [isAuthenticated, debouncedSync, collection, setCollection]);
+    }, [collection, debouncedSync, getItemKey, isAuthenticated, setCollection, toStrictKey]);
 
     const rateContent = useCallback(async (id: string, type: 'movie' | 'series' | 'episode', rating: number) => {
         if (!isAuthenticated) return false;
@@ -415,55 +376,63 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         const serviceType = type === 'series' ? 'show' : type;
         const traktRating = rating * 2; // 5 -> 10 scale
 
+        const strictId = type === 'episode'
+            ? toStrictMediaId(id, 'series')
+            : toStrictKey(id, type);
+
+        if (!strictId) {
+            console.warn('[TraktContext] Invalid id for rateContent', { id, type });
+            return false;
+        }
+
         // Optimistic Update
         const optimisticItem: TraktRatingItem = {
             rating: traktRating,
             rated_at: new Date().toISOString(),
             type: serviceType,
             // Minimal optimistic object
-            movie: type === 'movie' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
-            show: type === 'series' ? { ids: { imdb: id } as any, title: '' } as any : undefined,
+            movie: type === 'movie' ? { id: strictId, ids: {}, title: '' } as any : undefined,
+            show: type === 'series' ? { id: strictId, ids: {}, title: '' } as any : undefined,
         };
 
-        const newContent = ratedContent.filter(r => {
-            const media = type === 'movie' ? r.movie : r.show;
-            if (!media) return true;
-            if (id.startsWith('tt')) return media.ids.imdb !== id;
-            return media.ids.tmdb !== parseInt(id, 10);
-        });
+        const newContent = ratedContent.filter(r => getItemKey((type === 'movie' ? r.movie : r.show) || r) !== strictId);
         
         setRatedContent([...newContent, optimisticItem]);
 
-        const success = await TraktService.addRating(id, serviceType, rating);
+        const success = await TraktService.addRating(strictId, serviceType, rating);
         if (success) {
             debouncedSync();
             return true;
         } else {
             return false;
         }
-    }, [isAuthenticated, debouncedSync, ratedContent, setRatedContent]);
+    }, [debouncedSync, getItemKey, isAuthenticated, ratedContent, setRatedContent, toStrictKey]);
 
     const removeContentRating = useCallback(async (id: string, type: 'movie' | 'series' | 'episode') => {
         if (!isAuthenticated) return false;
 
         const serviceType = type === 'series' ? 'show' : type;
 
-        const newContent = ratedContent.filter(r => {
-            const media = type === 'movie' ? r.movie : r.show;
-            if (!media) return true;
-            if (id.startsWith('tt')) return media.ids.imdb !== id;
-            return media.ids.tmdb !== parseInt(id, 10);
-        });
+        const strictId = type === 'episode'
+            ? toStrictMediaId(id, 'series')
+            : toStrictKey(id, type);
+
+        if (!strictId) {
+            console.warn('[TraktContext] Invalid id for removeContentRating', { id, type });
+            return false;
+        }
+
+        const newContent = ratedContent.filter(r => getItemKey((type === 'movie' ? r.movie : r.show) || r) !== strictId);
         setRatedContent(newContent);
 
-        const success = await TraktService.removeRating(id, serviceType);
+        const success = await TraktService.removeRating(strictId, serviceType);
         if (success) {
             debouncedSync();
             return true;
         } else {
             return false;
         }
-    }, [isAuthenticated, debouncedSync, ratedContent, setRatedContent]);
+    }, [debouncedSync, getItemKey, isAuthenticated, ratedContent, setRatedContent, toStrictKey]);
 
     const scrobble = useCallback(async (action: 'start' | 'pause' | 'stop', id: string, type: 'movie' | 'series', progress: number, season?: number, episode?: number) => {
         if (!isAuthenticated) return null;
@@ -473,16 +442,19 @@ export function TraktProvider({ children }: { children: ReactNode }) {
     const markMovieAsWatched = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;
 
+        const strictBaseId = toStrictKey(id, 'movie');
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for markMovieAsWatched', { id });
+            return false;
+        }
+
         // Optimistic Add
-        const idStr = String(id);
-        const numericId = parseInt(idStr.replace(/^(tmdb:|trakt:|imdb:)/, ''), 10);
         const optimisticItem: any = {
+            id: strictBaseId,
             type: 'movie',
             movie: {
-                ids: {
-                    imdb: idStr.startsWith('tt') ? idStr : undefined,
-                    tmdb: !isNaN(numericId) ? numericId : undefined
-                },
+                id: strictBaseId,
+                ids: {},
                 title: ''
             },
             watched_at: new Date().toISOString()
@@ -491,7 +463,7 @@ export function TraktProvider({ children }: { children: ReactNode }) {
         const previousHistory = watchedHistory;
         setWatchedHistory([...previousHistory, optimisticItem]);
 
-        const success = await TraktService.addToHistory(id, 'movie');
+        const success = await TraktService.addToHistory(strictBaseId, 'movie');
         if (success) {
             debouncedSync();
             return true;
@@ -499,22 +471,42 @@ export function TraktProvider({ children }: { children: ReactNode }) {
 
         setWatchedHistory(previousHistory);
         return false;
-    }, [isAuthenticated, debouncedSync, setWatchedHistory, watchedHistory]);
+    }, [isAuthenticated, debouncedSync, setWatchedHistory, toStrictKey, watchedHistory]);
 
     const removeMovieFromHistory = useCallback(async (id: string) => {
         if (!isAuthenticated) return false;
 
-        const success = await TraktService.removeFromHistory(id, 'movie');
+        const strictBaseId = toStrictKey(id, 'movie');
+        if (!strictBaseId) {
+            console.warn('[TraktContext] Invalid id for removeMovieFromHistory', { id });
+            return false;
+        }
+
+        const success = await TraktService.removeFromHistory(strictBaseId, 'movie');
         if (success) {
             debouncedSync();
             return true;
         } else {
             return false;
         }
-    }, [isAuthenticated, debouncedSync]);
+    }, [isAuthenticated, debouncedSync, toStrictKey]);
 
-    // Placeholder
-    const markEpisodeAsWatched = useCallback(async () => false, []);
+    const markEpisodeAsWatched = useCallback(async (showId: string, season: number, episode: number) => {
+        if (!isAuthenticated) return false;
+
+        const strictShowId = toStrictKey(showId, 'series');
+        if (!strictShowId) {
+            console.warn('[TraktContext] Invalid show id for markEpisodeAsWatched', { showId, season, episode });
+            return false;
+        }
+
+        const success = await TraktService.addEpisodeToHistory(strictShowId, season, episode);
+        if (success) {
+            debouncedSync();
+            return true;
+        }
+        return false;
+    }, [debouncedSync, isAuthenticated, toStrictKey]);
 
     const contextValue = useMemo(() => ({
         isAuthenticated,

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { StorageService } from '../storage';
+import { toStrictBaseMediaId } from '../ids/mediaIds';
 import {
     normalizeTmdbDetails,
     resolveTmdbId,
@@ -118,7 +119,19 @@ export class TMDBService {
         if (!stremioId) return {};
         const idStr = String(stremioId);
 
-        const cacheKey = `${idStr}_${type}`;
+        const mediaType = normalizeMediaType(type);
+        if (!mediaType) {
+            console.warn('[TMDBService] Unsupported media type:', type);
+            return {};
+        }
+
+        const strictBaseId = toStrictBaseMediaId(idStr, mediaType);
+        if (!strictBaseId) {
+            console.warn('[TMDBService] Unable to coerce strict id:', idStr);
+            return {};
+        }
+
+        const cacheKey = `${strictBaseId}_${mediaType}`;
         if (metaCache[cacheKey]) return metaCache[cacheKey];
 
         // 0. Check Persistent Cache
@@ -135,17 +148,11 @@ export class TMDBService {
                 return {};
             }
 
-            const mediaType = normalizeMediaType(type);
-            if (!mediaType) {
-                console.warn('[TMDBService] Unsupported media type:', type);
-                return {};
-            }
-
             const findPath = mediaType === 'movie' ? 'movie' : 'tv';
-            const resolved = await resolveTmdbId(idStr, mediaType, { apiKey: API_KEY });
+            const resolved = await resolveTmdbId(strictBaseId, mediaType, { apiKey: API_KEY });
             const foundTmdbId = resolved.tmdbId;
 
-            console.log(`[TMDBService] Enriching ${idStr} (${type})`);
+            console.log(`[TMDBService] Enriching ${strictBaseId} (${mediaType})`);
 
             if (!foundTmdbId) {
                 console.warn('[TMDBService] Unable to resolve TMDB id:', idStr);
@@ -259,7 +266,7 @@ export class TMDBService {
                         name: colRes.data.name,
                         backdrop: colRes.data.backdrop_path ? `${IMAGE_BASE}/w780${colRes.data.backdrop_path}` : null,
                         parts: colRes.data.parts.filter((p: any) => p.poster_path).map((p: any) => ({
-                            id: p.id, // Note: This is TMDB ID, might need resolution if clicking
+                            id: `tmdb:movie:${p.id}`,
                             name: p.title,
                             poster: `${IMAGE_BASE}/w500${p.poster_path}`,
                             year: (p.release_date || '').split('-')[0],
@@ -281,12 +288,12 @@ export class TMDBService {
             };
 
             const enriched: Partial<TMDBMeta> = {
-                id: idStr,
+                id: strictBaseId,
                 tmdbId: core.ids.tmdb || Number(foundTmdbId),
                 imdbId: core.ids.imdb || resolved.imdbId || data.external_ids?.imdb_id || (data.imdb_id),
                 type: mediaType,
             };
-            console.log(`[TMDBService] Resolved meta for ${idStr}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);
+            console.log(`[TMDBService] Resolved meta for ${strictBaseId}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);
 
             Object.assign(enriched, {
                 title: core.title || data.title || data.name,
@@ -345,14 +352,20 @@ export class TMDBService {
                     airDate: s.air_date,
                     poster: s.poster_path ? `${IMAGE_BASE}/w500${s.poster_path}` : null,
                 })) || [],
-                similar: data.recommendations?.results?.slice(0, 10).map((r: any) => ({
-                    id: r.id.toString(),
-                    name: r.title || r.name,
-                    poster: r.poster_path ? `${IMAGE_BASE}/w500${r.poster_path}` : null,
-                    year: (r.release_date || r.first_air_date || '').split('-')[0],
-                    type: r.media_type || (findPath === 'movie' ? 'movie' : 'series'),
-                    tmdbId: r.id,
-                })) || [],
+                similar: data.recommendations?.results?.slice(0, 10).map((r: any) => {
+                    const itemType = r.media_type === 'tv'
+                        ? 'series'
+                        : (r.media_type === 'movie' ? 'movie' : (findPath === 'movie' ? 'movie' : 'series'));
+                    const strictId = itemType === 'series' ? `tmdb:show:${r.id}` : `tmdb:movie:${r.id}`;
+                    return {
+                        id: strictId,
+                        name: r.title || r.name,
+                        poster: r.poster_path ? `${IMAGE_BASE}/w500${r.poster_path}` : null,
+                        year: (r.release_date || r.first_air_date || '').split('-')[0],
+                        type: itemType,
+                        tmdbId: r.id,
+                    };
+                }) || [],
                 videos: data.videos?.results || [],
             });
 
@@ -410,7 +423,7 @@ export class TMDBService {
             return res.data.results
                 .filter((r: any) => r.poster_path)
                 .map((r: any) => ({
-                    id: `tmdb:${r.id}`,
+                    id: type === 'series' ? `tmdb:show:${r.id}` : `tmdb:movie:${r.id}`,
                     tmdbId: r.id,
                     name: r.title || r.name,
                     poster: `${IMAGE_BASE}/w500${r.poster_path}`,
@@ -456,17 +469,17 @@ export class TMDBService {
                             }
                         });
                         return Array.from(unique.values())
-                            .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
-                            .map((c: any) => ({
-                                id: c.id.toString(),
-                                tmdbId: c.id,
-                                name: c.title || c.name,
-                                poster: c.poster_path ? `${IMAGE_BASE}/w500${c.poster_path}` : null,
-                                year: (c.release_date || c.first_air_date || '').split('-')[0],
-                                type: c.media_type === 'tv' ? 'series' : 'movie',
-                                rating: c.vote_average?.toFixed(1) || '0.0',
-                            }));
-                    })(),
+                             .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
+                             .map((c: any) => ({
+                                 id: c.media_type === 'tv' ? `tmdb:show:${c.id}` : `tmdb:movie:${c.id}`,
+                                 tmdbId: c.id,
+                                 name: c.title || c.name,
+                                 poster: c.poster_path ? `${IMAGE_BASE}/w500${c.poster_path}` : null,
+                                 year: (c.release_date || c.first_air_date || '').split('-')[0],
+                                 type: c.media_type === 'tv' ? 'series' : 'movie',
+                                 rating: c.vote_average?.toFixed(1) || '0.0',
+                             }));
+                     })(),
                     crew: data.combined_credits?.crew || [],
                 }
             };

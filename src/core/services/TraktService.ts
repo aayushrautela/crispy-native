@@ -9,6 +9,7 @@ import {
     parseEpisodeIdSuffix,
     tryBuildTraktRatingPayloadFromId,
     tryBuildTraktSyncPayloadFromId,
+    coerceProviderRef,
 } from '@crispy-streaming/media-core';
 
 // Storage keys - persisted in active profile scope
@@ -800,10 +801,30 @@ export class TraktService {
         return this.apiRequest('/sync/history', 'POST', payload);
     }
 
+    public async addEpisodeToHistory(showId: string, season: number, episode: number) {
+        const episodeId = `${showId}:${season}:${episode}`;
+        const payload = tryBuildTraktSyncPayloadFromId('episode', episodeId);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for addEpisodeToHistory', { showId, season, episode });
+            return null;
+        }
+        return this.apiRequest('/sync/history', 'POST', payload);
+    }
+
     public async removeFromHistory(id: string, type: 'movie' | 'show') {
         const payload = tryBuildTraktSyncPayloadFromId(type, id);
         if (!payload) {
             console.warn('[TraktService] Invalid IDs for removeFromHistory', { id, type });
+            return null;
+        }
+        return this.apiRequest('/sync/history/remove', 'POST', payload);
+    }
+
+    public async removeEpisodeFromHistory(showId: string, season: number, episode: number) {
+        const episodeId = `${showId}:${season}:${episode}`;
+        const payload = tryBuildTraktSyncPayloadFromId('episode', episodeId);
+        if (!payload) {
+            console.warn('[TraktService] Invalid IDs for removeEpisodeFromHistory', { showId, season, episode });
             return null;
         }
         return this.apiRequest('/sync/history/remove', 'POST', payload);
@@ -865,48 +886,68 @@ export class TraktService {
 
     // --- Comments & Social (Ported from WebUI) ---
 
+    /**
+     * Extracts IMDb ID from strict or loose IDs.
+     * Returns null if no valid IMDb ID can be extracted.
+     */
+    private extractImdbId(id: string): string | null {
+        if (!id) return null;
+        
+        // If it's already a clean tt... ID
+        if (id.startsWith('tt')) return id;
+        
+        // Try to coerce as a movie/show ID to extract IMDb
+        const ref = coerceProviderRef(id, 'movie') || coerceProviderRef(id, 'show');
+        if (ref && ref.provider === 'imdb') {
+            return ref.id;
+        }
+        
+        return null;
+    }
+
     // Unified getComments to satisfy useTraktComments hook expectation
     public async getComments(type: 'movie' | 'show' | 'episode', id: string, options: { page?: number, limit?: number, season?: number, episode?: number } = {}) {
         if (!this.isAuthenticated()) return [];
-        const cleanId = id.replace('imdb:', '');
+        const imdbId = this.extractImdbId(id);
+        if (!imdbId) {
+            console.warn('[TraktService] Cannot get comments - no valid IMDb ID found in:', id);
+            return [];
+        }
         const { page = 1, limit = 10 } = options;
 
         if (type === 'movie') {
-            return this.getMovieComments(cleanId, page, limit);
+            return this.getMovieComments(imdbId, page, limit);
         } else if (type === 'show') {
-            return this.getShowComments(cleanId, page, limit);
+            return this.getShowComments(imdbId, page, limit);
         }
         return [];
     }
 
-    public async getMovieComments(id: string, page: number = 1, limit: number = 10) {
-        const imdbId = id.replace('imdb:', '');
+    public async getMovieComments(imdbId: string, page: number = 1, limit: number = 10) {
+        // imdbId should already be clean (tt...)
         return this.apiRequest<any[]>(`/movies/${imdbId}/comments/likes?page=${page}&limit=${limit}`);
     }
 
-    public async getShowComments(id: string, page: number = 1, limit: number = 10) {
-        const imdbId = id.replace('imdb:', '');
+    public async getShowComments(imdbId: string, page: number = 1, limit: number = 10) {
+        // imdbId should already be clean (tt...)
         return this.apiRequest<any[]>(`/shows/${imdbId}/comments/likes?page=${page}&limit=${limit}`);
     }
 
     public async getTraktIdFromImdbId(id: string, type: 'movie' | 'show'): Promise<string | number | null> {
         if (!id) return null;
 
-        if (typeof id === 'string' && id.startsWith('trakt:')) {
-            return parseInt(id.replace('trakt:', ''), 10);
+        // Extract IMDb ID using strict coercion
+        const imdbId = this.extractImdbId(id);
+        if (!imdbId) {
+            console.warn('[TraktService] Cannot get Trakt ID - no valid IMDb ID found in:', id);
+            return null;
         }
 
-        const imdbId = id.toString().replace('imdb:', '');
-        if (imdbId.startsWith('tt')) {
-            const data = await this.apiRequest<any[]>(`/search/imdb/${imdbId}?type=${type}`);
-            if (data && data.length > 0) {
-                const traktId = data[0][type]?.ids?.trakt;
-                return traktId;
-            }
+        const data = await this.apiRequest<any[]>(`/search/imdb/${imdbId}?type=${type}`);
+        if (data && data.length > 0) {
+            const traktId = data[0][type]?.ids?.trakt;
+            return traktId;
         }
-
-        // If numeric, assume it's already a Trakt ID
-        if (!isNaN(Number(imdbId))) return Number(imdbId);
 
         return null;
     }
@@ -1000,5 +1041,13 @@ export class TraktService {
 
     public static async removeFromHistory(id: string, type: 'movie' | 'show') {
         return this.getInstance().removeFromHistory(id, type);
+    }
+
+    public static async addEpisodeToHistory(showId: string, season: number, episode: number) {
+        return this.getInstance().addEpisodeToHistory(showId, season, episode);
+    }
+
+    public static async removeEpisodeFromHistory(showId: string, season: number, episode: number) {
+        return this.getInstance().removeEpisodeFromHistory(showId, season, episode);
     }
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { StorageService } from '../storage';
+import { isStrictMediaId, makeEpisodeId, parseAppEpisodeSuffix, toStrictBaseMediaId, toStrictMediaId } from '../ids/mediaIds';
 
 export interface TraktStoreState {
     // raw data
@@ -44,9 +45,33 @@ const buildIds = (items: any[]): Set<string> => {
     items.forEach(item => {
         const media = item.movie || item.show || item.episode || item;
         const metaIds = media.ids || item.ids || {};
-        if (metaIds.imdb) ids.add(`imdb:${metaIds.imdb}`);
-        if (metaIds.tmdb) ids.add(`tmdb:${metaIds.tmdb}`);
-        if (metaIds.trakt) ids.add(`trakt:${metaIds.trakt}`);
+
+        // Prefer canonical strict id when present.
+        if (typeof media.id === 'string' && isStrictMediaId(media.id)) {
+            ids.add(media.id);
+            return;
+        }
+        if (typeof item.id === 'string' && isStrictMediaId(item.id)) {
+            ids.add(item.id);
+            return;
+        }
+
+        const mediaType = media.type || item.type;
+        const appType = mediaType === 'show' || mediaType === 'series' ? 'series' : 'movie';
+
+        const candidate =
+            metaIds.imdb
+                ? `imdb:${metaIds.imdb}`
+                : metaIds.tmdb
+                    ? `tmdb:${metaIds.tmdb}`
+                    : metaIds.trakt
+                        ? `trakt:${metaIds.trakt}`
+                        : media.id;
+
+        if (candidate) {
+            const strict = toStrictMediaId(candidate, appType);
+            if (strict) ids.add(toStrictBaseMediaId(strict, appType) || strict);
+        }
     });
     return ids;
 };
@@ -55,11 +80,17 @@ const buildEpisodeIds = (shows: any[]): Set<string> => {
     const ids = new Set<string>();
     shows.forEach(show => {
         const showMeta = show.show || {};
-        const showId = showMeta.ids?.imdb;
+        const candidateShowId =
+            showMeta.id ||
+            (showMeta.ids?.imdb ? `imdb:${showMeta.ids.imdb}` : null) ||
+            (showMeta.ids?.tmdb ? `tmdb:${showMeta.ids.tmdb}` : null) ||
+            (showMeta.ids?.trakt ? `trakt:${showMeta.ids.trakt}` : null);
+
+        const showId = candidateShowId ? toStrictBaseMediaId(candidateShowId, 'series') : null;
         if (showId && show.seasons) {
             show.seasons.forEach((season: any) => {
                 season.episodes?.forEach((ep: any) => {
-                    ids.add(`${showId}:${season.number}:${ep.number}`);
+                    ids.add(makeEpisodeId(showId, season.number, ep.number));
                 });
             });
         }
@@ -111,10 +142,36 @@ export const useTraktStore = create<TraktStoreState>((set, get) => ({
     },
     setIsLoading: (isLoading) => set({ isLoading }),
 
-    isInWatchlist: (id) => id ? get().watchlistIds.has(id) : false,
-    isInCollection: (id) => id ? get().collectionIds.has(id) : false,
-    isWatched: (id) => id ? get().watchedIds.has(id) : false,
-    isEpisodeWatched: (showId, season, episode) => get().watchedEpisodeIds.has(`${showId}:${season}:${episode}`),
+    isInWatchlist: (id) => {
+        if (!id) return false;
+        const parsed = parseAppEpisodeSuffix(id);
+        const key = isStrictMediaId(parsed.baseId)
+            ? parsed.baseId
+            : toStrictBaseMediaId(id, 'movie') || toStrictBaseMediaId(id, 'series');
+        return key ? get().watchlistIds.has(key) : false;
+    },
+    isInCollection: (id) => {
+        if (!id) return false;
+        const parsed = parseAppEpisodeSuffix(id);
+        const key = isStrictMediaId(parsed.baseId)
+            ? parsed.baseId
+            : toStrictBaseMediaId(id, 'movie') || toStrictBaseMediaId(id, 'series');
+        return key ? get().collectionIds.has(key) : false;
+    },
+    isWatched: (id) => {
+        if (!id) return false;
+        const parsed = parseAppEpisodeSuffix(id);
+        const key = isStrictMediaId(parsed.baseId)
+            ? parsed.baseId
+            : toStrictBaseMediaId(id, 'movie') || toStrictBaseMediaId(id, 'series');
+        return key ? get().watchedIds.has(key) : false;
+    },
+    isEpisodeWatched: (showId, season, episode) => {
+        const parsed = parseAppEpisodeSuffix(showId);
+        const key = isStrictMediaId(parsed.baseId) ? parsed.baseId : toStrictBaseMediaId(showId, 'series');
+        if (!key) return false;
+        return get().watchedEpisodeIds.has(makeEpisodeId(key, season, episode));
+    },
 
     hydrate: () => {
         const watchlist = StorageService.getProfile<any[]>('trakt-watchlist') || [];
