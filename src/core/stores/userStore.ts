@@ -390,7 +390,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         },
 
         reloadFromStorage: () => {
-            console.log('[UserStore] 🔄 Reloading from storage (Context Switch)...');
+            console.log('[UserStore] Reloading from storage (Context Switch)...');
             const addons = loadInitialAddons();
 
             set({
@@ -407,7 +407,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         },
 
         resetToDefaults: () => {
-            console.log('[UserStore] ⚠️ Factory Reset / Logout Wipe');
+            console.log('[UserStore] Factory Reset / Logout Wipe');
             const defaults = getDefaultAddons();
             set({
                 settings: getDefaultSettings(),
