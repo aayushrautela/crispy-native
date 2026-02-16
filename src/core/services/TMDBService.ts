@@ -1,18 +1,82 @@
-import axios from 'axios';
+import { TMDB } from 'tmdb-ts';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { StorageService } from '../storage';
-import { toStrictBaseMediaId } from '../ids/mediaIds';
+import { toImdbIdForExternalLookup, toStrictBaseMediaId } from '../ids/mediaIds';
 import {
     normalizeTmdbDetails,
-    resolveTmdbId,
     normalizeMediaType,
     type MediaType,
     type TMDBDetail,
     type TMDBImagesResponse,
 } from '@crispy-streaming/media-core';
 
-const API_KEY = process.env.EXPO_PUBLIC_TMDB_API_KEY;
-const BASE_URL = 'https://api.themoviedb.org/3';
+const ENV_ACCESS_TOKEN = process.env.EXPO_PUBLIC_TMDB_ACCESS_TOKEN;
 const IMAGE_BASE = 'https://image.tmdb.org/t/p';
+const APPEND_MOVIE = ['credits', 'release_dates', 'recommendations', 'similar', 'external_ids', 'videos', 'reviews', 'keywords'];
+const APPEND_TV = ['credits', 'content_ratings', 'recommendations', 'similar', 'external_ids', 'videos', 'reviews', 'keywords'];
+const INCLUDE_IMAGE_LANGUAGE = ['en', 'null', 'fr', 'de', 'es', 'it', 'ja', 'ko', 'zh'];
+
+let tmdbClient: TMDB | null = null;
+let tmdbClientToken = '';
+
+interface TmdbErrorLike {
+    status_code?: number;
+    status_message?: string;
+    message?: string;
+}
+
+function normalizeToken(value: string | null | undefined): string {
+    if (!value) return '';
+    return value.replace(/^Bearer\s+/i, '').trim();
+}
+
+function getTmdbAccessToken(): string {
+    const fromSettings = normalizeToken(useUserStore.getState().settings.tmdbAccessToken);
+    if (fromSettings) return fromSettings;
+    return normalizeToken(ENV_ACCESS_TOKEN);
+}
+
+function getTmdbClient(): TMDB | null {
+    const token = getTmdbAccessToken();
+    if (!token) return null;
+    if (!tmdbClient || tmdbClientToken !== token) {
+        tmdbClient = new TMDB(token);
+        tmdbClientToken = token;
+    }
+    return tmdbClient;
+}
+
+function parseTmdbIdFromAnyId(id: string): number | null {
+    const parts = id.split(':');
+    if (parts[0] !== 'tmdb') return null;
+    const raw = parts[parts.length - 1];
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+async function resolveTmdbIdFromToken(strictBaseId: string, mediaType: MediaType, tmdb: TMDB): Promise<{ tmdbId: number | null; imdbId?: string }> {
+    const fromTmdbStrict = parseTmdbIdFromAnyId(strictBaseId);
+    if (fromTmdbStrict) return { tmdbId: fromTmdbStrict };
+
+    const imdbId =
+        toImdbIdForExternalLookup(strictBaseId, mediaType) ||
+        (strictBaseId.startsWith('tt') ? strictBaseId : null);
+    if (!imdbId) return { tmdbId: null };
+
+    const found = await tmdb.find.byExternalId(imdbId, { external_source: 'imdb_id' });
+    const result = mediaType === 'movie' ? found.movie_results?.[0] : found.tv_results?.[0];
+    return { tmdbId: result?.id || null, imdbId };
+}
+
+function getErrorMessage(error: unknown): string {
+    const maybe = error as TmdbErrorLike;
+    if (maybe?.status_message) {
+        return maybe.status_code ? `${maybe.status_code}: ${maybe.status_message}` : maybe.status_message;
+    }
+    if (maybe?.message) return maybe.message;
+    return String(error);
+}
 
 export interface TMDBCast {
     id: number;
@@ -143,35 +207,33 @@ export class TMDBService {
         }
 
         try {
-            if (!API_KEY) {
-                console.warn('[TMDBService] Missing EXPO_PUBLIC_TMDB_API_KEY');
+            const tmdb = getTmdbClient();
+            if (!tmdb) {
+                console.warn('[TMDBService] Missing TMDB access token (set in Metadata settings or EXPO_PUBLIC_TMDB_ACCESS_TOKEN)');
                 return {};
             }
 
-            const findPath = mediaType === 'movie' ? 'movie' : 'tv';
-            const resolved = await resolveTmdbId(strictBaseId, mediaType, { apiKey: API_KEY });
+            const isMovie = mediaType === 'movie';
+            const resolved = await resolveTmdbIdFromToken(strictBaseId, mediaType, tmdb);
             const foundTmdbId = resolved.tmdbId;
-
-            console.log(`[TMDBService] Enriching ${strictBaseId} (${mediaType})`);
 
             if (!foundTmdbId) {
                 console.warn('[TMDBService] Unable to resolve TMDB id:', idStr);
                 return {};
             }
 
-            // 2. Get Full Details & Credits & content_ratings/release_dates & Similar & External IDs & Reviews & Keywords
-            const appendToResponse = findPath === 'movie' ? 'credits,release_dates,recommendations,similar,external_ids,videos,reviews,keywords' : 'credits,content_ratings,recommendations,similar,external_ids,videos,reviews,keywords';
-            const detailUrl = `${BASE_URL}/${findPath}/${foundTmdbId}?api_key=${API_KEY}&language=en&append_to_response=${appendToResponse}`;
-            const detailRes = await axios.get(detailUrl);
-            const data = detailRes.data;
-
-            console.log(`[TMDBService] Fetch URL: ${detailUrl}`);
-            console.log(`[TMDBService] Has videos?`, !!data.videos, 'Count:', data.videos?.results?.length);
+            // 2. Get full details with append_to_response
+            const data: any =
+                isMovie
+                    ? await tmdb.movies.details(foundTmdbId, APPEND_MOVIE as any, 'en-US')
+                    : await tmdb.tvShows.details(foundTmdbId, APPEND_TV as any, 'en-US');
 
             // Fallback metadata if overview is missing (WebUI parity)
             if (!data.overview) {
-                const fallbackRes = await axios.get(`${BASE_URL}/${findPath}/${foundTmdbId}?api_key=${API_KEY}&language=en`);
-                const fallbackData = fallbackRes.data;
+                const fallbackData: any =
+                    isMovie
+                        ? await tmdb.movies.details(foundTmdbId, undefined, 'en-US')
+                        : await tmdb.tvShows.details(foundTmdbId, undefined, 'en-US');
                 if (fallbackData.overview) data.overview = fallbackData.overview;
                 if (!data.title && !data.name && (fallbackData.title || fallbackData.name)) {
                     data.title = fallbackData.title;
@@ -186,11 +248,12 @@ export class TMDBService {
             let allPosters: string[] = [];
             let imagesData: TMDBImagesResponse | undefined;
             try {
-                // Fetch images with a broader language filter to ensure we get a gallery (Nuvio-style)
-                const imagesUrl = `${BASE_URL}/${findPath}/${foundTmdbId}/images?api_key=${API_KEY}&include_image_language=en,null,fr,de,es,it,ja,ko,zh`;
-                const imagesRes = await axios.get(imagesUrl);
-                imagesData = imagesRes.data as TMDBImagesResponse;
-                const logos = imagesRes.data.logos || [];
+                imagesData = (
+                    mediaType === 'movie'
+                        ? await tmdb.movies.images(foundTmdbId, { include_image_language: INCLUDE_IMAGE_LANGUAGE })
+                        : await tmdb.tvShows.images(foundTmdbId, { include_image_language: INCLUDE_IMAGE_LANGUAGE })
+                ) as TMDBImagesResponse;
+                const logos = imagesData.logos || [];
 
                 if (logos.length > 0) {
                     // Selection Priority: English SVG > English PNG > Any English > Any SVG > Any PNG > First Available
@@ -203,24 +266,24 @@ export class TMDBService {
                     logo = (enSvg || enPng || enAny || anySvg || anyPng || logos[0]).file_path;
                 }
 
-                const backdrops = imagesRes.data.backdrops || [];
-                console.log(`[TMDBService] Found ${backdrops.length} backdrops for ${data.title || data.name}`);
+                const backdrops = imagesData.backdrops || [];
                 if (backdrops.length > 0) {
                     backdropFallback = backdrops[0].file_path;
                     allBackdrops = backdrops.map((b: any) => `${IMAGE_BASE}/w780${b.file_path}`);
-                    console.log(`[TMDBService] Backdrop URLs (first 3):`, allBackdrops.slice(0, 3));
                 }
 
-                const posters = imagesRes.data.posters || [];
+                const posters = imagesData.posters || [];
                 if (posters.length > 0) {
                     allPosters = posters.map((p: any) => `${IMAGE_BASE}/w500${p.file_path}`);
                 }
-            } catch (e) { }
+            } catch (e) {
+                console.warn('[TMDBService] Failed to fetch images:', getErrorMessage(e));
+            }
 
             // Fallback for Logo: Use Network/Studio logo if main logo is missing (Nuvio-style major brands fallback)
             if (!logo) {
                 const majorBrands = ['netflix', 'amazon', 'warner bros', 'apple tv', 'paramount', 'hbo', 'hulu', 'disney', 'marvel', 'star wars', 'dc comics'];
-                if (findPath === 'tv') {
+                if (!isMovie) {
                     const brandNetwork = data.networks?.find((n: any) =>
                         majorBrands.some(brand => n.name.toLowerCase().includes(brand))
                     ) || data.networks?.[0];
@@ -238,7 +301,6 @@ export class TMDBService {
             const maturityRating = core.certification;
             const director = core.director || data.credits?.crew?.find((c: any) => c.job === 'Director')?.name;
 
-            // Map Cast (with original sizing/path logic if preferred, keeping existing for now as it's fine)
             const cast: TMDBCast[] = data.credits?.cast?.slice(0, 10).map((c: any) => ({
                 id: c.id,
                 name: c.name,
@@ -260,40 +322,39 @@ export class TMDBService {
             let collection: TMDBCollection | undefined;
             if (data.belongs_to_collection) {
                 try {
-                    const colRes = await axios.get(`${BASE_URL}/collection/${data.belongs_to_collection.id}?api_key=${API_KEY}`);
+                    const colRes: any = await tmdb.collections.details(data.belongs_to_collection.id, { language: 'en-US' });
                     collection = {
-                        id: colRes.data.id,
-                        name: colRes.data.name,
-                        backdrop: colRes.data.backdrop_path ? `${IMAGE_BASE}/w780${colRes.data.backdrop_path}` : null,
-                        parts: colRes.data.parts.filter((p: any) => p.poster_path).map((p: any) => ({
+                        id: colRes.id,
+                        name: colRes.name,
+                        backdrop: colRes.backdrop_path ? `${IMAGE_BASE}/w780${colRes.backdrop_path}` : null,
+                        parts: (colRes.parts || []).filter((p: any) => p.poster_path).map((p: any) => ({
                             id: `tmdb:movie:${p.id}`,
                             name: p.title,
                             poster: `${IMAGE_BASE}/w500${p.poster_path}`,
                             year: (p.release_date || '').split('-')[0],
                             type: 'movie',
                             tmdbId: p.id,
-                        }))
+                        })),
                     };
-                } catch (e) { console.warn('Failed to fetch collection', e); }
+                } catch (e) {
+                    console.warn('[TMDBService] Failed to fetch collection:', getErrorMessage(e));
+                }
             }
 
             // AI Insights
-            const keywords = (data.keywords?.keywords || data.keywords?.results || []).map((k: any) => k.name).slice(0, 5);
             const aiInsights = {
-                keywords,
-                tagline: data.tagline || "",
-                tone: data.vote_average > 8 ? "Critically Acclaimed Masterpiece" : (data.vote_average > 6 ? "Solid Entertainment" : "Polarizing"),
+                tagline: data.tagline || '',
+                tone: data.vote_average > 8 ? 'Critically Acclaimed Masterpiece' : (data.vote_average > 6 ? 'Solid Entertainment' : 'Polarizing'),
                 studio: data.production_companies?.[0]?.name || data.networks?.[0]?.name,
-                homepage: data.homepage
+                homepage: data.homepage,
             };
 
             const enriched: Partial<TMDBMeta> = {
                 id: strictBaseId,
                 tmdbId: core.ids.tmdb || Number(foundTmdbId),
                 imdbId: core.ids.imdb || resolved.imdbId || data.external_ids?.imdb_id || (data.imdb_id),
-                type: mediaType,
+                type: mediaType === 'series' ? 'series' : 'movie',
             };
-            console.log(`[TMDBService] Resolved meta for ${strictBaseId}: tmdbId=${enriched.tmdbId}, imdbId=${enriched.imdbId}, type=${enriched.type}`);
 
             Object.assign(enriched, {
                 title: core.title || data.title || data.name,
@@ -352,10 +413,10 @@ export class TMDBService {
                     airDate: s.air_date,
                     poster: s.poster_path ? `${IMAGE_BASE}/w500${s.poster_path}` : null,
                 })) || [],
-                similar: data.recommendations?.results?.slice(0, 10).map((r: any) => {
+                similar: (data.recommendations?.results || data.similar?.results || []).slice(0, 10).map((r: any) => {
                     const itemType = r.media_type === 'tv'
                         ? 'series'
-                        : (r.media_type === 'movie' ? 'movie' : (findPath === 'movie' ? 'movie' : 'series'));
+                        : (r.media_type === 'movie' ? 'movie' : (isMovie ? 'movie' : 'series'));
                     const strictId = itemType === 'series' ? `tmdb:show:${r.id}` : `tmdb:movie:${r.id}`;
                     return {
                         id: strictId,
@@ -373,16 +434,17 @@ export class TMDBService {
             StorageService.setGlobal(persistentKey, enriched);
             return enriched;
         } catch (e) {
-            console.error('[TMDBService] Failed to enrich:', stremioId, e);
+            console.error('[TMDBService] Failed to enrich:', stremioId, getErrorMessage(e));
             return {};
         }
     }
 
     static async getSeasonEpisodes(tmdbId: number, seasonNumber: number): Promise<any[]> {
         try {
-            const url = `${BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?api_key=${API_KEY}`;
-            const res = await axios.get(url);
-            return res.data.episodes.map((e: any) => ({
+            const tmdb = getTmdbClient();
+            if (!tmdb) return [];
+            const season: any = await tmdb.tvShows.season(tmdbId, seasonNumber);
+            return (season.episodes || []).map((e: any) => ({
                 episode: e.episode_number,
                 name: e.name,
                 overview: e.overview,
@@ -391,15 +453,20 @@ export class TMDBService {
                 runtime: e.runtime ? `${e.runtime}m` : null,
             }));
         } catch (e) {
+            console.warn('[TMDBService] Failed to fetch season episodes:', getErrorMessage(e));
             return [];
         }
     }
 
     static async getEpisodeDetails(tmdbId: number, seasonNumber: number, episodeNumber: number): Promise<any | null> {
         try {
-            const url = `${BASE_URL}/tv/${tmdbId}/season/${seasonNumber}/episode/${episodeNumber}?api_key=${API_KEY}`;
-            const res = await axios.get(url);
-            const e = res.data;
+            const tmdb = getTmdbClient();
+            if (!tmdb) return null;
+            const e: any = await tmdb.tvEpisode.details({
+                tvShowID: tmdbId,
+                seasonNumber,
+                episodeNumber,
+            });
             return {
                 episode: e.episode_number,
                 name: e.name,
@@ -409,18 +476,20 @@ export class TMDBService {
                 runtime: e.runtime ? `${e.runtime}m` : null,
             };
         } catch (e) {
-            console.error('[TMDBService] Failed to fetch episode details:', e);
+            console.error('[TMDBService] Failed to fetch episode details:', getErrorMessage(e));
             return null;
         }
     }
 
     static async search(type: 'movie' | 'series', query: string, page = 1): Promise<any[]> {
         try {
-            const tmdbType = type === 'series' ? 'tv' : 'movie';
-            const url = `${BASE_URL}/search/${tmdbType}?api_key=${API_KEY}&query=${encodeURIComponent(query)}&page=${page}&include_adult=false`;
-            const res = await axios.get(url);
+            const tmdb = getTmdbClient();
+            if (!tmdb || !query.trim()) return [];
+            const result = type === 'series'
+                ? await tmdb.search.tvShows({ query, page, include_adult: false, language: 'en-US' })
+                : await tmdb.search.movies({ query, page, include_adult: false, language: 'en-US' });
 
-            return res.data.results
+            return (result.results || [])
                 .filter((r: any) => r.poster_path)
                 .map((r: any) => ({
                     id: type === 'series' ? `tmdb:show:${r.id}` : `tmdb:movie:${r.id}`,
@@ -434,16 +503,16 @@ export class TMDBService {
                     popularity: r.popularity
                 }));
         } catch (e) {
-            console.error('[TMDBService] Search failed:', e);
+            console.error('[TMDBService] Search failed:', getErrorMessage(e));
             return [];
         }
     }
 
     static async getPersonDetails(personId: number): Promise<TMDBPerson | null> {
         try {
-            const url = `${BASE_URL}/person/${personId}?api_key=${API_KEY}&append_to_response=combined_credits,external_ids`;
-            const res = await axios.get(url);
-            const data = res.data;
+            const tmdb = getTmdbClient();
+            if (!tmdb) return null;
+            const data: any = await tmdb.people.details(personId, ['combined_credits', 'external_ids'] as any, 'en-US');
 
             return {
                 id: data.id,
@@ -484,7 +553,7 @@ export class TMDBService {
                 }
             };
         } catch (e) {
-            console.error('[TMDBService] Failed to fetch person details:', personId, e);
+            console.error('[TMDBService] Failed to fetch person details:', personId, getErrorMessage(e));
             return null;
         }
     }

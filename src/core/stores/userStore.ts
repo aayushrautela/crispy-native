@@ -8,7 +8,7 @@ import type { CrispyDecoderMode, CrispyGpuMode } from '@/modules/crispy-native-c
 // --- Interfaces ---
 
 export interface AppSettings {
-    tmdbKey: string;
+    tmdbAccessToken: string;
     omdbKey: string;
     addonSearchEnabled: boolean;
     autoplayEnabled: boolean;
@@ -95,7 +95,9 @@ export interface UserState {
 
 function getDefaultSettings(): AppSettings {
     return {
-        tmdbKey: StorageService.getProfile<string>('crispy-tmdb-key') || '',
+        tmdbAccessToken:
+            StorageService.getProfile<string>('crispy-tmdb-access-token') ||
+            '',
         omdbKey: StorageService.getProfile<string>('crispy-omdb-key') || '',
         addonSearchEnabled: StorageService.getProfile<boolean>('crispy-addon-search-enabled') || false,
         autoplayEnabled: StorageService.getProfile<boolean>('crispy-autoplay-enabled') || false,
@@ -186,7 +188,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
 
     // Persist ALL settings fields
     const keys: (keyof AppSettings)[] = [
-        'introSkipMode', 'mobileNavbarStyle', 'omdbKey', 'tmdbKey',
+        'introSkipMode', 'mobileNavbarStyle', 'omdbKey', 'tmdbAccessToken',
         'openRouterKey', 'aiInsightsMode', 'aiModelType', 'aiCustomModelName',
         'accentColor', 'amoledMode', 'useMaterialYou', 'videoPlayerEngine',
         'decoderMode', 'gpuMode',
@@ -204,7 +206,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
                 'introSkipMode': 'crispy-intro-skip-mode',
                 'mobileNavbarStyle': 'crispy-mobile-navbar-style',
                 'omdbKey': 'crispy-omdb-key',
-                'tmdbKey': 'crispy-tmdb-key',
+                'tmdbAccessToken': 'crispy-tmdb-access-token',
                 'openRouterKey': 'crispy-openrouter-key',
                 'aiInsightsMode': 'crispy-ai-insights-mode',
                 'aiModelType': 'crispy-ai-model-type',

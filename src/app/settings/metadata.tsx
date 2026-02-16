@@ -9,7 +9,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 export default function MetadataScreen() {
     const { theme } = useTheme();
-    const tmdbKey = useUserStore((state) => state.settings.tmdbKey);
+    const tmdbAccessToken = useUserStore((state) => state.settings.tmdbAccessToken);
     const omdbKey = useUserStore((state) => state.settings.omdbKey);
     const updateSettings = useUserStore((state) => state.updateSettings);
 
@@ -19,15 +19,15 @@ export default function MetadataScreen() {
                 <SettingsGroup title="TMDB API">
                     <SettingsItem
                         icon={Key}
-                        label="API Key"
-                        description="Personal key for fetching movie/show details"
+                        label="Read Access Token"
+                        description="TMDB bearer token for metadata requests"
                         showChevron={false}
                     />
                     <View style={styles.inputContainer}>
                         <TextInput
-                            value={tmdbKey}
-                            onChangeText={(text) => updateSettings({ tmdbKey: text })}
-                            placeholder="e.g. 1a2b3c4d5e..."
+                            value={tmdbAccessToken}
+                            onChangeText={(text) => updateSettings({ tmdbAccessToken: text })}
+                            placeholder="Paste TMDB API Read Access Token"
                             placeholderTextColor={theme.colors.onSurfaceVariant + '80'}
                             style={[styles.input, { backgroundColor: theme.colors.surfaceContainerHighest, color: theme.colors.onSurface }]}
                         />
