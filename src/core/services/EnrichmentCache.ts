@@ -1,4 +1,5 @@
 import { MetaPreview } from './AddonService';
+import { isStrictMediaId, toStrictMediaId } from '../ids/mediaIds';
 
 /**
  * A lightweight, in-memory LRU-like cache for enriched metadata.
@@ -17,17 +18,33 @@ class EnrichmentCacheService {
     public getKey(item: any): string | null {
         if (!item) return null;
 
-        // If it's already a full MetaPreview with a unique ID, use that
-        if (item.id && typeof item.id === 'string' && item.id.includes(':')) {
+        // Prefer strict typed ids for collision-free caching.
+        if (item.id && typeof item.id === 'string' && isStrictMediaId(item.id)) {
             return item.id;
+        }
+
+        // If we have a legacy id + type, coerce to a strict typed key.
+        if (item.id && (item.type || item.mediaType)) {
+            const strict = toStrictMediaId(item.id, String(item.type || item.mediaType));
+            if (strict) return strict;
         }
 
         const ids = item.ids || item.movie?.ids || item.show?.ids;
         if (!ids) return item.id ? String(item.id) : null;
 
-        if (ids.tmdb) return `tmdb:${ids.tmdb}`;
-        if (ids.imdb) return `imdb:${ids.imdb}`;
-        if (ids.trakt) return `trakt:${ids.trakt}`;
+        const type = item.type || item.mediaType || item.movie?.type || item.show?.type;
+        if (ids.tmdb) {
+            const strict = toStrictMediaId(`tmdb:${ids.tmdb}`, String(type || 'movie'));
+            if (strict) return strict;
+        }
+        if (ids.imdb) {
+            const strict = toStrictMediaId(`imdb:${ids.imdb}`, String(type || 'movie'));
+            if (strict) return strict;
+        }
+        if (ids.trakt) {
+            const strict = toStrictMediaId(`trakt:${ids.trakt}`, String(type || 'movie'));
+            if (strict) return strict;
+        }
 
         return null;
     }

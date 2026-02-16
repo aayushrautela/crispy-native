@@ -2,6 +2,7 @@ import { useResponsive } from '@/src/core/hooks/useResponsive';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { ThemeOverrideProvider, useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
+import { SectionHeader } from '@/src/core/ui/SectionHeader';
 import { RatingModal } from '@/src/core/ui/RatingModal';
 import { Typography } from '@/src/core/ui/Typography';
 import { hexToRgba } from '@/src/core/utils/colors';
@@ -20,6 +21,7 @@ import { StreamSelector } from '@/src/features/player/components/StreamSelector'
 import { useStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
+import { makeEpisodeId, toImdbIdForExternalLookup, toStrictBaseMediaId } from '@/src/core/ids/mediaIds';
 import { createMaterial3Theme } from '@pchmn/expo-material3-theme';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
@@ -70,8 +72,20 @@ export default function MetaDetailsScreen() {
     const [pendingSheetOpen, setPendingSheetOpen] = useState(false);
     const [isStreamSheetVisible, setStreamSheetVisible] = useState(false);
 
+    // Normalize route ID to strict format early to prevent cache collisions
+    const routeStrictBaseId = useMemo(() => {
+        const candidate = id as string;
+        // Try both types since route type can be wrong/unknown during initial render
+        return toStrictBaseMediaId(candidate, 'movie') || toStrictBaseMediaId(candidate, 'series');
+    }, [id]);
+
     // Core Data Aggregator
-    const { meta, enriched, seasonEpisodes, isLoading, error, colorExtraction } = useMetaAggregator(id as string, type as string, activeSeason);
+    // Use normalized strict ID to prevent cache collisions and ensure consistent TMDB resolution
+    const { meta, enriched, seasonEpisodes, isLoading, error, colorExtraction } = useMetaAggregator(
+        routeStrictBaseId || (id as string),
+        type as string,
+        activeSeason
+    );
 
     const streamBottomSheetRef = React.useRef<BottomSheetRef>(null);
     const scrollY = useSharedValue(0);
@@ -90,9 +104,23 @@ export default function MetaDetailsScreen() {
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
 
+    const strictBaseId = useMemo(() => {
+        const candidate = (enriched?.id as string | undefined) || routeStrictBaseId || (id as string);
+        // Try both since route type can be wrong/unknown during initial render.
+        return toStrictBaseMediaId(candidate, 'movie') || toStrictBaseMediaId(candidate, 'series');
+    }, [enriched?.id, routeStrictBaseId, id]);
+
+    const externalImdbId = useMemo(() => {
+        if (enriched?.imdbId && typeof enriched.imdbId === 'string' && enriched.imdbId.startsWith('tt')) {
+            return enriched.imdbId;
+        }
+        if (!strictBaseId) return null;
+        return toImdbIdForExternalLookup(strictBaseId, isSeries ? 'series' : 'movie');
+    }, [enriched?.imdbId, isSeries, strictBaseId]);
+
     // 1. Lifted Watch State
     const watchState = useTraktWatchState(
-        (enriched.imdbId || id) as string,
+        (strictBaseId || (id as string)) as string,
         // useTraktWatchState implementation uses loose string check, 'series' is fine or 'show'
         isSeries ? 'show' : 'movie'
     );
@@ -111,20 +139,21 @@ export default function MetaDetailsScreen() {
 
     // Stream Pre-fetching
     const preFetchId = useMemo(() => {
-        const baseId = enriched.imdbId || id as string;
+        const baseId = strictBaseId;
+        if (!baseId) return '';
         if (isSeries) {
             // Priority: Continue Watching Episode
             if (watchState.state === 'continue' && watchState.episode) {
-                return `${baseId}:${watchState.episode.season}:${watchState.episode.number}`;
+                return makeEpisodeId(baseId, watchState.episode.season, watchState.episode.number);
             }
             // Fallback: Episode 1 of active season
             // This ensures "Watch Now" (which defaults to S{Active}:E1) has data ready
-            return `${baseId}:${activeSeason}:1`;
+            return makeEpisodeId(baseId, activeSeason, 1);
         }
         return baseId;
-    }, [enriched.imdbId, id, isSeries, activeSeason, watchState.state, watchState.episode]);
+    }, [activeSeason, isSeries, strictBaseId, watchState.episode, watchState.state]);
 
-    useStreams(isSeries ? 'series' : 'movie', preFetchId, true);
+    useStreams(isSeries ? 'series' : 'movie', preFetchId, !!preFetchId);
 
     // Trakt Logic
     const {
@@ -151,54 +180,53 @@ export default function MetaDetailsScreen() {
     // Computed states
     const isListed = useMemo(() => {
         if (!meta) return false;
-        const baseId = enriched.imdbId || id as string;
-        // Legacy: Context interface expects 'series' but implementation expects 'show'
-        const traktType = (isSeries ? 'show' : 'movie') as any;
-        return isInWatchlist(baseId, traktType);
-    }, [meta, enriched.imdbId, id, isSeries, isInWatchlist]);
+        if (!strictBaseId) return false;
+        const traktType = isSeries ? 'series' : 'movie';
+        return isInWatchlist(strictBaseId, traktType);
+    }, [isInWatchlist, isSeries, meta, strictBaseId]);
 
     const isWatched = useMemo(() => {
         if (!meta || isSeries) return false;
-        const baseId = enriched.imdbId || id as string;
-        return isMovieWatched(baseId);
-    }, [meta, enriched.imdbId, id, isSeries, isMovieWatched]);
+        if (!strictBaseId) return false;
+        return isMovieWatched(strictBaseId);
+    }, [isMovieWatched, isSeries, meta, strictBaseId]);
 
     const userRating = useMemo(() => {
         if (!meta) return null;
-        const baseId = enriched.imdbId || id as string;
-        const traktType = (isSeries ? 'show' : 'movie') as any;
-        return getUserRating(baseId, traktType);
-    }, [meta, enriched.imdbId, id, isSeries, getUserRating]);
+        if (!strictBaseId) return null;
+        const traktType = isSeries ? 'series' : 'movie';
+        return getUserRating(strictBaseId, traktType);
+    }, [getUserRating, isSeries, meta, strictBaseId]);
 
     const isCollected = useMemo(() => {
         if (!meta) return false;
-        const baseId = enriched.imdbId || id as string;
-        const traktType = (isSeries ? 'show' : 'movie') as any;
-        return isInCollection(baseId, traktType);
-    }, [meta, enriched.imdbId, id, isSeries, isInCollection]);
+        if (!strictBaseId) return false;
+        const traktType = isSeries ? 'series' : 'movie';
+        return isInCollection(strictBaseId, traktType);
+    }, [isInCollection, isSeries, meta, strictBaseId]);
 
     const handleWatchlistToggle = useCallback(async () => {
         if (!isAuthenticated) return;
-        const baseId = enriched.imdbId || id as string;
-        const traktType = (isSeries ? 'show' : 'movie') as any;
-        if (isListed) await removeFromWatchlist(baseId, traktType);
-        else await addToWatchlist(baseId, traktType);
-    }, [isAuthenticated, enriched.imdbId, id, isSeries, isListed, removeFromWatchlist, addToWatchlist]);
+        if (!strictBaseId) return;
+        const traktType = isSeries ? 'series' : 'movie';
+        if (isListed) await removeFromWatchlist(strictBaseId, traktType);
+        else await addToWatchlist(strictBaseId, traktType);
+    }, [addToWatchlist, isAuthenticated, isListed, isSeries, removeFromWatchlist, strictBaseId]);
 
     const handleCollectionToggle = useCallback(async () => {
         if (!isAuthenticated) return;
-        const baseId = enriched.imdbId || id as string;
-        const traktType = (isSeries ? 'show' : 'movie') as any;
-        if (isCollected) await removeFromCollection(baseId, traktType);
-        else await addToCollection(baseId, traktType);
-    }, [isAuthenticated, enriched.imdbId, id, isSeries, isCollected, removeFromCollection, addToCollection]);
+        if (!strictBaseId) return;
+        const traktType = isSeries ? 'series' : 'movie';
+        if (isCollected) await removeFromCollection(strictBaseId, traktType);
+        else await addToCollection(strictBaseId, traktType);
+    }, [addToCollection, isAuthenticated, isCollected, isSeries, removeFromCollection, strictBaseId]);
 
     const handleWatchedToggle = useCallback(async () => {
         if (!isAuthenticated || isSeries) return;
-        const baseId = enriched.imdbId || id as string;
-        if (isWatched) await removeMovieFromHistory(baseId);
-        else await markMovieAsWatched(baseId);
-    }, [isAuthenticated, isSeries, enriched.imdbId, id, isWatched, removeMovieFromHistory, markMovieAsWatched]);
+        if (!strictBaseId) return;
+        if (isWatched) await removeMovieFromHistory(strictBaseId);
+        else await markMovieAsWatched(strictBaseId);
+    }, [isAuthenticated, isSeries, isWatched, markMovieAsWatched, removeMovieFromHistory, strictBaseId]);
 
     // AI Hooks
     const { loadFromCache, generateInsights, insights, isLoading: isAiLoading, error: aiError } = useAiInsights();
@@ -285,8 +313,11 @@ export default function MetaDetailsScreen() {
 
     const handleStreamSelect = useCallback((stream: any) => {
         streamBottomSheetRef.current?.dismiss();
-        const baseId = enriched.imdbId || id as string;
-        const streamId = isSeries && selectedEpisode ? `${baseId}:${activeSeason}:${selectedEpisode.episode}` : baseId;
+        const baseId = strictBaseId;
+        if (!baseId) return;
+        const streamId = isSeries && selectedEpisode
+            ? makeEpisodeId(baseId, activeSeason, selectedEpisode.episode)
+            : baseId;
 
         const params: any = {
             id: streamId,
@@ -313,11 +344,11 @@ export default function MetaDetailsScreen() {
         }
 
         router.push({ pathname: '/player', params });
-    }, [enriched.imdbId, id, isSeries, selectedEpisode, activeSeason, enriched?.title, meta?.name, availableStreams, router]);
+    }, [activeSeason, availableStreams, enriched?.title, isSeries, meta?.name, router, selectedEpisode, strictBaseId]);
 
     const handleShare = useCallback(async () => {
-        const baseId = enriched.imdbId || id as string;
-        const url = `https://www.imdb.com/title/${baseId}/`;
+        if (!externalImdbId) return;
+        const url = `https://www.imdb.com/title/${externalImdbId}/`;
         try {
             await Share.share({
                 message: `Check out ${enriched.title || meta?.name} on IMDb: ${url}`,
@@ -327,7 +358,7 @@ export default function MetaDetailsScreen() {
         } catch (error) {
             console.error(error);
         }
-    }, [enriched.imdbId, id, enriched.title, meta?.name]);
+    }, [enriched.title, externalImdbId, meta?.name]);
 
     // Sub-component Callbacks
     const handleWatchPress = useCallback(() => {
@@ -369,8 +400,9 @@ export default function MetaDetailsScreen() {
     }, [pendingSheetOpen, selectedEpisode]);
 
     const handleIsEpisodeWatched = useCallback((epNum: number) => {
-        return isEpisodeWatched((enriched.imdbId || id) as string, activeSeason, epNum);
-    }, [isEpisodeWatched, enriched.imdbId, id, activeSeason]);
+        if (!strictBaseId) return false;
+        return isEpisodeWatched(strictBaseId, activeSeason, epNum);
+    }, [activeSeason, isEpisodeWatched, strictBaseId]);
 
     const seasons = useMemo(() => {
         if (enriched?.seasons && enriched.seasons.length > 0) {
@@ -614,14 +646,12 @@ export default function MetaDetailsScreen() {
                         title={enriched.title || meta?.name}
                         initialRating={userRating !== null && userRating !== undefined ? userRating * 2 : null}
                         onRate={(r) => {
-                            const baseId = enriched.imdbId || id as string;
-                            const traktType = (isSeries ? 'show' : 'movie') as any;
-                            rateContent(baseId, traktType, r);
+                            if (!strictBaseId) return;
+                            rateContent(strictBaseId, isSeries ? 'series' : 'movie', r);
                         }}
                         onRemoveRating={() => {
-                            const baseId = enriched.imdbId || id as string;
-                            const traktType = (isSeries ? 'show' : 'movie') as any;
-                            removeContentRating(baseId, traktType);
+                            if (!strictBaseId) return;
+                            removeContentRating(strictBaseId, isSeries ? 'series' : 'movie');
                         }}
                     />
 
@@ -642,7 +672,7 @@ export default function MetaDetailsScreen() {
 
                         <View style={{ marginHorizontal: -20 }}>
                             <CommentsSection
-                                id={(enriched.imdbId || id) as string}
+                                id={externalImdbId || undefined}
                                 type={isSeries ? 'show' : 'movie'}
                             />
                         </View>
@@ -673,40 +703,24 @@ export default function MetaDetailsScreen() {
                         )}
 
                         {detailsRows.length > 0 && (
-                            <View
-                                style={[
-                                    styles.metaDetailsSection,
-                                    {
-                                        backgroundColor: (scopedTheme.colors as any).surfaceContainerLow || scopedTheme.colors.surfaceVariant,
-                                        borderColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
-                                    },
-                                ]}
-                            >
-                                <Typography variant="label" weight="black" style={[styles.metaDetailsHeader, { color: scopedTheme.colors.onSurfaceVariant }]}>
-                                    {isSeries ? 'SHOW DETAILS' : 'MOVIE DETAILS'}
-                                </Typography>
-
-                                {detailsRows.map((row, index) => (
-                                    <View
-                                        key={`${row.label}-${index}`}
-                                        style={[
-                                            styles.metaDetailsRow,
-                                            index > 0
-                                                ? {
-                                                    borderTopWidth: StyleSheet.hairlineWidth,
-                                                    borderTopColor: scopedTheme.colors.outlineVariant || scopedTheme.colors.outline,
-                                                }
-                                                : null,
-                                        ]}
-                                    >
-                                        <Typography variant="label" weight="black" style={[styles.metaDetailsLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>
-                                            {row.label}
-                                        </Typography>
-                                        <Typography variant="label" weight="bold" style={[styles.metaDetailsValue, { color: scopedTheme.colors.onSurface }]}>
-                                            {row.value}
-                                        </Typography>
-                                    </View>
-                                ))}
+                            <View style={{ marginTop: 24, marginHorizontal: -20 }}>
+                                <SectionHeader
+                                    title={isSeries ? 'Show Details' : 'Movie Details'}
+                                    hideAction
+                                    style={{ paddingHorizontal: 20 }}
+                                />
+                                <View style={styles.metaDetailsList}>
+                                    {detailsRows.map((row, index) => (
+                                        <View key={`${row.label}-${index}`} style={styles.metaDetailsRow}>
+                                            <Typography variant="label" weight="black" style={[styles.metaDetailsLabel, { color: scopedTheme.colors.onSurfaceVariant }]}>
+                                                {row.label}
+                                            </Typography>
+                                            <Typography variant="label" weight="bold" style={[styles.metaDetailsValue, { color: scopedTheme.colors.onSurface }]}>
+                                                {row.value}
+                                            </Typography>
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
                         )}
                     </View>
@@ -726,7 +740,11 @@ export default function MetaDetailsScreen() {
             >
                 <StreamSelector
                     type={isSeries ? 'series' : 'movie'}
-                    id={isSeries && selectedEpisode ? `${enriched.imdbId || id}:${activeSeason}:${selectedEpisode.episode}` : (enriched.imdbId || id) as string}
+                    id={(() => {
+                        if (!strictBaseId) return '';
+                        if (isSeries && selectedEpisode) return makeEpisodeId(strictBaseId, activeSeason, selectedEpisode.episode);
+                        return strictBaseId;
+                    })()}
                     onSelect={handleStreamSelect}
                     hideHeader
                     onStreamsLoaded={setAvailableStreams}
@@ -772,31 +790,20 @@ const styles = StyleSheet.create({
     colorSwatch: { width: 56, height: 28, borderRadius: 8, marginBottom: 6 },
     body: { flex: 1 },
     subLabel: { opacity: 0.7, fontSize: 10 },
-    metaDetailsSection: {
-        marginTop: 24,
-        borderRadius: 16,
-        borderWidth: 1,
-        overflow: 'hidden',
-    },
-    metaDetailsHeader: {
-        paddingHorizontal: 14,
-        paddingTop: 14,
-        paddingBottom: 10,
-        fontSize: 10,
-        opacity: 0.8,
+    metaDetailsList: {
+        paddingHorizontal: 20,
+        marginTop: 12,
     },
     metaDetailsRow: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
         justifyContent: 'space-between',
-        gap: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
+        alignItems: 'flex-start',
+        paddingVertical: 6,
     },
     metaDetailsLabel: {
         fontSize: 10,
-        opacity: 0.8,
-        minWidth: 110,
+        opacity: 0.7,
+        minWidth: 100,
     },
     metaDetailsValue: {
         flex: 1,

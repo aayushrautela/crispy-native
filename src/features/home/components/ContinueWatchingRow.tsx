@@ -113,7 +113,7 @@ const SKELETON_DATA = [...Array(4)];
 
 const styles = StyleSheet.create({
     container: {
-        paddingVertical: 8,
+        paddingVertical: 2,
     },
     scrollContent: {
         paddingHorizontal: 24,

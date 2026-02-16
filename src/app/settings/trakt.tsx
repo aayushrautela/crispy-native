@@ -1,6 +1,7 @@
 import { CheckCircle2, Copy, ExternalLink, Globe, Layout, RefreshCw, XCircle } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Alert, Clipboard, Linking, StyleSheet, View } from 'react-native';
+import { Alert, Linking, StyleSheet, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { TraktDeviceCodeResponse } from '../../core/services/trakt-types';
 import { TraktService } from '../../core/services/TraktService';
 import { useUserStore } from '../../core/stores/userStore';

@@ -3,11 +3,12 @@ import { getStoredLanguage, setStoredLanguage } from '../languages';
 import { AddonService } from '../services/AddonService';
 import { StorageService } from '../storage';
 import { AddonManifest } from '../types/addon-types';
+import type { CrispyDecoderMode, CrispyGpuMode } from '@/modules/crispy-native-core';
 
 // --- Interfaces ---
 
 export interface AppSettings {
-    tmdbKey: string;
+    tmdbAccessToken: string;
     omdbKey: string;
     addonSearchEnabled: boolean;
     autoplayEnabled: boolean;
@@ -31,6 +32,10 @@ export interface AppSettings {
     useMaterialYou: boolean;
     // Playback engine preference. "auto" starts with ExoPlayer and falls back to VLC when needed.
     videoPlayerEngine: 'auto' | 'vlc';
+
+    // VLC (Android) tuning
+    decoderMode?: CrispyDecoderMode;
+    gpuMode?: CrispyGpuMode;
     updatedAt?: number;
 }
 
@@ -38,6 +43,18 @@ function normalizeVideoPlayerEngine(value: unknown): AppSettings['videoPlayerEng
     const engine = typeof value === 'string' ? value.toLowerCase() : '';
     // Legacy values: treat explicit Exo selection as Auto.
     return engine === 'vlc' ? 'vlc' : 'auto';
+}
+
+function normalizeDecoderMode(value: unknown): CrispyDecoderMode {
+    const mode = typeof value === 'string' ? value.toLowerCase() : '';
+    if (mode === 'sw' || mode === 'hw' || mode === 'hw+' || mode === 'auto') return mode as CrispyDecoderMode;
+    return 'auto';
+}
+
+function normalizeGpuMode(value: unknown): CrispyGpuMode {
+    const mode = typeof value === 'string' ? value.toLowerCase() : '';
+    if (mode === 'gpu' || mode === 'gpu-next') return mode as CrispyGpuMode;
+    return 'gpu';
 }
 
 function sanitizeSettingsPatch(updates: Partial<AppSettings>): Partial<AppSettings> {
@@ -78,7 +95,9 @@ export interface UserState {
 
 function getDefaultSettings(): AppSettings {
     return {
-        tmdbKey: StorageService.getProfile<string>('crispy-tmdb-key') || '',
+        tmdbAccessToken:
+            StorageService.getProfile<string>('crispy-tmdb-access-token') ||
+            '',
         omdbKey: StorageService.getProfile<string>('crispy-omdb-key') || '',
         addonSearchEnabled: StorageService.getProfile<boolean>('crispy-addon-search-enabled') || false,
         autoplayEnabled: StorageService.getProfile<boolean>('crispy-autoplay-enabled') || false,
@@ -101,6 +120,9 @@ function getDefaultSettings(): AppSettings {
         amoledMode: !!StorageService.getProfile<boolean>('crispy-amoled-mode'),
         useMaterialYou: StorageService.getProfile<boolean>('crispy-material-you') ?? true,
         videoPlayerEngine: normalizeVideoPlayerEngine(StorageService.getProfile<string>('crispy-video-engine')),
+
+        decoderMode: normalizeDecoderMode(StorageService.getProfile<string>('crispy-decoder-mode')),
+        gpuMode: normalizeGpuMode(StorageService.getProfile<string>('crispy-gpu-mode')),
     };
 }
 
@@ -166,9 +188,10 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
 
     // Persist ALL settings fields
     const keys: (keyof AppSettings)[] = [
-        'introSkipMode', 'mobileNavbarStyle', 'omdbKey', 'tmdbKey',
+        'introSkipMode', 'mobileNavbarStyle', 'omdbKey', 'tmdbAccessToken',
         'openRouterKey', 'aiInsightsMode', 'aiModelType', 'aiCustomModelName',
         'accentColor', 'amoledMode', 'useMaterialYou', 'videoPlayerEngine',
+        'decoderMode', 'gpuMode',
         'audioLanguage', 'subtitleLanguage', 'subtitleSize', 'subtitlePosition',
         'subtitleColor', 'subtitleBackColor', 'subtitleBorderColor',
         'showRatingBadges', 'addonSearchEnabled', 'autoplayEnabled'
@@ -183,7 +206,7 @@ function persistLocalSettings(updates: Partial<AppSettings>) {
                 'introSkipMode': 'crispy-intro-skip-mode',
                 'mobileNavbarStyle': 'crispy-mobile-navbar-style',
                 'omdbKey': 'crispy-omdb-key',
-                'tmdbKey': 'crispy-tmdb-key',
+                'tmdbAccessToken': 'crispy-tmdb-access-token',
                 'openRouterKey': 'crispy-openrouter-key',
                 'aiInsightsMode': 'crispy-ai-insights-mode',
                 'aiModelType': 'crispy-ai-model-type',
@@ -369,7 +392,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         },
 
         reloadFromStorage: () => {
-            console.log('[UserStore] 🔄 Reloading from storage (Context Switch)...');
+            console.log('[UserStore] Reloading from storage (Context Switch)...');
             const addons = loadInitialAddons();
 
             set({
@@ -386,7 +409,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
         },
 
         resetToDefaults: () => {
-            console.log('[UserStore] ⚠️ Factory Reset / Logout Wipe');
+            console.log('[UserStore] Factory Reset / Logout Wipe');
             const defaults = getDefaultAddons();
             set({
                 settings: getDefaultSettings(),

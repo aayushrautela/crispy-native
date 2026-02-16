@@ -3,6 +3,7 @@ import { AddonService } from '@/src/core/services/AddonService';
 import { IntroService, type IntroTimestamps } from '@/src/core/services/IntroService';
 import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { parseAppEpisodeSuffix, toImdbIdForExternalLookup } from '@/src/core/ids/mediaIds';
 import { useTheme } from '@/src/core/ThemeContext';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
@@ -36,34 +37,16 @@ interface PlayerOverlayRootProps {
     artworkUrl?: string;
 }
 
-const pickBaseId = (rawId: string) => {
-    const parts = String(rawId || '').split(':');
-    if (parts.length >= 2 && (parts[0] === 'tmdb' || parts[0] === 'trakt')) {
-        return `${parts[0]}:${parts[1]}`;
-    }
-    return parts[0] || '';
-};
+const pickBaseId = (rawId: string) => parseAppEpisodeSuffix(rawId).baseId;
 
 const pickSeasonFromId = (rawId: string): number => {
-    const parts = String(rawId || '').split(':');
-    if (parts.length >= 4 && (parts[0] === 'tmdb' || parts[0] === 'trakt')) {
-        return Number.parseInt(parts[2], 10) || 1;
-    }
-    if (parts.length >= 3) return Number.parseInt(parts[1], 10) || 1;
-    return 1;
+    const parsed = parseAppEpisodeSuffix(rawId);
+    return typeof parsed.season === 'number' ? parsed.season : 1;
 };
 
 const pickEpisodeFromId = (rawId: string): number | null => {
-    const parts = String(rawId || '').split(':');
-    if (parts.length >= 4 && (parts[0] === 'tmdb' || parts[0] === 'trakt')) {
-        const ep = Number.parseInt(parts[3], 10);
-        return Number.isFinite(ep) ? ep : null;
-    }
-    if (parts.length >= 3) {
-        const ep = Number.parseInt(parts[2], 10);
-        return Number.isFinite(ep) ? ep : null;
-    }
-    return null;
+    const parsed = parseAppEpisodeSuffix(rawId);
+    return typeof parsed.episode === 'number' ? parsed.episode : null;
 };
 
 const normalizePipMode = (payload: any): boolean => {
@@ -296,7 +279,9 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                 return;
             }
 
-            const imdbId = enriched?.imdbId || (contentId.startsWith('tt') ? contentId.split(':')[0] : null);
+            const imdbId =
+                (typeof enriched?.imdbId === 'string' && enriched.imdbId.startsWith('tt') ? enriched.imdbId : null) ||
+                toImdbIdForExternalLookup(contentId, 'series');
             if (!imdbId) {
                 setIntroTimestamps(null);
                 return;
@@ -611,7 +596,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
                         <Text style={styles.vlcDebugLine}>surface={formatDebugSize(vlcDebugSnapshot?.surfaceViewWidth, vlcDebugSnapshot?.surfaceViewHeight)} holder={formatDebugSize(vlcDebugSnapshot?.holderFrameWidth, vlcDebugSnapshot?.holderFrameHeight)}</Text>
                         <Text style={styles.vlcDebugLine}>target={formatDebugSize(vlcDebugSnapshot?.targetWidth, vlcDebugSnapshot?.targetHeight)} retries={Math.round(toFiniteNumber(vlcDebugSnapshot?.surfaceAttachRetryCount))}</Text>
                         {vlcEngineSnapshot && (
-                            <Text style={styles.vlcDebugLine}>engineState={String(vlcEngineSnapshot.state || '-')} engineMode={String(vlcEngineSnapshot.resizeMode || '-')} scaleType={String(vlcEngineSnapshot.lastAppliedScaleType || '-')}</Text>
+                            <Text style={styles.vlcDebugLine}>engineState={String(vlcEngineSnapshot?.state || '-')} engineMode={String(vlcEngineSnapshot?.resizeMode || '-')} scaleType={String(vlcEngineSnapshot?.lastAppliedScaleType || '-')}</Text>
                         )}
                         <Text style={styles.vlcDebugLog}>{vlcDebugLines.join('\n') || 'waiting for vlc-debug events...'}</Text>
                     </View>

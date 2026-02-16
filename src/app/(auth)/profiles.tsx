@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     avatar: {
         width: 44,
         height: 44,
-        borderRadius: 14,
+        borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
@@ -206,6 +206,7 @@ const styles = StyleSheet.create({
     avatarImage: {
         width: '100%',
         height: '100%',
+        borderRadius: 22,
     },
     profileMeta: {
         flex: 1,

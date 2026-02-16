@@ -16,7 +16,7 @@ export type ProfileStorageKey =
     | 'crispy-mobile-navbar-style'
     | 'crispy-intro-skip-mode'
     | 'crispy-omdb-key'
-    | 'crispy-tmdb-key'
+    | 'crispy-tmdb-access-token'
     | 'crispy-trakt-auth'
     | 'crispy-language'
     | 'crispy-addon-search-enabled'

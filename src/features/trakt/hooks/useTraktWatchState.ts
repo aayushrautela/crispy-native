@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TraktService } from '../../../core/services/TraktService';
 import { useUserStore } from '../../../core/stores/userStore';
+import { toStrictProviderRef } from '../../../core/ids/mediaIds';
 
 export type WatchState = 'watch' | 'continue' | 'rewatch';
 
@@ -23,7 +24,8 @@ export function useTraktWatchState(id: string | undefined, type: string | undefi
 
         setIsLoading(true);
         try {
-            const cleanId = id.startsWith('tmdb:') ? id.split(':')[1] : id;
+            const appType = type === 'show' || type === 'series' ? 'series' : 'movie';
+            const ref = toStrictProviderRef(id, appType);
 
             // 1. Check Continue Watching (Playback)
             const playback = await TraktService.getContinueWatching();
@@ -34,9 +36,12 @@ export function useTraktWatchState(id: string | undefined, type: string | undefi
                 const mIds = media.ids;
 
                 // Compare IDs
-                if (mIds.imdb && mIds.imdb === id) return true;
-                if (mIds.tmdb && String(mIds.tmdb) === cleanId) return true;
-                if (mIds.trakt && String(mIds.trakt) === cleanId) return true;
+                if (ref?.provider === 'imdb' && mIds.imdb && mIds.imdb === ref.id) return true;
+                if (ref?.provider === 'tmdb' && mIds.tmdb && mIds.tmdb === ref.id) return true;
+                if (ref?.provider === 'trakt' && mIds.trakt && mIds.trakt === ref.id) return true;
+
+                // Fallback for legacy callers
+                if (!ref && mIds.imdb && (mIds.imdb === id || `imdb:${mIds.imdb}` === id)) return true;
                 return false;
             });
 
@@ -57,9 +62,12 @@ export function useTraktWatchState(id: string | undefined, type: string | undefi
                 if (!media) return false;
                 const mIds = media.ids;
 
-                if (mIds.imdb && mIds.imdb === id) return true;
-                if (mIds.tmdb && String(mIds.tmdb) === cleanId) return true;
-                if (mIds.trakt && String(mIds.trakt) === cleanId) return true;
+                if (ref?.provider === 'imdb' && mIds.imdb && mIds.imdb === ref.id) return true;
+                if (ref?.provider === 'tmdb' && mIds.tmdb && mIds.tmdb === ref.id) return true;
+                if (ref?.provider === 'trakt' && mIds.trakt && mIds.trakt === ref.id) return true;
+
+                // Fallback for legacy callers
+                if (!ref && mIds.imdb && (mIds.imdb === id || `imdb:${mIds.imdb}` === id)) return true;
                 return false;
             });
 
