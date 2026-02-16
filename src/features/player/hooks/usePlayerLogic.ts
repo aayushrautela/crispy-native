@@ -1,9 +1,8 @@
-import { useReducer, useEffect, useRef, useCallback } from 'react';
-import { DeviceEventEmitter, Platform } from 'react-native';
+import { useReducer, useEffect, useRef } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import CrispyNativeCore from '@/modules/crispy-native-core';
-import { useNativePlayerSessionStore } from '@/src/features/player/native/nativePlayerSessionStore';
-import { playerReducer, initialPlayerState, type PlayerAction } from '../state/playerMachine';
-import { normalizeLocalStreamUrl } from '../utils/streamUtils';
+import { playerReducer, initialPlayerState } from '../state/playerMachine';
+import { isMagnetUrl, normalizeLocalStreamUrl } from '../utils/streamUtils';
 
 const POLL_INTERVAL_MS = 750;
 const POLL_TIMEOUT_MS = 180_000;
@@ -15,10 +14,16 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
 
     // --- Effect: Boot Torrent Engine ---
     useEffect(() => {
-        if (state.status === 'booting_torrent' && state.stream?.infoHash) {
-            const { infoHash, fileIdx } = state.stream;
-            
-            CrispyNativeCore.startStream(infoHash, fileIdx ?? -1, sessionId)
+        if (state.status === 'booting_torrent' && state.stream) {
+            const { infoHash, fileIdx, url } = state.stream;
+
+            const startPromise = infoHash
+                ? CrispyNativeCore.startStream(infoHash, fileIdx ?? -1, sessionId)
+                : isMagnetUrl(url)
+                    ? CrispyNativeCore.startStreamFromLink(url!, fileIdx ?? -1, sessionId)
+                    : Promise.resolve<string | null>(null);
+
+            startPromise
                 .then((url) => {
                     if (url) {
                         const normalized = normalizeLocalStreamUrl(url);
@@ -59,7 +64,7 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
                     if (res.status === 404 || (res.status >= 500 && res.status !== 503)) {
                         dispatch({ type: 'ERROR', error: `Local stream returned HTTP ${res.status}` });
                     }
-                } catch (e) {
+                } catch {
                     // Keep polling
                 }
             };

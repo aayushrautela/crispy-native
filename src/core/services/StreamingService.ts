@@ -1,4 +1,5 @@
 import CrispyNativeCore from '@/modules/crispy-native-core';
+import { isMagnetUrl } from '@/src/features/player/utils/streamUtils';
 
 export class StreamingService {
     /**
@@ -6,12 +7,15 @@ export class StreamingService {
      * If the input is already a URL, it is returned as is.
      */
     static async resolveStream(stream: { url?: string; infoHash?: string; fileIdx?: number }): Promise<string | null> {
-        if (stream.url) {
+        if (stream.url && !isMagnetUrl(stream.url)) {
             return stream.url;
         }
 
+        if (stream.url && isMagnetUrl(stream.url)) {
+            return await CrispyNativeCore.startStreamFromLink(stream.url, stream.fileIdx ?? -1);
+        }
+
         if (stream.infoHash) {
-            console.log('[StreamingService] Resolving infoHash:', stream.infoHash);
             console.log('[StreamingService] Resolving infoHash:', stream.infoHash);
             return await CrispyNativeCore.startStream(stream.infoHash, stream.fileIdx ?? -1);
         }

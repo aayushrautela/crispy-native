@@ -167,6 +167,18 @@ export default {
     },
 
     /**
+     * Starts a torrent stream from a torrent link (magnet/hash/url) and resolves it to a localhost URL.
+     */
+    async startStreamFromLink(link: string, fileIdx: number = -1, sessionId: string = ''): Promise<string | null> {
+        try {
+            return await CrispyNativeCore.startStreamFromLink(link, fileIdx, sessionId);
+        } catch (e) {
+            console.error('[CrispyNativeCore] startStreamFromLink failed:', e);
+            return null;
+        }
+    },
+
+    /**
      * Destroys the current stream if the session ID matches.
      * @param sessionId Session ID to match against
      */

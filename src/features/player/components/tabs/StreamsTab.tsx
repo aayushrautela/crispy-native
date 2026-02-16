@@ -1,8 +1,9 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
+import { isMagnetUrl } from '@/src/features/player/utils/streamUtils';
 import { Check } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 export interface Stream {
     url?: string;
@@ -31,7 +32,6 @@ export function StreamsTab({
     onSelectStream
 }: StreamsTabProps) {
     const { theme } = useTheme();
-    const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
     if (!streams || streams.length === 0) {
         return (
@@ -51,15 +51,19 @@ export function StreamsTab({
             renderItem={({ item }) => {
                 const primaryText = item.name || item.title || item.quality || (item.url ? 'Stream URL' : 'Stream');
                 const isSelected = !!currentStreamUrl && !!item.url && item.url === currentStreamUrl;
+                const isTorrent = !!item.infoHash || isMagnetUrl(item.url);
+                const isDisabled = Platform.OS === 'ios' && isTorrent;
                 return (
                     <Pressable
                         onPress={() => onSelectStream(item)}
+                        disabled={isDisabled}
                         style={[
                             styles.item,
                             {
                                 backgroundColor: isSelected
                                     ? theme.colors.primaryContainer
                                     : 'transparent',
+                                opacity: isDisabled ? 0.45 : 1,
                             }
                         ]}
                     >
@@ -88,6 +92,11 @@ export function StreamsTab({
                                 {item.addonName && (
                                     <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
                                         {item.addonName}
+                                    </Typography>
+                                )}
+                                {isDisabled && (
+                                    <Typography variant="body-small" style={{ color: theme.colors.onSurfaceVariant }}>
+                                        Android only
                                     </Typography>
                                 )}
                             </View>

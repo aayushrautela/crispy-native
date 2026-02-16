@@ -1,4 +1,5 @@
-import { Stream, PlayerState, PlayerAction, initialPlayerState } from './playerMachineTypes';
+import { PlayerState, PlayerAction, initialPlayerState } from './playerMachineTypes';
+import { isMagnetUrl } from '../utils/streamUtils';
 
 export * from './playerMachineTypes';
 
@@ -6,7 +7,8 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
     switch (action.type) {
         case 'LOAD_STREAM': {
             const { stream, engine, meta } = action;
-            const isTorrent = !stream.url && !!stream.infoHash;
+            const isTorrent = !!stream.infoHash || isMagnetUrl(stream.url);
+            const resolvedUrl = isTorrent ? null : (stream.url || null);
 
             return {
                 ...state,
@@ -14,7 +16,7 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
                 stream,
                 engine: engine || state.engine,
                 meta: meta || state.meta,
-                resolvedUrl: stream.url || null, 
+                resolvedUrl,
                 pollingUrl: null,
                 error: null,
                 fatalError: false,
