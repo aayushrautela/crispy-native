@@ -1,7 +1,30 @@
 import { AddonService } from '@/src/core/services/AddonService';
 import { useUserStore } from '@/src/core/stores/userStore';
+import { formatIdForIdPrefixes } from '@crispy-streaming/media-core';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useMemo } from 'react';
+
+type StremioType = 'movie' | 'series';
+type StreamResource = string | { name?: string; types?: string[]; idPrefixes?: string[] };
+
+function pickStreamResource(resources: StreamResource[] | undefined, type: StremioType): StreamResource | null {
+    if (!resources || resources.length === 0) return null;
+
+    let hasStreamString = false;
+
+    for (const r of resources) {
+        if (typeof r === 'string') {
+            if (r === 'stream') hasStreamString = true;
+            continue;
+        }
+
+        if (r?.name !== 'stream') continue;
+        if (Array.isArray(r.types) && r.types.length > 0 && !r.types.includes(type)) continue;
+        return r;
+    }
+
+    return hasStreamString ? 'stream' : null;
+}
 
 export const useStreams = (type: string, id: string, enabled: boolean = true) => {
     const addons = useUserStore((state) => state.addons);
@@ -9,33 +32,45 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
     const [streams, setStreams] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    const streamAddonUrls = useMemo(() => {
-        return addons
-            .map((addon) => {
-                const m = manifests[addon.url];
-                const supportsStreams = m?.resources?.some((r) =>
-                    typeof r === 'string' ? r === 'stream' : r?.name === 'stream'
-                );
-                return supportsStreams ? addon.url : null;
-            })
-            .filter((url): url is string => Boolean(url));
-    }, [addons, manifests]);
+    const stremioType = useMemo<StremioType>(() => (type === 'movie' ? 'movie' : 'series'), [type]);
+
+    const enabledAddons = useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
+
+    const streamAddons = useMemo(() => {
+        const out: Array<{ url: string; idPrefixes?: string[] }> = [];
+
+        for (const addon of enabledAddons) {
+            const m = manifests[addon.url];
+            const streamResource = pickStreamResource(m?.resources as StreamResource[] | undefined, stremioType);
+            if (!streamResource) continue;
+
+            if (typeof streamResource === 'string') {
+                out.push({ url: addon.url });
+                continue;
+            }
+
+            const idPrefixes = Array.isArray(streamResource.idPrefixes) ? streamResource.idPrefixes : undefined;
+            out.push({ url: addon.url, idPrefixes });
+        }
+
+        return out;
+    }, [enabledAddons, manifests, stremioType]);
 
     const { refetch } = useQuery({
-        queryKey: ['streams', type, id, addons.length, Object.keys(manifests).length, streamAddonUrls],
+        queryKey: ['streams', stremioType, id, enabledAddons.length, Object.keys(manifests).length, streamAddons],
         queryFn: async () => {
             // Reset streams for new fetch
             setStreams([]);
             setIsLoading(true);
 
-            if (addons.length === 0) {
-                console.warn('[useStreams] No addons installed');
+            if (enabledAddons.length === 0) {
+                console.warn('[useStreams] No enabled addons');
                 setIsLoading(false);
                 return [];
             }
 
-            if (streamAddonUrls.length === 0) {
-                const missingManifestCount = addons.filter((addon) => !manifests[addon.url]).length;
+            if (streamAddons.length === 0) {
+                const missingManifestCount = enabledAddons.filter((addon) => !manifests[addon.url]).length;
 
                 if (missingManifestCount > 0) {
                     // Keep loading state so UI does not incorrectly show an empty result while manifests are still syncing
@@ -49,9 +84,14 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
             }
 
             // Fetch from each addon individually and update state as they complete
-            const fetchPromises = streamAddonUrls.map(async (url) => {
+            const fetchPromises = streamAddons.map(async ({ url, idPrefixes }) => {
                 try {
-                    const result = await AddonService.getStreams(url, type, id);
+                    const formattedId =
+                        formatIdForIdPrefixes(id, stremioType, idPrefixes) ||
+                        formatIdForIdPrefixes(id, stremioType) ||
+                        id;
+
+                    const result = await AddonService.getStreams(url, stremioType, formattedId);
                     if (result?.streams && result.streams.length > 0) {
                         // Add new streams incrementally
                         setStreams(prev => {

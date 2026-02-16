@@ -1,5 +1,6 @@
 import { useStreams } from '../hooks/useStreams';
 import { useTheme } from '@/src/core/ThemeContext';
+import { useUserStore } from '@/src/core/stores/userStore';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
@@ -30,7 +31,31 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
+    const addons = useUserStore((s) => s.addons);
+    const manifests = useUserStore((s) => s.manifests);
+
     const { data: streams, isLoading } = useStreams(type, id, isVisible);
+
+    const stremioType = React.useMemo(() => (type === 'movie' ? 'movie' : 'series'), [type]);
+
+    const enabledAddons = React.useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
+
+    const missingManifestCount = React.useMemo(
+        () => enabledAddons.filter((addon) => !manifests[addon.url]).length,
+        [enabledAddons, manifests]
+    );
+
+    const enabledStreamAddonCount = React.useMemo(() => {
+        return enabledAddons.filter((addon) => {
+            const m = manifests[addon.url];
+            return m?.resources?.some((r) => {
+                if (typeof r === 'string') return r === 'stream';
+                if (r?.name !== 'stream') return false;
+                if (Array.isArray(r.types) && r.types.length > 0 && !r.types.includes(stremioType)) return false;
+                return true;
+            });
+        }).length;
+    }, [enabledAddons, manifests, stremioType]);
 
     React.useEffect(() => {
         if (streams && onStreamsLoaded) {
@@ -158,10 +183,23 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
 
     const renderEmptyState = () => {
         if (isLoading) return null;
+
+        let message = 'No streams found for this content.';
+
+        if (missingManifestCount > 0) {
+            message = 'Syncing addon manifests...';
+        } else if (enabledAddons.length === 0) {
+            message = 'No addons enabled. Add one in Settings to find streams.';
+        } else if (enabledStreamAddonCount === 0) {
+            message = 'No stream addons enabled. Add one in Settings to find streams.';
+        } else {
+            message = 'No streams returned from your addons for this content.';
+        }
+
         return (
             <View style={styles.empty}>
                 <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
-                    No streams found for this content. Try adding more addons in Settings.
+                    {message}
                 </Typography>
             </View>
         );

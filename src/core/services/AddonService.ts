@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { formatIdForIdPrefixes } from '@crispy-streaming/media-core';
 import { AddonManifest } from '../types/addon-types';
 
 export interface MetaPreview {
@@ -187,6 +188,8 @@ export class AddonService {
      * deduplicates by URL.
      */
     static async fetchAllSubtitles(addonUrls: string[], type: string, id: string): Promise<any[]> {
+        const mediaType = type === 'movie' ? 'movie' : 'series';
+
         // 1. Fetch all manifests to see which ones support subtitles
         const manifestResults = await Promise.allSettled(
             addonUrls.map(url => this.fetchManifest(url).then(m => ({ manifest: m, baseUrl: url })))
@@ -212,7 +215,21 @@ export class AddonService {
         const subtitleResults = await Promise.allSettled(
             subtitleAddons.map(async ({ manifest, baseUrl }) => {
                 try {
-                    const data = await this.getSubtitles(baseUrl, type, id);
+                    const subtitleResource = manifest.resources?.find(r =>
+                        typeof r !== 'string' && r.name === 'subtitles' && (!r.types || r.types.includes(type))
+                    );
+
+                    const idPrefixes =
+                        subtitleResource && typeof subtitleResource !== 'string' && Array.isArray(subtitleResource.idPrefixes)
+                            ? subtitleResource.idPrefixes
+                            : undefined;
+
+                    const formattedId =
+                        formatIdForIdPrefixes(id, mediaType, idPrefixes) ||
+                        formatIdForIdPrefixes(id, mediaType) ||
+                        id;
+
+                    const data = await this.getSubtitles(baseUrl, type, formattedId);
                     return (data.subtitles || []).map(sub => ({
                         ...sub,
                         addonId: manifest.id,
