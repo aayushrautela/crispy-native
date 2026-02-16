@@ -18,8 +18,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class CrispyNativeCoreModule : Module() {
-  // CrispyServer is owned exclusively by TorrentService and started on-demand.
-  // This avoids EADDRINUSE when both Module and Service try to bind port 11470.
+  // TorrentService owns the bundled TorrServer process and is started on-demand.
   private var torrentService: TorrentService? = null
   private var isBound = false
   private var serviceLatch = CountDownLatch(1)
@@ -65,7 +64,7 @@ class CrispyNativeCoreModule : Module() {
         }
       }.start()
 
-      // TorrentService (with its CrispyServer) is started on-demand in ensureService()
+      // TorrentService (with bundled TorrServer) is started on-demand in ensureService()
     }
 
     OnDestroy {
@@ -97,20 +96,46 @@ class CrispyNativeCoreModule : Module() {
       }
 
       if (!service.awaitServerReady()) {
-          Log.e("CrispyModule", "Failed to start stream: local server not ready")
+          Log.e("CrispyModule", "Failed to start stream: TorrServer not ready")
           return@AsyncFunction null
       }
       
-      // Start torrent download (non-blocking) with Session ID
+      // Start torrent in TorrServer with session ID
       if (!service.startInfoHash(infoHash, sessionId)) {
           Log.e("CrispyModule", "Failed to start torrent: $infoHash")
           return@AsyncFunction null
       }
       
-      // Return URL immediately - Native Server handles waiting for metadata if player connects early
       val idx = if (fileIdx >= 0) fileIdx else service.getLargestFileIndex(infoHash)
       val url = service.getStreamUrl(infoHash, idx)
       Log.d("CrispyModule", "[JS] -> resolved URL immediately: $url")
+      return@AsyncFunction url
+    }
+
+    AsyncFunction("startStreamFromLink") { link: String, fileIdx: Int, sessionId: String ->
+      Log.d("CrispyModule", "[JS] startStreamFromLink: $link, index: $fileIdx, session: $sessionId")
+
+      waitForStartupCleanup()
+
+      val service = ensureService()
+      if (service == null) {
+        Log.e("CrispyModule", "Failed to start stream from link: Service not bound (timeout)")
+        return@AsyncFunction null
+      }
+
+      if (!service.awaitServerReady()) {
+        Log.e("CrispyModule", "Failed to start stream from link: TorrServer not ready")
+        return@AsyncFunction null
+      }
+
+      if (!service.startLink(link, sessionId)) {
+        Log.e("CrispyModule", "Failed to start torrent link: $link")
+        return@AsyncFunction null
+      }
+
+      val idx = if (fileIdx >= 0) fileIdx else service.getLargestFileIndexFromLink(link)
+      val url = service.getStreamUrlForLink(link, idx)
+      Log.d("CrispyModule", "[JS] -> resolved URL from link: $url")
       return@AsyncFunction url
     }
 

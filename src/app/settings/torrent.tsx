@@ -7,71 +7,71 @@ import { SettingsSubpage } from '@/src/core/ui/layout/SettingsSubpage';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, TextInput, View } from 'react-native';
 
-type TorrentStats = {
-    infoHash: string;
-    name: string;
-    peers: number;
-    seeds: number;
-    downloadSpeed: number;
-    uploadSpeed: number;
-    progress: number;
-    state: string;
-};
-
-type FileStats = {
-    streamProgress: number;
-    streamLen: number;
-    streamName: string;
-    downloaded: number;
-    pieceLength: number;
-};
-
-const PRIMARY_SERVER_ORIGIN = 'http://localhost:11470';
-
-function normalizeInfoHash(input: string): string | null {
-    const trimmed = input.trim();
-    const match = trimmed.match(/[0-9a-fA-F]{40}/);
-    return match ? match[0].toLowerCase() : null;
-}
-
-function formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
-    const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / Math.pow(1024, exp);
-    return `${value.toFixed(value >= 100 || exp === 0 ? 0 : value >= 10 ? 1 : 2)} ${units[exp]}`;
-}
-
-function formatSpeed(bytesPerSec: number): string {
-    return `${formatBytes(bytesPerSec)}/s`;
-}
+const SERVER_ORIGIN = 'http://localhost:8090';
+const DEBUG_SESSION_ID = 'torrent-debug';
 
 function delay(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function normalizeInfoHash(input: string): string | null {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    const directHash = trimmed.match(/^[0-9a-fA-F]{40}$/)?.[0];
+    if (directHash) return directHash.toLowerCase();
+    const magnetHash = trimmed.match(/xt=urn:btih:([a-zA-Z0-9]{40})/i)?.[1];
+    if (magnetHash) return magnetHash.toLowerCase();
+    return null;
+}
+
+function isMagnetLink(input: string): boolean {
+    return input.trim().toLowerCase().startsWith('magnet:');
+}
+
+function parseFileIndex(url: string | null): number | null {
+    if (!url) return null;
+    const playMatch = url.match(/\/play\/[0-9a-fA-F]{40}\/(\d+)$/);
+    if (playMatch?.[1]) {
+        const n = Number.parseInt(playMatch[1], 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    const streamMatch = url.match(/[?&]index=(\d+)/);
+    if (streamMatch?.[1]) {
+        const n = Number.parseInt(streamMatch[1], 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    const legacyMatch = url.match(/\/(\d+)$/);
+    if (legacyMatch?.[1]) {
+        const n = Number.parseInt(legacyMatch[1], 10);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    return null;
+}
+
 export default function TorrentDebugScreen() {
     const { theme } = useTheme();
-
     const isAndroid = Platform.OS === 'android';
 
     const [input, setInput] = useState('');
+    const [streamUrl, setStreamUrl] = useState<string | null>(null);
     const [activeInfoHash, setActiveInfoHash] = useState<string | null>(null);
     const [activeFileIdx, setActiveFileIdx] = useState<number | null>(null);
-    const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
-    const [torrentStats, setTorrentStats] = useState<TorrentStats | null>(null);
-    const [fileStats, setFileStats] = useState<FileStats | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [engineReady, setEngineReady] = useState(false);
+    const [streamReady, setStreamReady] = useState(false);
+    const [lastStatusCode, setLastStatusCode] = useState<number | null>(null);
     const [isStarting, setIsStarting] = useState(false);
     const [warmOnStart, setWarmOnStart] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-    const warmInFlight = useRef(false);
     const activeInfoHashRef = useRef<string | null>(null);
-    const serverOriginRef = useRef(PRIMARY_SERVER_ORIGIN);
 
-    const normalized = useMemo(() => normalizeInfoHash(input), [input]);
+    const normalizedHash = useMemo(() => normalizeInfoHash(input), [input]);
+    const inputIsMagnet = useMemo(() => isMagnetLink(input), [input]);
 
     useEffect(() => {
         activeInfoHashRef.current = activeInfoHash;
@@ -84,123 +84,126 @@ export default function TorrentDebugScreen() {
         }
     }, []);
 
-    const fetchLocal = useCallback(async (path: string, init?: RequestInit) => {
-        const response = await fetch(`${serverOriginRef.current}${path}`, init);
-        return response;
-    }, []);
-
-    const waitForServerReady = useCallback(async () => {
-        for (let i = 0; i < 20; i++) {
+    const checkEngineReady = useCallback(async () => {
+        for (let i = 0; i < 25; i++) {
             try {
-                const response = await fetchLocal('/stats.json', { cache: 'no-store' });
-                if (response.ok) return true;
+                const response = await fetch(`${SERVER_ORIGIN}/echo`, { cache: 'no-store' });
+                if (response.ok) {
+                    return true;
+                }
             } catch {
                 // ignore and retry
             }
             await delay(120);
         }
         return false;
-    }, [fetchLocal]);
+    }, []);
 
-    const pollOnce = useCallback(async (infoHash: string, fileIdx: number | null) => {
+    const probeStream = useCallback(async (url: string) => {
         try {
-            const tsRes = await fetchLocal(`/${infoHash}/stats.json`, { cache: 'no-store' });
-            if (tsRes.ok) {
-                const json = (await tsRes.json()) as TorrentStats;
-                setTorrentStats(json);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    Range: 'bytes=0-1',
+                },
+            });
+            setLastStatusCode(response.status);
+            const ok = response.status === 200 || response.status === 206;
+            if (ok) {
+                setStreamReady(true);
+                setError(null);
             }
-
-            if (fileIdx != null) {
-                const fsRes = await fetchLocal(`/${infoHash}/${fileIdx}/stats.json`, { cache: 'no-store' });
-                if (fsRes.ok) {
-                    const json = (await fsRes.json()) as FileStats;
-                    setFileStats(json);
-                }
-            }
-
-            setError(null);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            return ok;
+        } catch {
+            setLastStatusCode(null);
+            return false;
         }
-    }, [fetchLocal]);
+    }, []);
+
+    const warmStream = useCallback(async (url: string) => {
+        try {
+            await fetch(url, {
+                method: 'GET',
+                headers: {
+                    Range: 'bytes=0-1048575',
+                },
+            });
+        } catch {
+            // best effort only
+        }
+    }, []);
 
     const start = useCallback(async () => {
-        const infoHash = normalized;
-        if (!infoHash) {
-            Alert.alert('Invalid infoHash', 'Paste a 40-character hex infoHash (or a magnet containing it).');
+        const raw = input.trim();
+        if (!raw) {
+            Alert.alert('Missing torrent input', 'Paste a 40-char hash or a magnet link.');
+            return;
+        }
+
+        const canStart = !!normalizedHash || inputIsMagnet;
+        if (!canStart) {
+            Alert.alert('Unsupported input', 'Use a 40-char infoHash or a magnet link.');
             return;
         }
 
         setIsStarting(true);
         setError(null);
-        setTorrentStats(null);
-        setFileStats(null);
-        setActiveInfoHash(infoHash);
-        setActiveFileIdx(null);
+        setEngineReady(false);
+        setStreamReady(false);
+        setLastStatusCode(null);
         setStreamUrl(null);
+        setActiveInfoHash(normalizedHash);
+        setActiveFileIdx(null);
 
         try {
-            const url = await CrispyNativeCore.startStream(infoHash, -1, 'torrent-debug');
-            setStreamUrl(url);
+            const resolvedUrl = normalizedHash
+                ? await CrispyNativeCore.startStream(normalizedHash, -1, DEBUG_SESSION_ID)
+                : await CrispyNativeCore.startStreamFromLink(raw, -1, DEBUG_SESSION_ID);
 
-            if (!url) {
-                throw new Error('startStream returned no URL');
+            if (!resolvedUrl) {
+                throw new Error('Torrent engine returned no stream URL');
             }
 
-            serverOriginRef.current = PRIMARY_SERVER_ORIGIN;
+            setStreamUrl(resolvedUrl);
+            setActiveFileIdx(parseFileIndex(resolvedUrl));
 
-            const idxFromUrl = url?.match(/\/(\d+)$/)?.[1];
-            const fileIdx = idxFromUrl ? Number.parseInt(idxFromUrl, 10) : null;
-            setActiveFileIdx(Number.isFinite(fileIdx as number) ? (fileIdx as number) : null);
-
-            const ready = await waitForServerReady();
+            const ready = await checkEngineReady();
+            setEngineReady(ready);
             if (!ready) {
-                throw new Error(`Local server not ready (${serverOriginRef.current})`);
+                throw new Error(`TorrServer is not reachable at ${SERVER_ORIGIN}`);
+            }
+
+            if (warmOnStart) {
+                void warmStream(resolvedUrl);
             }
 
             stopPolling();
-            await pollOnce(infoHash, Number.isFinite(fileIdx as number) ? (fileIdx as number) : null);
+            void probeStream(resolvedUrl);
             pollTimer.current = setInterval(() => {
-                void pollOnce(infoHash, Number.isFinite(fileIdx as number) ? (fileIdx as number) : null);
+                void probeStream(resolvedUrl);
             }, 1000);
-
-            if (warmOnStart && Number.isFinite(fileIdx as number)) {
-                // Trigger streaming prioritization without invoking any player.
-                void (async () => {
-                    if (warmInFlight.current) return;
-                    warmInFlight.current = true;
-                    try {
-                        await fetchLocal(`/${infoHash}/${fileIdx}`, {
-                            headers: {
-                                Range: 'bytes=0-1048575',
-                            },
-                        });
-                    } catch {
-                        // ignore: this is best-effort diagnostics
-                    } finally {
-                        warmInFlight.current = false;
-                    }
-                })();
-            }
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         } finally {
             setIsStarting(false);
         }
-    }, [fetchLocal, normalized, pollOnce, stopPolling, waitForServerReady, warmOnStart]);
+    }, [checkEngineReady, input, inputIsMagnet, normalizedHash, probeStream, stopPolling, warmOnStart, warmStream]);
 
     const stop = useCallback(async () => {
         stopPolling();
-        const infoHash = activeInfoHash;
+
+        const hash = activeInfoHash;
+        setStreamUrl(null);
         setActiveInfoHash(null);
         setActiveFileIdx(null);
-        setStreamUrl(null);
+        setStreamReady(false);
+        setLastStatusCode(null);
 
         try {
-            if (infoHash) {
-                await CrispyNativeCore.stopTorrent(infoHash);
+            if (hash) {
+                await CrispyNativeCore.stopTorrent(hash);
             }
-            await CrispyNativeCore.destroyStream('torrent-debug');
+            await CrispyNativeCore.destroyStream(DEBUG_SESSION_ID);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
@@ -209,22 +212,13 @@ export default function TorrentDebugScreen() {
     useEffect(() => {
         return () => {
             stopPolling();
-            // Keep it on-demand: stop diagnostic torrents when leaving screen.
-            const infoHash = activeInfoHashRef.current;
-            if (infoHash) {
-                void CrispyNativeCore.stopTorrent(infoHash);
-                void CrispyNativeCore.destroyStream('torrent-debug');
+            const hash = activeInfoHashRef.current;
+            if (hash) {
+                void CrispyNativeCore.stopTorrent(hash);
             }
+            void CrispyNativeCore.destroyStream(DEBUG_SESSION_ID);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const percent = useMemo(() => {
-        const p = fileStats?.streamProgress ?? torrentStats?.progress;
-        if (!Number.isFinite(p as number)) return null;
-        const v = Math.max(0, Math.min(1, p as number));
-        return v;
-    }, [fileStats?.streamProgress, torrentStats?.progress]);
+    }, [stopPolling]);
 
     const surfaceContainerHigh = (theme.colors as any).surfaceContainerHigh || theme.colors.surfaceVariant;
 
@@ -232,28 +226,28 @@ export default function TorrentDebugScreen() {
         <SettingsSubpage title="Torrent Debug">
             <View style={{ paddingHorizontal: 16, gap: 12 }}>
                 <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                    Download-only diagnostics. Starts the torrent engine and polls `/{'{'}infoHash{'}'}/stats.json`.
+                    TorrServer diagnostics for Android. Checks `/echo` health and probes the stream URL via HTTP Range.
                 </Typography>
 
                 {!isAndroid ? (
-                    <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}> 
+                    <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}>
                         <Typography variant="label-large" style={{ color: theme.colors.onSurface }}>
                             Android Only
                         </Typography>
                         <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                            Torrent engine diagnostics are currently implemented via Android `TorrentService`.
+                            iOS does not include torrent playback.
                         </Typography>
                     </View>
                 ) : null}
 
-                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}> 
+                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}>
                     <Typography variant="label-large" style={{ color: theme.colors.onSurface }}>
-                        infoHash
+                        Torrent Input
                     </Typography>
                     <TextInput
                         value={input}
                         onChangeText={setInput}
-                        placeholder="40-char hex infoHash (or magnet)"
+                        placeholder="40-char hash or magnet link"
                         placeholderTextColor={theme.colors.onSurfaceVariant}
                         autoCapitalize="none"
                         autoCorrect={false}
@@ -262,11 +256,11 @@ export default function TorrentDebugScreen() {
                             {
                                 color: theme.colors.onSurface,
                                 borderColor: theme.colors.outlineVariant,
-                            }
+                            },
                         ]}
                     />
-                    <Typography variant="label-small" style={{ color: normalized ? theme.colors.primary : theme.colors.onSurfaceVariant }}>
-                        {normalized ? `Detected: ${normalized}` : 'Waiting for a valid 40-hex infoHash'}
+                    <Typography variant="label-small" style={{ color: normalizedHash || inputIsMagnet ? theme.colors.primary : theme.colors.onSurfaceVariant }}>
+                        {normalizedHash ? `Detected hash: ${normalizedHash}` : inputIsMagnet ? 'Detected: magnet link' : 'Waiting for valid hash or magnet'}
                     </Typography>
                 </View>
 
@@ -275,7 +269,7 @@ export default function TorrentDebugScreen() {
                         <ExpressiveButton
                             title={isStarting ? 'Starting…' : 'Start'}
                             onPress={start}
-                            disabled={!isAndroid || !normalized || isStarting}
+                            disabled={!isAndroid || isStarting || (!normalizedHash && !inputIsMagnet)}
                             isLoading={isStarting}
                         />
                     </View>
@@ -284,74 +278,53 @@ export default function TorrentDebugScreen() {
                             title="Stop"
                             variant="tonal"
                             onPress={stop}
-                            disabled={!isAndroid || !activeInfoHash}
+                            disabled={!isAndroid || !streamUrl}
                         />
                     </View>
                 </View>
 
-                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}> 
+                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                         <View style={{ flex: 1, paddingRight: 12 }}>
                             <Typography variant="label-large" style={{ color: theme.colors.onSurface }}>
-                                Warm via Local HTTP
+                                Warm Stream on Start
                             </Typography>
                             <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                                Sends a small Range request to trigger streaming prioritization (no player).
+                                Sends an initial 1MB range request after stream URL creation.
                             </Typography>
                         </View>
                         <ExpressiveSwitch value={warmOnStart} onValueChange={setWarmOnStart} />
                     </View>
                 </View>
 
-                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}> 
+                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}>
                     <Typography variant="label-large" style={{ color: theme.colors.onSurface }}>
                         Status
                     </Typography>
                     <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                        Platform: {Platform.OS} {String(Platform.Version)}
+                        Server: {SERVER_ORIGIN}
                     </Typography>
                     <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                        Active: {activeInfoHash ? activeInfoHash : '—'}
+                        Engine Ready (/echo): {engineReady ? 'yes' : 'no'}
+                    </Typography>
+                    <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Stream Ready (Range 0-1): {streamReady ? 'yes' : 'no'}
+                    </Typography>
+                    <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Last HTTP Status: {lastStatusCode ?? '—'}
+                    </Typography>
+                    <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Active Hash: {activeInfoHash ?? '—'}
                     </Typography>
                     <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
                         FileIdx: {activeFileIdx != null ? String(activeFileIdx) : '—'}
                     </Typography>
                     <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                        URL: {streamUrl ? streamUrl : '—'}
+                        URL: {streamUrl ?? '—'}
                     </Typography>
                     {error ? (
                         <Typography variant="body" style={{ color: theme.colors.error }}>
                             Error: {error}
-                        </Typography>
-                    ) : null}
-                </View>
-
-                <View style={[styles.card, { backgroundColor: surfaceContainerHigh, borderColor: theme.colors.outlineVariant }]}> 
-                    <Typography variant="label-large" style={{ color: theme.colors.onSurface }}>
-                        Progress
-                    </Typography>
-                    <View style={[styles.progressTrack, { backgroundColor: theme.colors.surfaceVariant }]}> 
-                        <View
-                            style={[
-                                styles.progressFill,
-                                {
-                                    width: `${Math.round(((percent ?? 0) * 1000)) / 10}%`,
-                                    backgroundColor: theme.colors.primary,
-                                }
-                            ]}
-                        />
-                    </View>
-                    <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                        {percent != null ? `${Math.round(percent * 1000) / 10}%` : '—'}
-                    </Typography>
-                    {fileStats ? (
-                        <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {fileStats.streamName} · {formatBytes(fileStats.downloaded)} / {formatBytes(fileStats.streamLen)}
-                        </Typography>
-                    ) : null}
-                    {torrentStats ? (
-                        <Typography variant="body" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {torrentStats.state} · peers {torrentStats.peers} · seeds {torrentStats.seeds} · down {formatSpeed(torrentStats.downloadSpeed)} · up {formatSpeed(torrentStats.uploadSpeed)}
                         </Typography>
                     ) : null}
                 </View>
@@ -375,14 +348,5 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 10,
         fontSize: 14,
-    },
-    progressTrack: {
-        height: 10,
-        borderRadius: 999,
-        overflow: 'hidden',
-    },
-    progressFill: {
-        height: 10,
-        borderRadius: 999,
     },
 });

@@ -26,16 +26,6 @@ android {
   }
 }
 
-repositories {
-  maven {
-    url "https://dl.frostwire.com/maven"
-    allowInsecureProtocol = true
-    content {
-      includeGroup "com.frostwire"
-    }
-  }
-}
-
 dependencies {
   implementation project(':expo-modules-core')
 
@@ -48,17 +38,6 @@ dependencies {
   // VLC Player library
   implementation "org.videolan.android:libvlc-all:3.6.0"
   
-  // jlibtorrent - Mavenized for production (Fixes W^X security warnings and Android 15 compatibility)
-  // Using 2.0.12.7 as it's the latest available on FrostWire repo
-  def jlibtorrent_version = '2.0.12.7'
-  implementation "com.frostwire:jlibtorrent:${jlibtorrent_version}"
-  implementation "com.frostwire:jlibtorrent-android-arm:${jlibtorrent_version}"
-  implementation "com.frostwire:jlibtorrent-android-arm64:${jlibtorrent_version}"
-  implementation "com.frostwire:jlibtorrent-android-x86:${jlibtorrent_version}"
-  implementation "com.frostwire:jlibtorrent-android-x86_64:${jlibtorrent_version}"
-  
-  // NanoHTTPD for local HTTP streaming server
-  implementation 'org.nanohttpd:nanohttpd:2.3.1'
   implementation "androidx.media:media:1.7.0"
   
   // Lifecycle & Coroutines
