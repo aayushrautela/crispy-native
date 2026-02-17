@@ -187,7 +187,7 @@ export function useStreams(type: string, id: string, enabled: boolean = true) {
     const stremioType = useMemo<StremioType>(() => (type === 'movie' ? 'movie' : 'series'), [type]);
     const enabledAddons = useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
 
-    const { streamAddons, addonFingerprints } = useMemo(
+    const { streamAddons, addonFingerprints, missingManifestCount } = useMemo(
         () => computeStreamAddons(enabledAddons, manifests, stremioType),
         [enabledAddons, manifests, stremioType]
     );
@@ -218,5 +218,7 @@ export function useStreams(type: string, id: string, enabled: boolean = true) {
         ...query,
         data: query.data ?? [],
         streamAddons,
+        enabledAddonCount: enabledAddons.length,
+        missingManifestCount,
     };
 }
