@@ -1,22 +1,10 @@
 import { useTheme } from '@/src/core/ThemeContext';
 import { Typography } from '@/src/core/ui/Typography';
+import type { Stream } from '@/src/features/player/types/streams';
 import { isMagnetUrl } from '@/src/features/player/utils/streamUtils';
 import { Check } from 'lucide-react-native';
 import React from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
-
-export interface Stream {
-    url?: string;
-    title?: string;
-    name?: string;
-    quality?: string;
-    size?: string;
-    seeders?: number;
-    infoHash?: string;
-    fileIdx?: number;
-    addonName?: string;
-    behaviorHints?: { headers?: Record<string, string> };
-}
 
 interface StreamsTabProps {
     streams?: Stream[];

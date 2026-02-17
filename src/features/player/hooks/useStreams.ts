@@ -1,141 +1,222 @@
 import { getStreams } from '@/src/core/addons/addonClient';
 import { useUserStore } from '@/src/core/stores/userStore';
+import type { AddonManifest } from '@/src/core/types/addon-types';
+import type { Stream, StreamListItem } from '@/src/features/player/types/streams';
+import { computeStreamAddons, type StremioType, type StreamAddon } from '@/src/features/player/streams/streamAddons';
 import { formatIdForIdPrefixes } from '@crispy-streaming/media-core';
-import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect, useMemo } from 'react';
+import {
+    useQuery,
+    useQueryClient,
+    type QueryClient,
+    type QueryFunctionContext,
+    type QueryKey,
+} from '@tanstack/react-query';
+import { useMemo } from 'react';
 
-type StremioType = 'movie' | 'series';
-type StreamResource = string | { name?: string; types?: string[]; idPrefixes?: string[] };
+function hashStringFNV1a(input: string): string {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        // hash *= 16777619 (with overflow)
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    // unsigned 32-bit -> base36
+    return (hash >>> 0).toString(36);
+}
 
-function pickStreamResource(resources: StreamResource[] | undefined, type: StremioType): StreamResource | null {
-    if (!resources || resources.length === 0) return null;
+function computeBaseStreamKey(stream: Stream, streamIndex: number): string {
+    if (typeof stream.url === 'string' && stream.url.length > 0) return `url:${stream.url}`;
 
-    let hasStreamString = false;
+    if (typeof stream.infoHash === 'string' && stream.infoHash.length > 0) {
+        const fileIdx = typeof stream.fileIdx === 'number' ? String(stream.fileIdx) : '';
+        return `torrent:${stream.infoHash}:${fileIdx}`;
+    }
 
-    for (const r of resources) {
-        if (typeof r === 'string') {
-            if (r === 'stream') hasStreamString = true;
+    const maybeId = (stream as { id?: unknown }).id;
+    if (typeof maybeId === 'string' && maybeId.length > 0) return `id:${maybeId}`;
+    if (typeof maybeId === 'number') return `id:${String(maybeId)}`;
+
+    const basis = [stream.name, stream.title, stream.description].filter(Boolean).join('|');
+    return `fallback:${hashStringFNV1a(basis)}:${streamIndex}`;
+}
+
+function mergeStreams(prev: StreamListItem[], incoming: StreamListItem[]): StreamListItem[] {
+    const map = new Map<string, StreamListItem>();
+
+    for (const item of prev) map.set(item._streamKey, item);
+
+    for (const next of incoming) {
+        const existing = map.get(next._streamKey);
+        if (!existing) {
+            map.set(next._streamKey, next);
             continue;
         }
 
-        if (r?.name !== 'stream') continue;
-        if (Array.isArray(r.types) && r.types.length > 0 && !r.types.includes(type)) continue;
-        return r;
+        // Prefer stable ordering (lower addon rank). If same, prefer earlier stream rank.
+        if (next._addonRank < existing._addonRank) {
+            map.set(next._streamKey, next);
+            continue;
+        }
+        if (next._addonRank === existing._addonRank && next._streamRank < existing._streamRank) {
+            map.set(next._streamKey, next);
+        }
     }
 
-    return hasStreamString ? 'stream' : null;
+    const out = Array.from(map.values());
+    out.sort((a, b) => {
+        if (a._addonRank !== b._addonRank) return a._addonRank - b._addonRank;
+        if (a._streamRank !== b._streamRank) return a._streamRank - b._streamRank;
+        return a._streamKey.localeCompare(b._streamKey);
+    });
+    return out;
 }
 
-export const useStreams = (type: string, id: string, enabled: boolean = true) => {
-    const addons = useUserStore((state) => state.addons);
-    const manifests = useUserStore((state) => state.manifests);
-    const [streams, setStreams] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const stremioType = useMemo<StremioType>(() => (type === 'movie' ? 'movie' : 'series'), [type]);
-
-    const enabledAddons = useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
-
-    const streamAddons = useMemo(() => {
-        const out: { url: string; idPrefixes?: string[] }[] = [];
-
-        for (const addon of enabledAddons) {
-            const m = manifests[addon.url];
-            const streamResource = pickStreamResource(m?.resources as StreamResource[] | undefined, stremioType);
-            if (!streamResource) continue;
-
-            if (typeof streamResource === 'string') {
-                out.push({ url: addon.url });
-                continue;
-            }
-
-            const idPrefixes = Array.isArray(streamResource.idPrefixes) ? streamResource.idPrefixes : undefined;
-            out.push({ url: addon.url, idPrefixes });
-        }
-
-        return out;
-    }, [enabledAddons, manifests, stremioType]);
-
-    const { refetch } = useQuery({
-        queryKey: ['streams', stremioType, id, enabledAddons.length, Object.keys(manifests).length, streamAddons],
-        queryFn: async () => {
-            // Reset streams for new fetch
-            setStreams([]);
-            setIsLoading(true);
-
-            if (enabledAddons.length === 0) {
-                console.warn('[useStreams] No enabled addons');
-                setIsLoading(false);
-                return [];
-            }
-
-            if (streamAddons.length === 0) {
-                const missingManifestCount = enabledAddons.filter((addon) => !manifests[addon.url]).length;
-
-                if (missingManifestCount > 0) {
-                    // Keep loading state so UI does not incorrectly show an empty result while manifests are still syncing
-                    console.warn(`[useStreams] Waiting for ${missingManifestCount} addon manifests`);
-                    return [];
-                }
-
-                console.warn('[useStreams] No addons support "stream" resource');
-                setIsLoading(false);
-                return [];
-            }
-
-            // Fetch from each addon individually and update state as they complete
-            const fetchPromises = streamAddons.map(async ({ url, idPrefixes }) => {
-                try {
-                    const formattedId =
-                        formatIdForIdPrefixes(id, stremioType, idPrefixes) ||
-                        formatIdForIdPrefixes(id, stremioType) ||
-                        id;
-
-                    const result = await getStreams(url, stremioType, formattedId, manifests[url]);
-                    if (result?.streams && result.streams.length > 0) {
-                        // Add new streams incrementally
-                        setStreams(prev => {
-                            const newStreams = result.streams.filter(Boolean);
-                            const existingUrls = new Set(prev.map(s => s.url || s.id || s.infoHash));
-                            const uniqueNewStreams = newStreams.filter(s => {
-                                const key = s.url || s.id || s.infoHash;
-                                return !existingUrls.has(key);
-                            });
-                            return [...prev, ...uniqueNewStreams];
-                        });
-                    }
-                    return result;
-                } catch (error) {
-                    console.warn(`[useStreams] Failed to fetch from ${url}:`, error);
-                    return null;
-                }
-            });
-
-            // Wait for all to complete
-            await Promise.allSettled(fetchPromises);
-            
-            setIsLoading(false);
-            return [];
-        },
-        enabled: enabled && !!id,
-        staleTime: 0,
-        gcTime: 0,
-        refetchOnMount: 'always',
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: 'always',
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+            reject(new Error(`[useStreams] Timeout (${ms}ms): ${label}`));
+        }, ms);
     });
 
-    // Reset streams when id/type changes
-    useEffect(() => {
-        if (!enabled || !id) {
-            setStreams([]);
-            setIsLoading(false);
-        }
-    }, [id, type, enabled]);
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timer) clearTimeout(timer);
+    });
+}
+
+// computeStreamAddons moved to src/features/player/streams/streamAddons.ts
+
+export function streamsQueryKey(params: { type: StremioType; id: string; addonFingerprints: string[] }): QueryKey {
+    return ['streams', params.type, params.id, params.addonFingerprints];
+}
+
+function createStreamsQueryFn(args: {
+    queryClient: QueryClient;
+    queryKey: QueryKey;
+    type: StremioType;
+    id: string;
+    streamAddons: StreamAddon[];
+    manifests: Record<string, AddonManifest>;
+}) {
+    const { queryClient, queryKey, type, id, streamAddons, manifests } = args;
+
+    return async ({ signal }: QueryFunctionContext<QueryKey>): Promise<StreamListItem[]> => {
+        const perAddonTimeoutMs = 12_000;
+
+        const fetches = streamAddons.map(async (addon, addonRank) => {
+            if (signal.aborted) return;
+
+            const formattedId =
+                formatIdForIdPrefixes(id, type, addon.idPrefixes) ||
+                formatIdForIdPrefixes(id, type) ||
+                id;
+
+            const label = `${addon.url} (${type}:${formattedId})`;
+
+            const result = await withTimeout(
+                getStreams(addon.url, type, formattedId, manifests[addon.url]),
+                perAddonTimeoutMs,
+                label
+            );
+
+            if (signal.aborted) return;
+
+            const rawStreams = Array.isArray(result?.streams) ? result.streams.filter(Boolean) : [];
+
+            const items: StreamListItem[] = rawStreams.map((s: Stream, streamIndex: number) => {
+                const baseKey = computeBaseStreamKey(s, streamIndex);
+                const addonName = typeof s.addonName === 'string' && s.addonName.length > 0 ? s.addonName : addon.name;
+
+                return {
+                    ...s,
+                    addonName,
+                    _streamKey: baseKey,
+                    _sourceAddonUrl: addon.url,
+                    _sourceAddonName: addon.name,
+                    _addonRank: addonRank,
+                    _streamRank: streamIndex,
+                };
+            });
+
+            queryClient.setQueryData<StreamListItem[]>(queryKey, (prev) => {
+                const safePrev = Array.isArray(prev) ? prev : [];
+                return mergeStreams(safePrev, items);
+            });
+        });
+
+        await Promise.allSettled(fetches);
+
+        const final = queryClient.getQueryData<StreamListItem[]>(queryKey);
+        return Array.isArray(final) ? final : [];
+    };
+}
+
+export async function prefetchStreams(queryClient: QueryClient, params: { type: string; id: string }) {
+    const id = params.id;
+    if (!id) return;
+
+    const stremioType: StremioType = params.type === 'movie' ? 'movie' : 'series';
+    const state = useUserStore.getState();
+    const enabledAddons = state.addons.filter((a) => a.enabled !== false);
+    const { streamAddons, addonFingerprints } = computeStreamAddons(enabledAddons, state.manifests, stremioType);
+    if (streamAddons.length === 0) return;
+
+    const queryKey = streamsQueryKey({ type: stremioType, id, addonFingerprints });
+    await queryClient.prefetchQuery({
+        queryKey,
+        queryFn: createStreamsQueryFn({
+            queryClient,
+            queryKey,
+            type: stremioType,
+            id,
+            streamAddons,
+            manifests: state.manifests,
+        }),
+        staleTime: 30_000,
+        gcTime: 10 * 60_000,
+        retry: 1,
+    });
+}
+
+export function useStreams(type: string, id: string, enabled: boolean = true) {
+    const queryClient = useQueryClient();
+    const addons = useUserStore((state) => state.addons);
+    const manifests = useUserStore((state) => state.manifests);
+
+    const stremioType = useMemo<StremioType>(() => (type === 'movie' ? 'movie' : 'series'), [type]);
+    const enabledAddons = useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
+
+    const { streamAddons, addonFingerprints } = useMemo(
+        () => computeStreamAddons(enabledAddons, manifests, stremioType),
+        [enabledAddons, manifests, stremioType]
+    );
+
+    const queryKey = useMemo(
+        () => streamsQueryKey({ type: stremioType, id, addonFingerprints }),
+        [addonFingerprints, id, stremioType]
+    );
+
+    const query = useQuery<StreamListItem[]>({
+        queryKey,
+        queryFn: createStreamsQueryFn({
+            queryClient,
+            queryKey,
+            type: stremioType,
+            id,
+            streamAddons,
+            manifests,
+        }),
+        enabled: enabled && !!id && streamAddons.length > 0,
+        staleTime: 30_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+        retry: 1,
+    });
 
     return {
-        data: streams,
-        isLoading,
-        refetch,
+        ...query,
+        data: query.data ?? [],
+        streamAddons,
     };
-};
+}

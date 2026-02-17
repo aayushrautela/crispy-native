@@ -4,6 +4,8 @@ import { useUserStore } from '@/src/core/stores/userStore';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
 import { LoadingIndicator } from '@/src/core/ui/LoadingIndicator';
 import { Typography } from '@/src/core/ui/Typography';
+import type { Stream, StreamListItem } from '@/src/features/player/types/streams';
+import { computeStreamAddons } from '@/src/features/player/streams/streamAddons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { Image as ExpoImage } from 'expo-image';
 import React from 'react';
@@ -20,9 +22,9 @@ export interface StreamMetadata {
 interface StreamSelectorProps {
     type: string;
     id: string;
-    onSelect: (stream: any) => void;
+    onSelect: (stream: Stream) => void;
     hideHeader?: boolean;
-    onStreamsLoaded?: (streams: any[]) => void;
+    onStreamsLoaded?: (streams: Stream[]) => void;
     isVisible?: boolean;
     metadata?: StreamMetadata;
 }
@@ -34,28 +36,25 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     const addons = useUserStore((s) => s.addons);
     const manifests = useUserStore((s) => s.manifests);
 
-    const { data: streams, isLoading } = useStreams(type, id, isVisible);
+    const streamsQuery = useStreams(type, id, isVisible);
+    const streams = streamsQuery.data;
+
+    const isSearching = React.useMemo(() => {
+        if (!isVisible) return false;
+        if (!id) return true;
+        return streamsQuery.fetchStatus === 'fetching';
+    }, [id, isVisible, streamsQuery.fetchStatus]);
 
     const stremioType = React.useMemo(() => (type === 'movie' ? 'movie' : 'series'), [type]);
 
     const enabledAddons = React.useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
 
-    const missingManifestCount = React.useMemo(
-        () => enabledAddons.filter((addon) => !manifests[addon.url]).length,
-        [enabledAddons, manifests]
+    const { streamAddons, missingManifestCount } = React.useMemo(
+        () => computeStreamAddons(enabledAddons, manifests, stremioType),
+        [enabledAddons, manifests, stremioType]
     );
 
-    const enabledStreamAddonCount = React.useMemo(() => {
-        return enabledAddons.filter((addon) => {
-            const m = manifests[addon.url];
-            return m?.resources?.some((r) => {
-                if (typeof r === 'string') return r === 'stream';
-                if (r?.name !== 'stream') return false;
-                if (Array.isArray(r.types) && r.types.length > 0 && !r.types.includes(stremioType)) return false;
-                return true;
-            });
-        }).length;
-    }, [enabledAddons, manifests, stremioType]);
+    const enabledStreamAddonCount = streamAddons.length;
 
     React.useEffect(() => {
         if (streams && onStreamsLoaded) {
@@ -85,16 +84,16 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         [bottom, listPaddingHorizontal]
     );
 
-    const handleSelect = React.useCallback((item: any) => {
+    const handleSelect = React.useCallback((item: Stream) => {
         onSelect(item);
     }, [onSelect]);
 
-    const keyExtractor = React.useCallback((item: any, index: number) => {
-        const key = item?.url || item?.id || item?.infoHash;
+    const keyExtractor = React.useCallback((item: StreamListItem, index: number) => {
+        const key = item?._streamKey || item?.url || item?.infoHash;
         return key ? String(key) : String(index);
     }, []);
 
-    const renderItem = React.useCallback<ListRenderItem<any>>(({ item }: { item: any }) => {
+    const renderItem = React.useCallback<ListRenderItem<StreamListItem>>(({ item }: { item: StreamListItem }) => {
         if (!item) return null;
 
         const mainTitle = item.name?.replace(/\n/g, ' ') || 'Stream';
@@ -170,7 +169,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     };
 
     const renderLoadingState = () => {
-        if (!isLoading) return null;
+        if (!isSearching) return null;
         return (
             <View style={styles.loading}>
                 <LoadingIndicator size={48} color={theme.colors.primary} />
@@ -182,7 +181,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
     };
 
     const renderEmptyState = () => {
-        if (isLoading) return null;
+        if (isSearching) return null;
 
         let message = 'No streams found for this content.';
 
@@ -192,7 +191,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
             message = 'No addons enabled. Add one in Settings to find streams.';
         } else if (enabledStreamAddonCount === 0) {
             message = 'No stream addons enabled. Add one in Settings to find streams.';
-        } else {
+        } else if (streamsQuery.isFetched) {
             message = 'No streams returned from your addons for this content.';
         }
 
@@ -205,16 +204,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         );
     };
 
-    if (!isVisible) {
-        return (
-            <View style={styles.loading}>
-                <LoadingIndicator size={48} color={theme.colors.primary} />
-                <Typography variant="body-medium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
-                    Searching for streams...
-                </Typography>
-            </View>
-        );
-    }
+    if (!isVisible) return null;
 
     return (
         <View style={[{ flex: 1 }, (hideHeader || metadata) && { paddingTop: 0, paddingHorizontal: 0 }]}>
