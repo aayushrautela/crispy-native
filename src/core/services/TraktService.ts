@@ -298,6 +298,7 @@ export class TraktService {
             year: core.year ? String(core.year) : '',
             poster: core.images.poster,
             backdrop: core.images.backdrop || core.images.fanart,
+            thumbnail: core.images.thumbnail,
             logo: core.images.logo,
             description: core.description,
             genres: core.genres,
@@ -451,8 +452,8 @@ export class TraktService {
     public async getCollection() {
         if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/collection/movies?extended=images,full'),
-            this.apiRequest<any[]>('/sync/collection/shows?extended=images,full')
+            this.apiRequest<any[]>('/sync/collection/movies?extended=images'),
+            this.apiRequest<any[]>('/sync/collection/shows?extended=images')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),
@@ -463,20 +464,20 @@ export class TraktService {
 
     public async getWatchedShows() {
         if (!this.isAuthenticated()) return [];
-        const shows = await this.apiRequest<any[]>('/sync/watched/shows?extended=images,full');
+        const shows = await this.apiRequest<any[]>('/sync/watched/shows?extended=images');
         return (shows || []).map(i => ({ ...i, type: 'show' })).map(i => this.normalize(i));
     }
 
     public async getWatchedMovies() {
         if (!this.isAuthenticated()) return [];
-        const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=images,full');
+        const movies = await this.apiRequest<any[]>('/sync/watched/movies?extended=images');
         return (movies || []).map(i => ({ ...i, type: 'movie' })).map(i => this.normalize(i));
     }
 
     public async getWatchedHistory() {
         if (!this.isAuthenticated()) return [];
         // Combined history for movies and episodes
-        const history = await this.apiRequest<any[]>('/sync/history?extended=images,full&limit=100');
+        const history = await this.apiRequest<any[]>('/sync/history?extended=images&limit=100');
         return (history || []).map(i => this.normalize(i));
     }
 
@@ -833,8 +834,8 @@ export class TraktService {
     public async getWatchlist() {
         if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/watchlist/movies?extended=images,full'),
-            this.apiRequest<any[]>('/sync/watchlist/shows?extended=images,full')
+            this.apiRequest<any[]>('/sync/watchlist/movies?extended=images'),
+            this.apiRequest<any[]>('/sync/watchlist/shows?extended=images')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),
@@ -846,8 +847,8 @@ export class TraktService {
     public async getRatings() {
         if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/ratings/movies?extended=full,images'),
-            this.apiRequest<any[]>('/sync/ratings/shows?extended=full,images')
+            this.apiRequest<any[]>('/sync/ratings/movies?extended=images'),
+            this.apiRequest<any[]>('/sync/ratings/shows?extended=images')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),
@@ -863,7 +864,7 @@ export class TraktService {
 
     public async getRecommendations(type: 'movies' | 'shows', limit = 10) {
         if (!this.isAuthenticated()) return [];
-        return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=full,images`);
+        return this.apiRequest<any[]>(`/recommendations/${type}?limit=${limit}&extended=images`);
     }
 
     public async getMixedRecommendations(limit = 10) {

@@ -45,14 +45,16 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
         let mounted = true;
 
         const enrich = async () => {
-            // PRODUCTION-GRADE GUARD: 
-            // Skip expensive TMDB calls if we already have a nice poster and name.
-            // Exceptions: We always want to enrich generic Items to get more metadata/logos if possible,
-            // OR if it's a specific episode that needs an air date.
-            const hasGoodMeta = !!(item.poster && item.name && item.logo);
-            const needsEpisodeMeta = item.type === 'series' && item.season !== undefined && item.episodeNumber !== undefined;
+            // Skip TMDB when Continue Watching already has display-ready visuals.
+            const hasDisplayImage = !!(item.thumbnail || item.backdrop || item.poster);
+            const hasLogo = !!item.logo;
+            const needsEpisodeMeta =
+                item.type === 'series' &&
+                item.season !== undefined &&
+                item.episodeNumber !== undefined &&
+                (!item.airDate || !item.episodeTitle);
 
-            if (hasGoodMeta && !needsEpisodeMeta) {
+            if (hasDisplayImage && hasLogo && !needsEpisodeMeta) {
                 // cache what we have so we don't check again
                 EnrichmentCache.set(newKey, item);
                 return;
@@ -80,7 +82,13 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
 
                     // Episode Logic
                     let episodeEnrichment = {};
-                    if (type === 'series' && item.season !== undefined && item.episodeNumber !== undefined && enrichedMeta.tmdbId) {
+                    if (
+                        type === 'series' &&
+                        item.season !== undefined &&
+                        item.episodeNumber !== undefined &&
+                        enrichedMeta.tmdbId &&
+                        (!item.airDate || !item.episodeTitle)
+                    ) {
                         try {
                             const epDetails = await TMDBService.getEpisodeDetails(enrichedMeta.tmdbId, item.season, item.episodeNumber);
                             if (epDetails) {
@@ -98,13 +106,14 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
                         const finalResult = {
                             ...item,
                             ...episodeEnrichment,
-                            name: enrichedMeta.title || item.name,
-                            poster: enrichedMeta.poster || item.poster,
-                            backdrop: enrichedMeta.backdrop || item.backdrop,
-                            logo: enrichedMeta.logo || item.logo,
-                            year: enrichedMeta.year || item.year,
-                            description: enrichedMeta.description || item.description,
-                            rating: enrichedMeta.rating || item.rating,
+                            name: item.name || enrichedMeta.title,
+                            poster: item.poster,
+                            thumbnail: item.thumbnail,
+                            backdrop: item.backdrop || enrichedMeta.backdrop,
+                            logo: item.logo || enrichedMeta.logo,
+                            year: item.year || enrichedMeta.year,
+                            description: item.description || enrichedMeta.description,
+                            rating: item.rating || enrichedMeta.rating,
                         };
 
                         // Write to Cache

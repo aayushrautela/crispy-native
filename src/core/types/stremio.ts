@@ -6,6 +6,7 @@ export interface MetaPreview {
     posterShape?: 'poster' | 'landscape' | 'square';
     description?: string;
     backdrop?: string;
+    thumbnail?: string;
     releaseInfo?: string;
     progressPercent?: number;
     episodeTitle?: string;

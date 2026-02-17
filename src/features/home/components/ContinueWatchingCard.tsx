@@ -51,7 +51,7 @@ const ContinueWatchingCardComponent = ({ item, width = 144 }: ContinueWatchingCa
         : undefined;
 
     const imageSrc = displayItem.posterShape === 'landscape'
-        ? (displayItem.backdrop || displayItem.poster)
+        ? (displayItem.thumbnail || displayItem.backdrop || displayItem.poster)
         : (displayItem.poster);
     const imageSource = shouldConstrainDecode && decodeWidth && decodeHeight
         ? { uri: imageSrc, width: decodeWidth, height: decodeHeight }

@@ -11,10 +11,10 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
     const [state, dispatch] = useReducer(playerReducer, initialPlayerState);
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollStartTimeRef = useRef<number>(0);
+    const lastAppliedSetPausedCommandRef = useRef<{ version: number; phase: typeof state.phase } | null>(null);
 
-    // --- Effect: Boot Torrent Engine ---
     useEffect(() => {
-        if (state.status === 'booting_torrent' && state.stream) {
+        if (state.phase === 'booting_torrent' && state.stream) {
             const { infoHash, fileIdx, url } = state.stream;
 
             const startPromise = infoHash
@@ -29,25 +29,24 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
                         const normalized = normalizeLocalStreamUrl(url);
                         dispatch({ type: 'TORRENT_ENGINE_STARTED', url: normalized });
                     } else {
-                         dispatch({ type: 'ERROR', error: 'Torrent engine started but returned no URL' });
+                        dispatch({ type: 'ERROR', error: 'Torrent engine started but returned no URL' });
                     }
                 })
                 .catch((err) => {
                     dispatch({ type: 'ERROR', error: `Failed to start torrent: ${err.message}` });
                 });
         }
-    }, [state.status, state.stream, sessionId]);
+    }, [state.phase, state.stream, sessionId]);
 
-    // --- Effect: Poll Localhost ---
     useEffect(() => {
         if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
 
-        if (state.status === 'polling_localhost' && state.pollingUrl) {
+        if (state.phase === 'polling_localhost' && state.pollingUrl) {
             pollStartTimeRef.current = Date.now();
-            
+
             const checkUrl = async () => {
                 if (Date.now() - pollStartTimeRef.current > POLL_TIMEOUT_MS) {
                     dispatch({ type: 'ERROR', error: 'Timed out waiting for local stream' });
@@ -65,50 +64,61 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
                         dispatch({ type: 'ERROR', error: `Local stream returned HTTP ${res.status}` });
                     }
                 } catch {
-                    // Keep polling
                 }
             };
 
-            // Poll immediately then interval
             void checkUrl();
             pollIntervalRef.current = setInterval(checkUrl, POLL_INTERVAL_MS);
         }
-    }, [state.status, state.pollingUrl]);
+    }, [state.phase, state.pollingUrl]);
 
-    // --- Effect: Load Native Player ---
     useEffect(() => {
         if (options?.skipNativeLoad) return;
-        if (state.status === 'loading_media' && state.resolvedUrl) {
+        if (state.phase === 'loading_media' && state.resolvedUrl) {
             const loadMedia = async () => {
                 try {
-                     await CrispyNativeCore.nativePlayerLoad({
+                    await CrispyNativeCore.nativePlayerLoad({
                         url: state.resolvedUrl!,
                         headers: state.stream?.behaviorHints?.headers,
-                        paused: false, // Auto-play by default on load
+                        paused: state.intent === 'pause',
                         metadata: state.meta ? {
                             title: state.meta.title,
                             subtitle: state.meta.subtitle,
-                            artworkUrl: state.meta.artworkUrl
+                            artworkUrl: state.meta.artworkUrl,
                         } : undefined
                     });
-                    // Native player will emit 'load' or 'buffering' events, which listener handles
                 } catch (e: any) {
                     dispatch({ type: 'ERROR', error: `Failed to load player: ${e.message}` });
                 }
             };
             void loadMedia();
         }
-    }, [state.status, state.resolvedUrl, state.meta, state.stream]);
+    }, [state.phase, state.resolvedUrl, state.meta, state.stream, state.intent, options?.skipNativeLoad]);
 
-    // --- Effect: Recovery ---
     useEffect(() => {
-        if (state.status === 'recovering') {
-            // Trigger the transition back to loading logic
+        const pendingSetPaused = state.pending.setPaused;
+        if (!pendingSetPaused) return;
+        const lastApplied = lastAppliedSetPausedCommandRef.current;
+        const shouldApply = !lastApplied
+            || lastApplied.version !== pendingSetPaused.version
+            || lastApplied.phase !== state.phase;
+        if (!shouldApply) return;
+
+        lastAppliedSetPausedCommandRef.current = {
+            version: pendingSetPaused.version,
+            phase: state.phase,
+        };
+        CrispyNativeCore.nativePlayerSetPaused(pendingSetPaused.value).catch((err: any) => {
+            dispatch({ type: 'ERROR', error: `Failed to update pause state: ${err?.message || String(err)}`, fatal: false });
+        });
+    }, [state.pending.setPaused, state.phase]);
+
+    useEffect(() => {
+        if (state.phase === 'recovering') {
             dispatch({ type: 'RECOVER_WITH_VLC' });
         }
-    }, [state.status]);
+    }, [state.phase]);
 
-    // --- Effect: Native Event Listener ---
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('nativePlayerEvent', (incoming: any) => {
             const evt = incoming?.nativeEvent ?? incoming;
@@ -117,16 +127,16 @@ export function usePlayerLogic(sessionId: string, options?: { skipNativeLoad?: b
 
             switch (evt.type) {
                 case 'load':
+                    dispatch({ type: 'NATIVE_LOAD' });
+                    break;
                 case 'first-frame':
-                    dispatch({ type: 'PLAYBACK_READY' });
+                    dispatch({ type: 'NATIVE_FIRST_FRAME' });
                     break;
                 case 'buffering':
-                    if (evt.buffering) dispatch({ type: 'PLAYBACK_BUFFERING' });
-                    else dispatch({ type: 'PLAYBACK_READY' });
+                    dispatch({ type: 'NATIVE_BUFFERING', buffering: !!evt.buffering });
                     break;
                 case 'isPlaying':
-                    if (evt.isPlaying) dispatch({ type: 'PLAYBACK_READY' });
-                    else dispatch({ type: 'PLAYBACK_PAUSED' });
+                    dispatch({ type: 'NATIVE_IS_PLAYING', isPlaying: !!evt.isPlaying });
                     break;
                 case 'error':
                     dispatch({ type: 'ERROR', error: evt.message || 'Unknown player error', fatal: false });

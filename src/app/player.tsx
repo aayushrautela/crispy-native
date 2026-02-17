@@ -2,7 +2,6 @@ import { useNativePlayerSessionStore } from '@/src/features/player/native/native
 import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import { IntroService, IntroTimestamps } from '@/src/core/services/IntroService';
 
-import { TMDBService } from '@/src/core/services/TMDBService';
 import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -19,7 +18,6 @@ import { SettingsTab } from '@/src/features/player/components/tabs/SettingsTab';
 import { StreamsTab } from '@/src/features/player/components/tabs/StreamsTab';
 import { SubtitlesTab } from '@/src/features/player/components/tabs/SubtitlesTab';
 import { VideoSurface, VideoSurfaceRef } from '@/src/features/player/components/VideoSurface';
-import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import CrispyNativeCore from '@/modules/crispy-native-core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -36,7 +34,7 @@ import {
     StepForward
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { DeviceEventEmitter, Image, Platform, Pressable, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -93,7 +91,6 @@ export default function PlayerScreen() {
     const { theme } = useTheme();
     const router = useRouter();
     const settings = useUserStore((s) => s.settings);
-    const updateSettings = useUserStore((s) => s.updateSettings);
     const getStreams = useProviderStore((s) => s.getStreams);
 
     // Session ID to prevent race conditions during fast navigation
@@ -105,10 +102,15 @@ export default function PlayerScreen() {
     // Derived State
     const activeStream = playerState.stream;
     const finalUrl = playerState.resolvedUrl;
-    const loading = playerState.status === 'booting_torrent' || playerState.status === 'polling_localhost' || playerState.status === 'loading_media' || playerState.status === 'recovering';
-    const playbackState = playerState.status;
-    const error = playerState.error;
-    const paused = playerState.status === 'paused';
+    const loading =
+        playerState.phase === 'booting_torrent'
+        || playerState.phase === 'polling_localhost'
+        || playerState.phase === 'loading_media'
+        || playerState.phase === 'recovering'
+        || playerState.phase === 'seeking';
+    const playbackPhase = playerState.phase;
+    const buffering = playerState.phase === 'buffering';
+    const paused = playerState.intent === 'pause';
     
     // Internal state for seamless switching (overrides params)
     const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
@@ -131,7 +133,6 @@ export default function PlayerScreen() {
     // const [error, setError] = useState<string | null>(null); // Replaced by machine
     const [isPipMode, setIsPipMode] = useState(false);
 
-    const [videoNaturalSize, setVideoNaturalSize] = useState<{ width: number; height: number } | null>(null);
     const [resizeMode, setResizeMode] = useState<'contain' | 'cover'>('contain');
 
     useEffect(() => {
@@ -148,7 +149,6 @@ export default function PlayerScreen() {
     const [introTimestamps, setIntroTimestamps] = useState<IntroTimestamps | null>(null);
 
     const [showUpNext, setShowUpNext] = useState(false);
-    const [upNextTimer, setUpNextTimer] = useState(0);
 
     // If we navigate to a different item (e.g. another episode), clear any internal
     // overrides so the new route params take effect.
@@ -254,28 +254,10 @@ export default function PlayerScreen() {
 
     // Tracks State
     const [audioTracks, setAudioTracks] = useState<any[]>([]);
-    const [subtitleTracks, setSubtitleTracks] = useState<any[]>([]);
-    const [externalSubtitles, setExternalSubtitles] = useState<any[]>([]);
+    const [, setSubtitleTracks] = useState<any[]>([]);
     const [subtitleDelay, setSubtitleDelay] = useState(0);
-    const [subtitleSize, setSubtitleSize] = useState(24);
-    const [subtitleOffset, setSubtitleOffset] = useState(0);
-
-    // Combine embedded and external subtitles for the UI
-    const allSubtitleTracks = useMemo(() => {
-        const embedded = subtitleTracks.map(t => ({
-            ...t,
-            isExternal: false,
-            source: 'embedded'
-        }));
-
-        const external = externalSubtitles.map(s => ({
-            ...s,
-            isExternal: true,
-            source: 'external'
-        }));
-
-        return [...embedded, ...external];
-    }, [subtitleTracks, externalSubtitles]);
+    const [subtitleSize] = useState(24);
+    const [subtitleOffset] = useState(0);
 
     // Track selection state - matching Nuvio's dual-state pattern
     const [selectedSubtitleId, setSelectedSubtitleId] = useState<number>(-1); // -1 = off, >=0 = internal index
@@ -353,7 +335,7 @@ export default function PlayerScreen() {
         };
         console.log('[Player] Generating mediaMetadata:', metaObj);
         return metaObj;
-    }, [title, episodeTitle, type, poster, enriched, meta, seasonEpisodes, id]);
+    }, [title, episodeTitle, type, poster, enriched, meta, seasonEpisodes, parsedId.episode]);
 
 
     // Dual-engine state
@@ -422,8 +404,6 @@ export default function PlayerScreen() {
         };
     }, [getStreams, id, strictId, type, pendingEpisode]);
 
-    const manifests = useUserStore((state) => state.manifests);
-
     // Session ID MOVED UP
     // const sessionId = useMemo(() => Math.random().toString(36).substring(7), []);
 
@@ -459,7 +439,7 @@ export default function PlayerScreen() {
              };
              void applyPlaybackModes();
         }
-    }, [playerState.engine, settings.decoderMode, settings.gpuMode]);
+    }, [playerState.engine, settings.decoderMode, settings.gpuMode, settings.videoPlayerEngine]);
 
     useEffect(() => {
         // Lock to landscape
@@ -509,9 +489,14 @@ export default function PlayerScreen() {
         }
     }, [activeTab, isPipMode, resetControlsTimer]);
 
+    useEffect(() => {
+        if (isSeeking) {
+            dispatch({ type: 'USER_SEEK' });
+        }
+    }, [dispatch, isSeeking]);
+
     const togglePlay = () => {
-        const nextPaused = !paused;
-        CrispyNativeCore.nativePlayerSetPaused(nextPaused);
+        dispatch({ type: paused ? 'USER_INTENT_PLAY' : 'USER_INTENT_PAUSE' });
 
         // Simple single bounce animation (no oscillation)
         playPauseScale.value = withSequence(
@@ -523,6 +508,7 @@ export default function PlayerScreen() {
     };
 
     const handleSeek = (direction: 'forward' | 'backward') => {
+        dispatch({ type: 'USER_SEEK' });
         if (seekAccumulationTimer.current) clearTimeout(seekAccumulationTimer.current);
 
         setSeekAccumulation(prev => {
@@ -606,11 +592,6 @@ export default function PlayerScreen() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const extractInfoHash = (magnet: string): string | null => {
-        const match = magnet.match(/xt=urn:btih:([a-zA-Z0-9]+)/);
-        return match ? match[1] : null;
-    };
-
     return (
         <View style={[styles.container, { backgroundColor: '#000' }]}> 
             {/* VIDEO LAYER - ALWAYS MOUNTED (zIndex: 0) */}
@@ -636,13 +617,12 @@ export default function PlayerScreen() {
                 }}
                 onBuffering={(isBuffering) => {
                     const nextState = isBuffering ? 'buffering' : 'ready';
-                    if (isBuffering) dispatch({ type: 'PLAYBACK_BUFFERING' });
-                    else dispatch({ type: 'PLAYBACK_READY' });
+                    dispatch({ type: 'NATIVE_BUFFERING', buffering: isBuffering });
                     useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: nextState });
                 }}
                 onReadyForDisplay={() => {
                     console.log('[Player] Ready for display');
-                    dispatch({ type: 'PLAYBACK_READY' });
+                    dispatch({ type: 'NATIVE_FIRST_FRAME' });
                     useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
                 }}
                 onProgress={(data) => {
@@ -657,13 +637,13 @@ export default function PlayerScreen() {
 
                     // Fallback: If video is playing but stuck in loading (e.g. VLC stream switch missed onLoad)
                     if (loading && durationSec > 0 && positionSec > 0.5) {
-                         // setLoading(false); // Handled by machine
-                         dispatch({ type: 'PLAYBACK_READY' });
-                         if (resumePosition !== null && resumePosition > 0) {
-                             console.log("Resuming (fallback) at:", resumePosition);
-                             videoRef.current?.seek(resumePosition);
-                             setResumePosition(null);
-                         }
+                        dispatch({ type: 'NATIVE_IS_PLAYING', isPlaying: true });
+                        useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
+                        if (resumePosition !== null && resumePosition > 0) {
+                            console.log("Resuming (fallback) at:", resumePosition);
+                            videoRef.current?.seek(resumePosition);
+                            setResumePosition(null);
+                        }
                     }
 
                     // JS Overlay Sync Logic
@@ -684,15 +664,12 @@ export default function PlayerScreen() {
                     }
                 }}
                 onLoad={(data) => {
-                    dispatch({ type: 'PLAYBACK_READY' });
+                    dispatch({ type: 'NATIVE_LOAD' });
+                    useNativePlayerSessionStore.getState().patchSession(sessionId, { playbackState: 'ready' });
                     // Duration is in SECONDS from react-native-video / MPV
                     const durationSec = data.duration ?? 0;
                     if (durationSec > 0) {
                         setStableDuration(durationSec);
-                    }
-
-                    if ((data.width ?? 0) > 0 && (data.height ?? 0) > 0) {
-                        setVideoNaturalSize({ width: data.width, height: data.height });
                     }
 
                     // Handle Resume - seek expects seconds
@@ -716,13 +693,14 @@ export default function PlayerScreen() {
             />
 
             {/* LOADING CURTAIN OVERLAY (zIndex: 10) */}
-            {!isPipMode && (loading || playbackState === 'booting_torrent' || playbackState === 'polling_localhost' || playbackState === 'loading_media' || playbackState === 'buffering') && (
+            {!isPipMode && (loading || buffering) && (
                 <View style={styles.centerLoading} pointerEvents="none">
                     <LoadingIndicator size="large" color={theme.colors.primary} />
                     <Typography variant="body" className="text-white mt-4">
-                        {playbackState === 'booting_torrent' ? 'Starting Torrent Engine...' :
-                         playbackState === 'polling_localhost' ? 'Waiting for Peers...' :
-                         playbackState === 'buffering' ? 'Buffering...' : 'Loading Video...'}
+                        {playbackPhase === 'booting_torrent' ? 'Starting Torrent Engine...' :
+                         playbackPhase === 'polling_localhost' ? 'Waiting for Peers...' :
+                         playbackPhase === 'buffering' ? 'Buffering...' :
+                         playbackPhase === 'seeking' ? 'Seeking...' : 'Loading Video...'}
                     </Typography>
                 </View>
             )}

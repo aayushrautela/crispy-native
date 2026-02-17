@@ -215,7 +215,7 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- NATIVE PLAYER ACTIVITY (Android) ---
-    AsyncFunction("openPlayerActivity") { sessionId: String, url: String, headers: Map<String, String>?, engine: String?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+    AsyncFunction("openPlayerActivity") { sessionId: String, url: String, infoHash: String?, fileIdx: Int?, headersJson: String?, headers: Map<String, String>?, engine: String?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
       val ctx = appContext.reactContext ?: return@AsyncFunction false
       val activity = appContext.currentActivity
 
@@ -224,6 +224,11 @@ class CrispyNativeCoreModule : Module() {
 
       intent.putExtra(PlayerActivity.EXTRA_SESSION_ID, sessionId)
       intent.putExtra(PlayerActivity.EXTRA_URL, url)
+      intent.putExtra(PlayerActivity.EXTRA_INFO_HASH, infoHash)
+      if (fileIdx != null) {
+        intent.putExtra(PlayerActivity.EXTRA_FILE_IDX, fileIdx)
+      }
+      intent.putExtra(PlayerActivity.EXTRA_HEADERS_JSON, headersJson)
       intent.putExtra(PlayerActivity.EXTRA_ENGINE, engine ?: PlayerActivity.ENGINE_EXO)
       intent.putExtra(PlayerActivity.EXTRA_PAUSED, paused)
       intent.putExtra(PlayerActivity.EXTRA_TITLE, title ?: "")

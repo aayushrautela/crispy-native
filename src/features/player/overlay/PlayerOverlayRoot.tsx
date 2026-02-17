@@ -1,18 +1,17 @@
 import CrispyNativeCore, { type CrispyMediaMetadata } from '@/modules/crispy-native-core';
 import { fetchAllSubtitles } from '@/src/core/addons/addonClient';
 import { IntroService, type IntroTimestamps } from '@/src/core/services/IntroService';
-import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { parseAppEpisodeSuffix, toImdbIdForExternalLookup } from '@/src/core/ids/mediaIds';
-import { useTheme } from '@/src/core/ThemeContext';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { CustomSubtitles } from '@/src/features/player/components/subtitles/CustomSubtitles';
 import { useNativePlayerSessionStore, type PlaybackState, type PlayerContentType } from '@/src/features/player/native/nativePlayerSessionStore';
+import type { PlayerPhase } from '@/src/features/player/state/playerMachine';
 import { parseSubtitle } from '@/src/features/player/utils/subtitleParser';
 import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, DeviceEventEmitter, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
 // New Decomposed Components & Hooks
 import { PlayerLoadingCurtain } from './components/PlayerLoadingCurtain';
@@ -23,6 +22,8 @@ import { usePlayerGestures } from './hooks/usePlayerGestures';
 
 const UP_NEXT_TRIGGER_SECONDS = 25;
 const VLC_DEBUG_LINE_LIMIT = 12;
+const BOOTSTRAP_SOURCE_TIMEOUT_MS = 2500;
+const BOOTSTRAP_RETRY_INTERVAL_MS = 180;
 
 
 type ActiveTab = 'none' | 'audio' | 'subtitles' | 'streams' | 'settings' | 'info';
@@ -31,6 +32,9 @@ interface PlayerOverlayRootProps {
     sessionId?: string;
     engine?: string;
     url?: string;
+    infoHash?: string;
+    fileIdx?: number;
+    headersJson?: string;
     paused?: boolean;
     title?: string;
     artist?: string;
@@ -73,17 +77,19 @@ const formatDebugSize = (width: any, height: any) => {
     return `${w}x${h}`;
 };
 
-const mapMachineStatusToPlaybackState = (status: string): PlaybackState => {
-    switch (status) {
+const mapMachinePhaseToPlaybackState = (phase: PlayerPhase): PlaybackState => {
+    switch (phase) {
         case 'booting_torrent':
         case 'polling_localhost':
+        case 'recovering':
             return 'resolving';
         case 'loading_media':
             return 'loading';
         case 'buffering':
+        case 'seeking':
             return 'buffering';
-        case 'playing':
-        case 'paused':
+        case 'ready':
+        case 'ended':
             return 'ready';
         case 'error':
             return 'error';
@@ -93,14 +99,24 @@ const mapMachineStatusToPlaybackState = (status: string): PlaybackState => {
 };
 
 export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
-    const { theme } = useTheme();
     const settings = useUserStore((s) => s.settings);
     const addons = useUserStore((s) => s.addons);
     const manifests = useUserStore((s) => s.manifests);
-    const getStreams = useProviderStore((s) => s.getStreams);
 
     const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
     const session = useNativePlayerSessionStore((s) => (sessionId ? s.sessionsById[sessionId] : undefined));
+    const launchHeaders = useMemo(() => {
+        if (!props.headersJson) return undefined;
+        try {
+            const parsed = JSON.parse(props.headersJson);
+            if (parsed && typeof parsed === 'object') {
+                return parsed as Record<string, string>;
+            }
+        } catch {
+            return undefined;
+        }
+        return undefined;
+    }, [props.headersJson]);
     const playbackEngine = useMemo(() => {
         const raw = (session?.engine || props.engine || 'exoplayer').toLowerCase();
         return raw === 'vlc' ? 'vlc' : 'exoplayer';
@@ -119,18 +135,33 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     // --- Core Player Logic (State Machine) ---
     const { state: playerState, dispatch } = usePlayerLogic(sessionId);
     const bootstrapLoadDispatchedRef = useRef(false);
+    const bootstrapWaitStartedAtRef = useRef<number | null>(null);
+    const [bootstrapRetryTick, setBootstrapRetryTick] = useState(0);
 
     useEffect(() => {
         if (bootstrapLoadDispatchedRef.current) return;
-        if (playerState.status !== 'idle' || playerState.stream) return;
+        if (playerState.phase !== 'idle' || playerState.stream) return;
 
         const streamUrl = session?.url || props.url || '';
-        const streamInfoHash = session?.infoHash;
+        const streamInfoHash = session?.infoHash || props.infoHash;
+        const streamFileIdx = session?.fileIdx ?? props.fileIdx;
+        const streamHeaders = session?.headers || launchHeaders;
         if (!streamUrl && !streamInfoHash) {
-            bootstrapLoadDispatchedRef.current = true;
-            dispatch({ type: 'ERROR', error: 'No stream source available for playback.', fatal: true });
-            return;
+            if (bootstrapWaitStartedAtRef.current === null) {
+                bootstrapWaitStartedAtRef.current = Date.now();
+            }
+            if ((Date.now() - bootstrapWaitStartedAtRef.current) >= BOOTSTRAP_SOURCE_TIMEOUT_MS) {
+                bootstrapLoadDispatchedRef.current = true;
+                dispatch({ type: 'ERROR', error: 'No stream source available for playback.', fatal: true });
+                return;
+            }
+            const retryTimeout = setTimeout(() => {
+                setBootstrapRetryTick((tick) => tick + 1);
+            }, BOOTSTRAP_RETRY_INTERVAL_MS);
+            return () => clearTimeout(retryTimeout);
         }
+
+        bootstrapWaitStartedAtRef.current = null;
 
         bootstrapLoadDispatchedRef.current = true;
         dispatch({
@@ -138,9 +169,9 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             stream: {
                 url: streamUrl || undefined,
                 infoHash: streamInfoHash,
-                fileIdx: session?.fileIdx,
+                fileIdx: streamFileIdx,
                 behaviorHints: {
-                    headers: session?.headers,
+                    headers: streamHeaders,
                 },
             },
             engine: playbackEngine === 'vlc' ? 'vlc' : 'exo',
@@ -154,14 +185,18 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     }, [
         session,
         props.url,
+        props.infoHash,
+        props.fileIdx,
+        launchHeaders,
         playbackEngine,
         episodeTitle,
         derivedTitle,
         contentType,
         poster,
         contentId,
-        playerState.status,
+        playerState.phase,
         playerState.stream,
+        bootstrapRetryTick,
         dispatch,
     ]);
 
@@ -174,7 +209,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
             url?: string;
             headers?: Record<string, string>;
         } = {
-            playbackState: mapMachineStatusToPlaybackState(playerState.status),
+            playbackState: mapMachinePhaseToPlaybackState(playerState.phase),
             engine: playerState.engine === 'vlc' ? 'vlc' : 'exoplayer',
         };
 
@@ -186,12 +221,17 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         }
 
         useNativePlayerSessionStore.getState().patchSession(sessionId, patch);
-    }, [sessionId, playerState.status, playerState.engine, playerState.resolvedUrl, playerState.stream]);
+    }, [sessionId, playerState.phase, playerState.engine, playerState.resolvedUrl, playerState.stream]);
     
     // Derived UI State
-    const paused = playerState.status === 'paused';
-    const buffering = playerState.status === 'buffering' || playerState.status === 'booting_torrent' || playerState.status === 'polling_localhost' || playerState.status === 'loading_media';
-    const firstFrameRendered = playerState.status === 'playing' || playerState.status === 'paused'; // Simplified
+    const paused = playerState.intent === 'pause';
+    const loadingStreamSwitch =
+        playerState.phase === 'booting_torrent'
+        || playerState.phase === 'polling_localhost'
+        || playerState.phase === 'loading_media'
+        || playerState.phase === 'recovering';
+    const buffering = loadingStreamSwitch || playerState.phase === 'buffering' || playerState.phase === 'seeking';
+    const firstFrameRendered = playerState.observed.firstFrameRendered || playerState.observed.hasLoaded;
     const lastError = playerState.error;
 
     const [showControls, setShowControls] = useState(true);
@@ -219,7 +259,6 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const [currentSubtitleText, setCurrentSubtitleText] = useState('');
     const [subtitleSize, setSubtitleSize] = useState(24);
     const [subtitleOffset, setSubtitleOffset] = useState(0);
-    const lastCueIndexRef = useRef(0);
 
     // Stream & Content management - read from session store (single source of truth)
     const availableStreams = useMemo(() => (session?.streams as any[]) ?? [], [session?.streams]);
@@ -251,19 +290,17 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { meta, enriched, seasonEpisodes, colors } = useMetaAggregator(baseId, String(contentType), activeSeason);
 
     const isLoading = useMemo(() => {
-        if (buffering) return true;
-        const pState = playerState.status;
-        if (pState === 'booting_torrent' || pState === 'polling_localhost' || pState === 'loading_media') return true;
-        return false;
-    }, [buffering, playerState.status]);
+        return buffering;
+    }, [buffering]);
 
     const loadingText = useMemo(() => {
-        if (playerState.status === 'booting_torrent') return 'Starting torrent stream...';
-        if (playerState.status === 'polling_localhost') return 'Connecting to peers...';
-        if (playerState.status === 'loading_media') return 'Loading stream...';
-        if (playerState.status === 'buffering') return 'Buffering...';
+        if (playerState.phase === 'booting_torrent') return 'Starting torrent stream...';
+        if (playerState.phase === 'polling_localhost') return 'Connecting to peers...';
+        if (playerState.phase === 'loading_media' || playerState.phase === 'recovering') return 'Loading stream...';
+        if (playerState.phase === 'seeking') return 'Seeking...';
+        if (playerState.phase === 'buffering') return 'Buffering...';
         return 'Loading...';
-    }, [playerState.status]);
+    }, [playerState.phase]);
 
     // Fetch Intro Data
     useEffect(() => {
@@ -325,15 +362,17 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     }, [activeTab, isPipMode]);
 
     const togglePlay = useCallback(() => {
-        const nextPaused = !paused;
-        // Optimistic update handled by dispatch if we wanted, but machine waits for native event.
-        // We just send the command.
-        void CrispyNativeCore.nativePlayerSetPaused(nextPaused);
-        animatePlayPause();
+        dispatch({ type: paused ? 'USER_INTENT_PLAY' : 'USER_INTENT_PAUSE' });
         resetControlsTimer();
-    }, [paused, resetControlsTimer]);
+    }, [dispatch, paused, resetControlsTimer]);
 
-    const { seekAccumulation, handleTouchEnd, playPauseScale, animatePlayPause } = usePlayerGestures({
+    useEffect(() => {
+        if (isSeeking) {
+            dispatch({ type: 'USER_SEEK' });
+        }
+    }, [dispatch, isSeeking]);
+
+    const { seekAccumulation, handleTouchEnd, playPauseScale } = usePlayerGestures({
         sessionId,
         position: progress.position,
         duration: stableDuration || progress.duration,
@@ -471,7 +510,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         const adjustedPosition = progress.position - subtitleDelay;
         const cue = subtitleCues.find(c => adjustedPosition >= c.start && adjustedPosition <= c.end);
         if (cue?.text !== currentSubtitleText) setCurrentSubtitleText(cue?.text || '');
-    }, [progress.position, subtitleCues, subtitleDelay, selectedExternalSubtitleUrl]);
+    }, [progress.position, subtitleCues, subtitleDelay, selectedExternalSubtitleUrl, currentSubtitleText]);
 
     // --- Stream switching (Delegated to Machine) ---
     const switchToStream = useCallback((stream: any, options?: any) => {
@@ -554,7 +593,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         <View style={styles.container} pointerEvents="box-none">
             <PlayerLoadingCurtain
                 sessionId={sessionId}
-                loadingStreamSwitch={playerState.status === 'loading_media' || playerState.status === 'booting_torrent' || playerState.status === 'polling_localhost'}
+                loadingStreamSwitch={loadingStreamSwitch}
                 buffering={buffering}
                 firstFrameRendered={firstFrameRendered}
                 position={progress.position}

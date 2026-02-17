@@ -27,6 +27,9 @@ export type CrispyGpuMode = 'gpu' | 'gpu-next';
 export interface CrispyOpenPlayerActivityParams {
     sessionId: string;
     url: string;
+    infoHash?: string;
+    fileIdx?: number;
+    headersJson?: string;
     headers?: Record<string, string>;
     engine?: CrispyPlayerEngine;
     paused?: boolean;
@@ -296,6 +299,9 @@ export default {
             return await CrispyNativeCore.openPlayerActivity(
                 params.sessionId,
                 params.url,
+                params.infoHash ?? null,
+                params.fileIdx ?? null,
+                params.headersJson ?? null,
                 params.headers ?? null,
                 params.engine ?? 'exoplayer',
                 params.paused ?? false,
