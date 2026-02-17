@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { AddonService, MetaPreview } from '../services/AddonService';
+import { getCatalog, getMeta } from '../addons/addonClient';
 import { useUserStore } from '../stores/userStore';
+import { MetaPreview } from '../types/stremio';
 
 export interface Meta extends MetaPreview {
     background?: string;
@@ -46,7 +47,7 @@ export const useHeroItems = (enabled: boolean = true) => {
             // 2. Fetch basic items from hero catalogs
             const catalogResults = await Promise.allSettled(
                 heroCatalogs.slice(0, 5).map(cat =>
-                    AddonService.getCatalog(cat.addonUrl, cat.type, cat.id)
+                    getCatalog(cat.addonUrl, cat.type, cat.id, undefined, manifests[cat.addonUrl])
                 )
             );
 
@@ -70,7 +71,7 @@ export const useHeroItems = (enabled: boolean = true) => {
             // 4. Resolve full metadata for candidates to get backdrop/logo
             const fullMetas = await Promise.allSettled(
                 candidates.map(item =>
-                    AddonService.getMeta(item.addonUrl, item.type, item.id)
+                    getMeta(item.addonUrl, item.type, item.id, manifests[item.addonUrl])
                 )
             );
 

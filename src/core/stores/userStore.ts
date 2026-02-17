@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { getStoredLanguage, setStoredLanguage } from '../languages';
-import { AddonService } from '../services/AddonService';
+import {
+    fetchManifest,
+    normalizeAddonUrl,
+    prepareAddonInstall as prepareAddonInstallRequest,
+    type PreparedAddonInstall,
+} from '../addons/addonClient';
 import { StorageService } from '../storage';
 import { AddonManifest } from '../types/addon-types';
 import type { CrispyDecoderMode, CrispyGpuMode } from '@/modules/crispy-native-core';
@@ -168,7 +173,8 @@ export interface UserStoreState extends UserState {
     updateTraktAuth: (auth: TraktAuth) => void;
 
     // Addon Actions (Unified)
-    addAddon: (url: string) => Promise<void>;
+    prepareAddonInstall: (url: string) => Promise<PreparedAddonInstall>;
+    confirmAddonInstall: (prepared: PreparedAddonInstall) => void;
     removeAddon: (url: string) => void;
     updateManifest: (url: string, manifest: AddonManifest) => void;
     syncManifests: () => Promise<void>;
@@ -278,47 +284,51 @@ export const useUserStore = create<UserStoreState>((set, get) => {
 
         // --- NEW Addon Actions ---
 
-        addAddon: async (url) => {
-            const normalizedUrl = AddonService.normalizeAddonUrl(url);
-
-            // Check if already exists
+        prepareAddonInstall: async (url) => {
+            const prepared = await prepareAddonInstallRequest(url);
+            const normalizedUrl = normalizeAddonUrl(prepared.transportUrl);
             const currentAddons = get().addons;
-            if (currentAddons.some(a => AddonService.normalizeAddonUrl(a.url) === normalizedUrl)) {
-                return; // Already exists
+
+            if (currentAddons.some((addon) => normalizeAddonUrl(addon.url) === normalizedUrl)) {
+                throw new Error('Addon already installed');
             }
 
-            try {
-                // Fetch to validate and get name
-                const manifest = await AddonService.fetchManifest(normalizedUrl);
+            return prepared;
+        },
 
-                const newAddon: Addon = {
-                    url: normalizedUrl,
-                    enabled: true,
-                    name: manifest.name,
-                    updatedAt: Date.now()
-                };
+        confirmAddonInstall: (prepared) => {
+            const normalizedUrl = normalizeAddonUrl(prepared.transportUrl);
+            const currentAddons = get().addons;
 
-                const nextAddons = [...currentAddons, newAddon];
-
-                // Update State
-                set((state) => ({
-                    addons: nextAddons,
-                    manifests: { ...state.manifests, [normalizedUrl]: manifest }
-                }));
-
-                // Persist
-                StorageService.setAccount('crispy-addons', nextAddons);
-
-            } catch (e) {
-                console.error('[UserStore] Failed to add addon:', url, e);
-                throw e;
+            if (currentAddons.some((addon) => normalizeAddonUrl(addon.url) === normalizedUrl)) {
+                return;
             }
+
+            const manifest = prepared.manifest;
+            const newAddon: Addon = {
+                url: normalizedUrl,
+                enabled: true,
+                name: manifest.name || 'Unknown Addon',
+                updatedAt: Date.now(),
+            };
+
+            const nextAddons = [...currentAddons, newAddon];
+
+            set((state) => ({
+                addons: nextAddons,
+                manifests: {
+                    ...state.manifests,
+                    [normalizedUrl]: manifest,
+                },
+            }));
+
+            StorageService.setAccount('crispy-addons', nextAddons);
         },
 
         removeAddon: (url) => {
-            const normalizedUrl = AddonService.normalizeAddonUrl(url);
+            const normalizedUrl = normalizeAddonUrl(url);
             const currentAddons = get().addons;
-            const nextAddons = currentAddons.filter(a => AddonService.normalizeAddonUrl(a.url) !== normalizedUrl);
+            const nextAddons = currentAddons.filter(a => normalizeAddonUrl(a.url) !== normalizedUrl);
 
             set((state) => {
                 const nextManifests = { ...state.manifests };
@@ -342,7 +352,7 @@ export const useUserStore = create<UserStoreState>((set, get) => {
             const { addons, updateManifest } = get();
             const promises = addons.map(async (addon) => {
                 try {
-                    const manifest = await AddonService.fetchManifest(addon.url);
+                    const manifest = await fetchManifest(addon.url);
                     updateManifest(addon.url, manifest);
                 } catch (e) {
                     console.warn(`[UserStore] Failed to refresh manifest for ${addon.url}`, e);

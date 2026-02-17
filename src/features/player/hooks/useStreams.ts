@@ -1,4 +1,4 @@
-import { AddonService } from '@/src/core/services/AddonService';
+import { getStreams } from '@/src/core/addons/addonClient';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { formatIdForIdPrefixes } from '@crispy-streaming/media-core';
 import { useQuery } from '@tanstack/react-query';
@@ -37,7 +37,7 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
     const enabledAddons = useMemo(() => addons.filter((a) => a.enabled !== false), [addons]);
 
     const streamAddons = useMemo(() => {
-        const out: Array<{ url: string; idPrefixes?: string[] }> = [];
+        const out: { url: string; idPrefixes?: string[] }[] = [];
 
         for (const addon of enabledAddons) {
             const m = manifests[addon.url];
@@ -91,7 +91,7 @@ export const useStreams = (type: string, id: string, enabled: boolean = true) =>
                         formatIdForIdPrefixes(id, stremioType) ||
                         id;
 
-                    const result = await AddonService.getStreams(url, stremioType, formattedId);
+                    const result = await getStreams(url, stremioType, formattedId, manifests[url]);
                     if (result?.streams && result.streams.length > 0) {
                         // Add new streams incrementally
                         setStreams(prev => {

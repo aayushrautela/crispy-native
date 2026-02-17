@@ -3,7 +3,7 @@ import React from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useTheme } from '../../core/ThemeContext';
-import { MetaPreview } from '../services/AddonService';
+import { MetaPreview } from '../types/stremio';
 import { Typography } from './Typography';
 
 interface MetaCardProps {

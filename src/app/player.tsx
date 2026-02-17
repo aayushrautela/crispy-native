@@ -1,6 +1,5 @@
 import { useNativePlayerSessionStore } from '@/src/features/player/native/nativePlayerSessionStore';
 import { usePlayerLogic } from '@/src/features/player/hooks/usePlayerLogic';
-import { AddonService } from '@/src/core/services/AddonService';
 import { IntroService, IntroTimestamps } from '@/src/core/services/IntroService';
 
 import { TMDBService } from '@/src/core/services/TMDBService';

@@ -1,6 +1,6 @@
 export interface AddonManifest {
     id: string;
-    name: string;
+    name?: string;
     version?: string;
     description?: string;
     icon?: string;
@@ -12,6 +12,7 @@ export interface AddonManifest {
         id: string;
         name?: string;
         extra?: (string | { name: string; isRequired?: boolean; options?: string[] })[];
-        extraSupported?: string[]; // Added this based on AddonService usage
+        extraSupported?: string[];
     }[];
+    [key: string]: unknown;
 }

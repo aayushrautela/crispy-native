@@ -1,4 +1,4 @@
-import { MetaPreview } from '@/src/core/services/AddonService';
+import { MetaPreview } from '@/src/core/types/stremio';
 import { CatalogRow } from '@/src/features/catalog/components/CatalogRow';
 import { ContinueWatchingRow } from '@/src/features/home/components/ContinueWatchingRow';
 import { HeroCarousel } from '@/src/features/home/components/HeroCarousel';

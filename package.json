@@ -13,6 +13,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@crispy-streaming/crispy-addon-client": "^2.0.0",
     "@crispy-streaming/media-core": "^0.3.2",
     "@crispy-streaming/supabase-contract": "^0.2.4",
     "@expo/vector-icons": "^15.0.3",
