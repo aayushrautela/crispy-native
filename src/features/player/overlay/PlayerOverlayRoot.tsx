@@ -34,7 +34,7 @@ interface PlayerOverlayRootProps {
     url?: string;
     infoHash?: string;
     fileIdx?: number;
-    headersJson?: string;
+    headers?: Record<string, string>;
     paused?: boolean;
     title?: string;
     artist?: string;
@@ -106,17 +106,9 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
     const session = useNativePlayerSessionStore((s) => (sessionId ? s.sessionsById[sessionId] : undefined));
     const launchHeaders = useMemo(() => {
-        if (!props.headersJson) return undefined;
-        try {
-            const parsed = JSON.parse(props.headersJson);
-            if (parsed && typeof parsed === 'object') {
-                return parsed as Record<string, string>;
-            }
-        } catch {
-            return undefined;
-        }
-        return undefined;
-    }, [props.headersJson]);
+        if (!props.headers) return undefined;
+        return props.headers;
+    }, [props.headers]);
     const playbackEngine = useMemo(() => {
         const raw = (session?.engine || props.engine || 'exoplayer').toLowerCase();
         return raw === 'vlc' ? 'vlc' : 'exoplayer';

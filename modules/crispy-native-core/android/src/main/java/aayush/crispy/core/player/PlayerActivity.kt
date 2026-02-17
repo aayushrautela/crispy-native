@@ -50,7 +50,6 @@ class PlayerActivity : ReactActivity() {
     const val EXTRA_URL = "crispy.player.url"
     const val EXTRA_INFO_HASH = "crispy.player.infoHash"
     const val EXTRA_FILE_IDX = "crispy.player.fileIdx"
-    const val EXTRA_HEADERS_JSON = "crispy.player.headersJson"
     const val EXTRA_HEADERS = "crispy.player.headers"
     const val EXTRA_ENGINE = "crispy.player.engine" // "exoplayer" | "vlc"
     const val EXTRA_PAUSED = "crispy.player.paused"
@@ -76,7 +75,6 @@ class PlayerActivity : ReactActivity() {
   private var url: String? = null
   private var infoHash: String? = null
   private var fileIdx: Int? = null
-  private var launchHeadersJson: String? = null
   private var headers: Map<String, String>? = null
   private var startPaused: Boolean = false
 
@@ -150,7 +148,14 @@ class PlayerActivity : ReactActivity() {
         if (fileIdx != null) {
           b.putInt("fileIdx", fileIdx!!)
         }
-        b.putString("headersJson", launchHeadersJson)
+        val launchHeaders = headers
+        if (!launchHeaders.isNullOrEmpty()) {
+          val headersBundle = Bundle(launchHeaders.size)
+          for ((k, v) in launchHeaders) {
+            headersBundle.putString(k, v)
+          }
+          b.putBundle("headers", headersBundle)
+        }
         b.putBoolean("paused", startPaused)
         b.putString("title", title)
         b.putString("artist", artist)
@@ -217,7 +222,6 @@ class PlayerActivity : ReactActivity() {
     url = intent.getStringExtra(EXTRA_URL)
     infoHash = intent.getStringExtra(EXTRA_INFO_HASH)
     fileIdx = if (intent.hasExtra(EXTRA_FILE_IDX)) intent.getIntExtra(EXTRA_FILE_IDX, -1) else null
-    launchHeadersJson = intent.getStringExtra(EXTRA_HEADERS_JSON)
     startPaused = intent.getBooleanExtra(EXTRA_PAUSED, false)
     title = intent.getStringExtra(EXTRA_TITLE) ?: ""
     artist = intent.getStringExtra(EXTRA_ARTIST) ?: ""

@@ -29,7 +29,6 @@ export interface CrispyOpenPlayerActivityParams {
     url: string;
     infoHash?: string;
     fileIdx?: number;
-    headersJson?: string;
     headers?: Record<string, string>;
     engine?: CrispyPlayerEngine;
     paused?: boolean;
@@ -296,19 +295,22 @@ export default {
     async openPlayerActivity(params: CrispyOpenPlayerActivityParams): Promise<boolean> {
         try {
             const md = params.metadata;
-            return await CrispyNativeCore.openPlayerActivity(
-                params.sessionId,
-                params.url,
-                params.infoHash ?? null,
-                params.fileIdx ?? null,
-                params.headersJson ?? null,
-                params.headers ?? null,
-                params.engine ?? 'exoplayer',
-                params.paused ?? false,
-                md?.title ?? '',
-                md?.subtitle ?? '',
-                md?.artworkUrl ?? null
-            );
+            return await CrispyNativeCore.openPlayerActivity({
+                sessionId: params.sessionId,
+                url: params.url,
+                infoHash: params.infoHash ?? null,
+                fileIdx: params.fileIdx ?? null,
+                headers: params.headers ?? null,
+                engine: params.engine ?? 'exoplayer',
+                paused: params.paused ?? false,
+                metadata: md
+                    ? {
+                          title: md.title,
+                          subtitle: md.subtitle,
+                          artworkUrl: md.artworkUrl ?? null,
+                      }
+                    : null,
+            });
         } catch (e) {
             console.error('[CrispyNativeCore] openPlayerActivity failed:', e);
             return false;

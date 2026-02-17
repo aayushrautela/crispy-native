@@ -215,27 +215,34 @@ class CrispyNativeCoreModule : Module() {
     }
 
     // --- NATIVE PLAYER ACTIVITY (Android) ---
-    AsyncFunction("openPlayerActivity") { sessionId: String, url: String, infoHash: String?, fileIdx: Int?, headersJson: String?, headers: Map<String, String>?, engine: String?, paused: Boolean, title: String?, artist: String?, artworkUrl: String? ->
+    AsyncFunction("openPlayerActivity") { params: CrispyOpenPlayerActivityParams ->
       val ctx = appContext.reactContext ?: return@AsyncFunction false
       val activity = appContext.currentActivity
 
       val intent = Intent(activity ?: ctx, PlayerActivity::class.java)
       if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-      intent.putExtra(PlayerActivity.EXTRA_SESSION_ID, sessionId)
-      intent.putExtra(PlayerActivity.EXTRA_URL, url)
-      intent.putExtra(PlayerActivity.EXTRA_INFO_HASH, infoHash)
-      if (fileIdx != null) {
-        intent.putExtra(PlayerActivity.EXTRA_FILE_IDX, fileIdx)
+      if (params.sessionId.isBlank() || params.url.isBlank()) {
+        Log.e("CrispyModule", "openPlayerActivity missing sessionId/url")
+        return@AsyncFunction false
       }
-      intent.putExtra(PlayerActivity.EXTRA_HEADERS_JSON, headersJson)
-      intent.putExtra(PlayerActivity.EXTRA_ENGINE, engine ?: PlayerActivity.ENGINE_EXO)
-      intent.putExtra(PlayerActivity.EXTRA_PAUSED, paused)
-      intent.putExtra(PlayerActivity.EXTRA_TITLE, title ?: "")
-      intent.putExtra(PlayerActivity.EXTRA_ARTIST, artist ?: "")
-      intent.putExtra(PlayerActivity.EXTRA_ARTWORK_URL, artworkUrl)
-      if (headers != null) {
-        intent.putExtra(PlayerActivity.EXTRA_HEADERS, HashMap(headers))
+
+      intent.putExtra(PlayerActivity.EXTRA_SESSION_ID, params.sessionId)
+      intent.putExtra(PlayerActivity.EXTRA_URL, params.url)
+      intent.putExtra(PlayerActivity.EXTRA_INFO_HASH, params.infoHash)
+      if (params.fileIdx != null) {
+        intent.putExtra(PlayerActivity.EXTRA_FILE_IDX, params.fileIdx)
+      }
+      intent.putExtra(PlayerActivity.EXTRA_ENGINE, params.engine ?: PlayerActivity.ENGINE_EXO)
+      intent.putExtra(PlayerActivity.EXTRA_PAUSED, params.paused)
+
+      val md = params.metadata
+      intent.putExtra(PlayerActivity.EXTRA_TITLE, md?.title ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTIST, md?.subtitle ?: "")
+      intent.putExtra(PlayerActivity.EXTRA_ARTWORK_URL, md?.artworkUrl)
+
+      if (params.headers != null) {
+        intent.putExtra(PlayerActivity.EXTRA_HEADERS, HashMap(params.headers))
       }
 
       return@AsyncFunction try {

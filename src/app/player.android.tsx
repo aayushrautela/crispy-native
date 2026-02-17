@@ -92,14 +92,11 @@ export default function PlayerScreenAndroid() {
             artworkUrl: poster,
         });
 
-        const headersJson = headers ? JSON.stringify(headers) : undefined;
-
         CrispyNativeCore.openPlayerActivity({
             sessionId,
             url: initialUrl,
             infoHash: infoHash || undefined,
             fileIdx,
-            headersJson,
             headers,
             engine: nativeEngine,
             paused: false,
