@@ -10,12 +10,15 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
+import android.security.NetworkSecurityPolicy
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.URLEncoder
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -116,6 +119,9 @@ class TorrentService : Service() {
     private val binder = TorrentBinder()
     private val activeTorrents = ConcurrentHashMap<String, ActiveTorrent>()
     private val processLock = Any()
+
+    @Volatile
+    private var preferredHttpHost: String = LOCAL_HOST
 
     @Volatile
     private var torrServerProcess: Process? = null
@@ -293,15 +299,135 @@ class TorrentService : Service() {
         }
     }
 
+    private data class HttpProbe(
+        val host: String,
+        val url: String,
+        val code: Int,
+        val error: Throwable? = null,
+    )
+
+    private fun resolveHostSummary(host: String): String {
+        return try {
+            InetAddress.getAllByName(host).joinToString(prefix = "[", postfix = "]") { it.hostAddress }
+        } catch (e: Exception) {
+            "error:${e.javaClass.simpleName}:${e.message}"
+        }
+    }
+
+    private fun cleartextPolicySummary(): String {
+        return try {
+            val policy = NetworkSecurityPolicy.getInstance()
+            val global = policy.isCleartextTrafficPermitted
+            val hostSpecificSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+            val permitted127 = if (hostSpecificSupported) policy.isCleartextTrafficPermitted(LOCAL_HOST) else null
+            val permittedLocalhost = if (hostSpecificSupported) policy.isCleartextTrafficPermitted("localhost") else null
+            "sdk=${Build.VERSION.SDK_INT} global=$global hostSpecific=$hostSpecificSupported host($LOCAL_HOST)=$permitted127 host(localhost)=$permittedLocalhost"
+        } catch (t: Throwable) {
+            "unavailable(${t.javaClass.simpleName}:${t.message})"
+        }
+    }
+
+    private fun processStateSummary(): String {
+        val process = torrServerProcess ?: return "null"
+        val alive = try {
+            process.isAlive
+        } catch (_: Throwable) {
+            false
+        }
+
+        val exitCode = if (!alive) {
+            try {
+                process.exitValue()
+            } catch (_: Throwable) {
+                null
+            }
+        } else {
+            null
+        }
+
+        return "alive=$alive exit=$exitCode"
+    }
+
+    private fun throwableSummary(t: Throwable?): String? {
+        if (t == null) return null
+        var root: Throwable = t
+        while (root.cause != null && root.cause !== root) {
+            root = root.cause!!
+        }
+        val msg = root.message?.trim().orEmpty()
+        return if (msg.isNotEmpty()) "${root.javaClass.simpleName}: $msg" else root.javaClass.simpleName
+    }
+
+    private fun httpProbe(method: String, path: String, host: String): HttpProbe {
+        val url = "http://$host:$LOCAL_PORT$path"
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = 500
+                readTimeout = 500
+            }
+            HttpProbe(host = host, url = url, code = connection.responseCode)
+        } catch (t: Throwable) {
+            HttpProbe(host = host, url = url, code = -1, error = t)
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun httpHostCandidates(): List<String> {
+        val ordered = LinkedHashSet<String>()
+        ordered.add(preferredHttpHost)
+        ordered.add(LOCAL_HOST)
+        ordered.add("localhost")
+        return ordered.toList()
+    }
+
     fun awaitServerReady(timeoutMs: Long = 8_000L): Boolean {
         if (!ensureServerStarted()) return false
 
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            val code = httpStatus("GET", "/echo")
-            if (code in 200..399) {
-                return true
+        val startedAtMs = SystemClock.elapsedRealtime()
+        val deadlineMs = startedAtMs + timeoutMs
+        val policy = cleartextPolicySummary()
+        Log.i(
+            TAG,
+            "awaitServerReady(timeoutMs=${timeoutMs}ms) bind=$LOCAL_HOST:$LOCAL_PORT preferredHost=$preferredHttpHost " +
+                "policy=($policy) resolve(localhost)=${resolveHostSummary("localhost")} process=${processStateSummary()}"
+        )
+
+        var attempts = 0
+        var lastProbe: HttpProbe? = null
+        var lastLogMs = 0L
+
+        while (SystemClock.elapsedRealtime() < deadlineMs) {
+            attempts++
+
+            for (host in httpHostCandidates()) {
+                val probe = httpProbe("GET", "/echo", host)
+                lastProbe = probe
+                if (probe.code in 200..399) {
+                    if (preferredHttpHost != host) {
+                        Log.i(TAG, "TorrServer ready via host=$host; switching preferred host from $preferredHttpHost")
+                        preferredHttpHost = host
+                    }
+                    val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                    Log.i(TAG, "TorrServer ready after ${elapsedMs}ms attempts=$attempts code=${probe.code} url=${probe.url}")
+                    return true
+                }
             }
+
+            val nowMs = SystemClock.elapsedRealtime()
+            if (attempts == 1 || nowMs - lastLogMs >= 1_000L) {
+                lastLogMs = nowMs
+                val elapsedMs = nowMs - startedAtMs
+                val last = lastProbe
+                Log.d(
+                    TAG,
+                    "TorrServer not ready yet elapsed=${elapsedMs}ms attempts=$attempts " +
+                        "lastHost=${last?.host} lastCode=${last?.code} lastErr=${throwableSummary(last?.error)}"
+                )
+            }
+
             try {
                 Thread.sleep(120)
             } catch (_: InterruptedException) {
@@ -310,31 +436,25 @@ class TorrentService : Service() {
             }
         }
 
-        Log.w(TAG, "TorrServer readiness check timed out after ${timeoutMs}ms")
+        val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+        val last = lastProbe
+        Log.w(
+            TAG,
+            "TorrServer readiness check timed out after ${timeoutMs}ms elapsed=${elapsedMs}ms attempts=$attempts " +
+                "lastHost=${last?.host} lastCode=${last?.code} lastErr=${throwableSummary(last?.error)} " +
+                "preferredHost=$preferredHttpHost policy=($policy) resolve(localhost)=${resolveHostSummary("localhost")} " +
+                "process=${processStateSummary()}"
+        )
         return false
-    }
-
-    private fun httpStatus(method: String, path: String): Int {
-        var connection: HttpURLConnection? = null
-        return try {
-            connection = (URL("http://$LOCAL_HOST:$LOCAL_PORT$path").openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = 500
-                readTimeout = 500
-            }
-            connection.responseCode
-        } catch (_: Exception) {
-            -1
-        } finally {
-            connection?.disconnect()
-        }
     }
 
     private fun postJson(path: String, body: JSONObject): JSONObject? {
         var connection: HttpURLConnection? = null
         return try {
+            val host = preferredHttpHost
+            val url = "http://$host:$LOCAL_PORT$path"
             val payload = body.toString().toByteArray(StandardCharsets.UTF_8)
-            connection = (URL("http://$LOCAL_HOST:$LOCAL_PORT$path").openConnection() as HttpURLConnection).apply {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 3_000
                 readTimeout = 5_000
@@ -344,6 +464,7 @@ class TorrentService : Service() {
             }
             connection.outputStream.use { it.write(payload) }
             val status = connection.responseCode
+            Log.d(TAG, "HTTP POST $path status=$status host=$host")
             val bodyText = (if (status in 200..399) connection.inputStream else connection.errorStream)
                 ?.bufferedReader()
                 ?.use { it.readText() }
@@ -351,7 +472,7 @@ class TorrentService : Service() {
 
             JSONObject(bodyText)
         } catch (e: Exception) {
-            Log.w(TAG, "HTTP POST $path failed: ${e.message}")
+            Log.w(TAG, "HTTP POST $path failed (host=$preferredHttpHost policy=(${cleartextPolicySummary()})): ${e.message}", e)
             null
         } finally {
             connection?.disconnect()
@@ -362,6 +483,7 @@ class TorrentService : Service() {
         val payload = JSONObject().put("action", action)
         if (!link.isNullOrBlank()) payload.put("link", link)
         if (!hash.isNullOrBlank()) payload.put("hash", hash.lowercase())
+        Log.d(TAG, "TorrServer /torrents action=$action host=$preferredHttpHost hash=${hash?.lowercase()} link=${link?.take(96)}")
         return postJson("/torrents", payload)
     }
 
@@ -439,12 +561,13 @@ class TorrentService : Service() {
     }
 
     private fun buildStreamUrl(link: String, hash: String?, fileIdx: Int): String {
+        val host = preferredHttpHost
         if (!hash.isNullOrBlank()) {
-            return "http://$LOCAL_HOST:$LOCAL_PORT/play/${hash.lowercase()}/$fileIdx"
+            return "http://$host:$LOCAL_PORT/play/${hash.lowercase()}/$fileIdx"
         }
 
         val encodedLink = URLEncoder.encode(link, StandardCharsets.UTF_8.toString())
-        return "http://$LOCAL_HOST:$LOCAL_PORT/stream?link=$encodedLink&index=$fileIdx&play=1"
+        return "http://$host:$LOCAL_PORT/stream?link=$encodedLink&index=$fileIdx&play=1"
     }
 
     fun getStreamUrl(infoHash: String, fileIdx: Int): String {
