@@ -8,7 +8,7 @@ import type { StreamAddon } from '@/src/features/player/streams/streamAddons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { Image as ExpoImage } from 'expo-image';
 import React from 'react';
-import { ListRenderItem, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ListRenderItem, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface StreamMetadata {
@@ -37,7 +37,7 @@ function getAddonLabel(addon: StreamAddon): string {
 function stripInternalStreamFields(item: StreamListItem): Stream {
     // Keep the payload stremio-like for downstream consumers.
     // Internal fields are for UI identity and filtering only.
-    const { _streamKey, _sourceAddonUrl, _sourceAddonName, _addonRank, _streamRank, ...rest } = item;
+    const { _streamKey, _sourceAddonUrl, _sourceAddonName, ...rest } = item;
     return rest;
 }
 
@@ -47,7 +47,6 @@ function AddonFilterRow({
     countsByAddonUrl,
     totalCount,
     isFinal,
-    colors,
     onSelect,
 }: {
     addons: StreamAddon[];
@@ -55,53 +54,47 @@ function AddonFilterRow({
     countsByAddonUrl: Record<string, number>;
     totalCount: number;
     isFinal: boolean;
-    colors: {
-        primary: string;
-        onPrimary: string;
-        primaryContainer: string;
-        onPrimaryContainer: string;
-        surfaceVariant: string;
-        onSurfaceVariant: string;
-        outlineVariant: string;
-    };
     onSelect: (value: AddonFilterValue) => void;
 }) {
+    const { theme } = useTheme();
+
+    const values = React.useMemo<AddonFilterValue[]>(() => ['all', ...addons.map((a) => a.url)], [addons]);
+    const activeIndex = React.useMemo(() => values.indexOf(selected), [selected, values]);
+
     if (addons.length <= 1) return null;
 
-    const renderChip = (value: AddonFilterValue, label: string, count: number, disabled: boolean) => {
+    const renderChip = (value: AddonFilterValue, label: string, count: number, disabled: boolean, index: number) => {
         const isSelected = selected === value;
 
-        const backgroundColor = isSelected ? colors.primaryContainer : colors.surfaceVariant;
-        const borderColor = isSelected ? colors.primary : colors.outlineVariant;
-        const textColor = isSelected ? colors.onPrimaryContainer : colors.onSurfaceVariant;
-        const badgeBackground = isSelected ? colors.primary : colors.outlineVariant;
-        const badgeText = isSelected ? colors.onPrimary : colors.onSurfaceVariant;
-
         return (
-            <Pressable
-                key={String(value)}
-                disabled={disabled}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter streams: ${label}`}
-                onPress={() => onSelect(value)}
-                style={({ pressed }) => [
-                    styles.addonChip,
-                    {
-                        backgroundColor,
-                        borderColor,
-                        opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
-                    },
-                ]}
-            >
-                <Typography variant="label" weight="bold" numberOfLines={1} style={{ color: textColor, maxWidth: 200 }}>
-                    {label}
-                </Typography>
-                <View style={[styles.addonCountBadge, { backgroundColor: badgeBackground }]}>
-                    <Typography variant="label" weight="black" style={{ color: badgeText }}>
-                        {count}
-                    </Typography>
-                </View>
-            </Pressable>
+            <View key={String(value)} style={{ opacity: disabled ? 0.45 : 1 }} pointerEvents={disabled ? 'none' : 'auto'}>
+                <ExpressiveSurface
+                    rounding="3xl"
+                    selected={isSelected}
+                    index={index}
+                    activeIndex={activeIndex}
+                    onPress={() => onSelect(value)}
+                    style={styles.addonChip}
+                >
+                    <View style={styles.addonChipContent}>
+                        <Typography
+                            variant="label"
+                            weight="bold"
+                            numberOfLines={1}
+                            style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.onSurface, maxWidth: 200 }}
+                        >
+                            {label}
+                        </Typography>
+                        <Typography
+                            variant="label"
+                            weight="black"
+                            style={[styles.addonCountText, { color: isSelected ? theme.colors.onPrimary : theme.colors.onSurfaceVariant }]}
+                        >
+                            {count}
+                        </Typography>
+                    </View>
+                </ExpressiveSurface>
+            </View>
         );
     };
 
@@ -113,11 +106,11 @@ function AddonFilterRow({
                 contentContainerStyle={styles.addonRowContent}
                 keyboardShouldPersistTaps="handled"
             >
-                {renderChip('all', 'All', totalCount, false)}
-                {addons.map((addon) => {
+                {renderChip('all', 'All', totalCount, false, 0)}
+                {addons.map((addon, idx) => {
                     const count = countsByAddonUrl[addon.url] ?? 0;
                     const disabled = isFinal && count === 0;
-                    return renderChip(addon.url, getAddonLabel(addon), count, disabled);
+                    return renderChip(addon.url, getAddonLabel(addon), count, disabled, idx + 1);
                 })}
             </ScrollView>
         </View>
@@ -213,16 +206,22 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
         const mainTitle = item.name?.replace(/\n/g, ' ') || 'Stream';
         const subtitle = item.title || item.description || '';
 
+        const cardBg =
+            (theme.colors as any).surfaceContainerHigh ||
+            (theme.colors as any).surfaceContainer ||
+            (theme.colors as any).surfaceContainerHighest ||
+            theme.colors.surfaceVariant;
+
         return (
-                 <ExpressiveSurface
-                     variant="tonal"
-                     rounding="none"
-                     disableLayoutAnimation
-                     onPress={() => handleSelect(item)}
-                     style={styles.streamItem}
-                 >
+            <ExpressiveSurface
+                variant="outlined"
+                rounding="xl"
+                disableLayoutAnimation
+                onPress={() => handleSelect(item)}
+                style={[styles.streamItem, { backgroundColor: cardBg, borderColor: theme.colors.outlineVariant }]}
+            >
                 <View style={styles.streamTextBlock}>
-                    <Typography variant="title-medium" weight="bold" style={[styles.streamTitle, { color: theme.colors.onSecondaryContainer }]}>
+                    <Typography variant="title-medium" weight="bold" style={[styles.streamTitle, { color: theme.colors.onSurface }]}>
                         {mainTitle}
                     </Typography>
                     <Typography variant="body-small" style={[styles.streamSubtitle, { color: theme.colors.onSurfaceVariant }]}>
@@ -231,9 +230,9 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 </View>
             </ExpressiveSurface>
         );
-    }, [handleSelect, theme.colors.onSecondaryContainer, theme.colors.onSurfaceVariant]);
+    }, [handleSelect, theme.colors]);
 
-    const renderHeader = () => {
+    const header = React.useMemo(() => {
         if (!metadata) {
             if (hideHeader) return null;
             return (
@@ -247,7 +246,6 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                         countsByAddonUrl={countsByAddonUrl}
                         totalCount={streams.length}
                         isFinal={streamsQuery.isFetched}
-                        colors={theme.colors}
                         onSelect={setAddonFilter}
                     />
                 </View>
@@ -294,12 +292,11 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                     countsByAddonUrl={countsByAddonUrl}
                     totalCount={streams.length}
                     isFinal={streamsQuery.isFetched}
-                    colors={theme.colors}
                     onSelect={setAddonFilter}
                 />
             </View>
         );
-    };
+    }, [addonFilter, countsByAddonUrl, hideHeader, metadata, streamAddons, streams.length, streamsQuery.isFetched, theme.colors]);
 
     const renderLoadingState = () => {
         if (!isSearching) return null;
@@ -325,22 +322,16 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                     <Typography variant="body-large" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
                         {`No streams from ${label} for this content.`}
                     </Typography>
-                    <Pressable
-                        accessibilityRole="button"
+                    <ExpressiveSurface
+                        variant="outlined"
+                        rounding="3xl"
                         onPress={() => setAddonFilter('all')}
-                        style={({ pressed }) => [
-                            styles.resetFilterButton,
-                            {
-                                backgroundColor: theme.colors.primaryContainer,
-                                borderColor: theme.colors.primary,
-                                opacity: pressed ? 0.85 : 1,
-                            },
-                        ]}
+                        style={[styles.resetFilterButton, { backgroundColor: theme.colors.primaryContainer, borderColor: theme.colors.primary }]}
                     >
                         <Typography variant="label" weight="black" style={{ color: theme.colors.onPrimaryContainer }}>
                             Show all streams
                         </Typography>
-                    </Pressable>
+                    </ExpressiveSurface>
                 </View>
             );
         }
@@ -374,7 +365,7 @@ export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStrea
                 data={filteredStreams}
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={header}
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
                 style={{ flex: 1 }}
                 ListEmptyComponent={renderEmptyState}
@@ -437,32 +428,27 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     addonRowContent: {
-        paddingVertical: 4,
-        gap: 8,
+        gap: 10,
+        paddingBottom: 16,
+        paddingTop: 4,
     },
     addonChip: {
+        paddingHorizontal: 16,
+        height: 40,
+        justifyContent: 'center',
+    },
+    addonChipContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        borderRadius: 999,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderWidth: 1,
     },
-    addonCountBadge: {
-        marginLeft: 8,
-        minWidth: 24,
-        height: 20,
-        paddingHorizontal: 6,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
+    addonCountText: {
+        marginLeft: 10,
+        opacity: 0.8,
     },
     resetFilterButton: {
         marginTop: 14,
-        borderRadius: 12,
         paddingVertical: 10,
         paddingHorizontal: 14,
-        borderWidth: 1,
     },
     loading: {
         height: 300,
@@ -478,7 +464,6 @@ const styles = StyleSheet.create({
     },
     streamItem: {
         width: '100%',
-        borderRadius: 10,
         paddingVertical: 14,
         paddingHorizontal: 16,
     },

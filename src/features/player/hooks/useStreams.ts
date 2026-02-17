@@ -41,33 +41,33 @@ function computeBaseStreamKey(stream: Stream, streamIndex: number): string {
 }
 
 function mergeStreams(prev: StreamListItem[], incoming: StreamListItem[]): StreamListItem[] {
-    const map = new Map<string, StreamListItem>();
+    if (incoming.length === 0) return prev;
 
-    for (const item of prev) map.set(item._streamKey, item);
+    // Append-only ordering: never re-order already rendered items.
+    // This avoids the "list jumps" effect when a slower addon returns later.
+    const out = [...prev];
+    const indexByKey = new Map<string, number>();
+
+    for (let i = 0; i < out.length; i++) indexByKey.set(out[i]._streamKey, i);
 
     for (const next of incoming) {
-        const existing = map.get(next._streamKey);
-        if (!existing) {
-            map.set(next._streamKey, next);
+        const idx = indexByKey.get(next._streamKey);
+        if (idx === undefined) {
+            indexByKey.set(next._streamKey, out.length);
+            out.push(next);
             continue;
         }
 
-        // Prefer stable ordering (lower addon rank). If same, prefer earlier stream rank.
-        if (next._addonRank < existing._addonRank) {
-            map.set(next._streamKey, next);
-            continue;
-        }
-        if (next._addonRank === existing._addonRank && next._streamRank < existing._streamRank) {
-            map.set(next._streamKey, next);
-        }
+        const existing = out[idx];
+        // Merge any extra fields without changing list position.
+        out[idx] = {
+            ...existing,
+            ...next,
+            _streamKey: existing._streamKey,
+            _sourceAddonUrl: existing._sourceAddonUrl,
+        };
     }
 
-    const out = Array.from(map.values());
-    out.sort((a, b) => {
-        if (a._addonRank !== b._addonRank) return a._addonRank - b._addonRank;
-        if (a._streamRank !== b._streamRank) return a._streamRank - b._streamRank;
-        return a._streamKey.localeCompare(b._streamKey);
-    });
     return out;
 }
 
@@ -104,7 +104,7 @@ function createStreamsQueryFn(args: {
     return async ({ signal }: QueryFunctionContext<QueryKey>): Promise<StreamListItem[]> => {
         const perAddonTimeoutMs = 12_000;
 
-        const fetches = streamAddons.map(async (addon, addonRank) => {
+        const fetches = streamAddons.map(async (addon) => {
             if (signal.aborted) return;
 
             const formattedId =
@@ -126,16 +126,15 @@ function createStreamsQueryFn(args: {
 
             const items: StreamListItem[] = rawStreams.map((s: Stream, streamIndex: number) => {
                 const baseKey = computeBaseStreamKey(s, streamIndex);
+                const streamKey = `${addon.url}::${baseKey}`;
                 const addonName = typeof s.addonName === 'string' && s.addonName.length > 0 ? s.addonName : addon.name;
 
                 return {
                     ...s,
                     addonName,
-                    _streamKey: baseKey,
+                    _streamKey: streamKey,
                     _sourceAddonUrl: addon.url,
                     _sourceAddonName: addon.name,
-                    _addonRank: addonRank,
-                    _streamRank: streamIndex,
                 };
             });
 

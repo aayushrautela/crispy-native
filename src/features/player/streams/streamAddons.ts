@@ -58,8 +58,7 @@ export function computeStreamAddons(enabledAddons: Addon[], manifests: Record<st
         });
     }
 
-    // Stable ordering to avoid UI churn.
-    streamAddons.sort((a, b) => a.url.localeCompare(b.url));
+    // Preserve enabledAddons order (install/user preference order).
 
     const addonFingerprints = streamAddons.map((a) => {
         const prefixes = a.idPrefixes && a.idPrefixes.length > 0 ? a.idPrefixes.join(',') : '';

@@ -11,7 +11,7 @@ import { BackHandler, ViewStyle, View, TextStyle, FlatListProps } from 'react-na
 import { Text } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme } from '@/src/core/ThemeContext';
+import { ThemeOverrideProvider, useTheme } from '@/src/core/ThemeContext';
 
 export interface BottomSheetProps {
   title?: string;
@@ -87,6 +87,12 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
+    const sheetSurface =
+      (theme.colors as any).surfaceContainerHigh ||
+      (theme.colors as any).surfaceContainer ||
+      (theme.colors as any).surfaceContainerHighest ||
+      theme.colors.surface;
+
     // Snap Points Logic
     const effectiveSnapPoints = useMemo(() => {
       if (snapPoints) return snapPoints;
@@ -127,10 +133,10 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
 
 
     const backgroundStyle = useMemo<ViewStyle>(() => ({
-      backgroundColor: theme.colors.surface,
+      backgroundColor: sheetSurface,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-    }), [theme.colors.surface]);
+    }), [sheetSurface]);
 
     const handleIndicatorStyle = useMemo<ViewStyle>(() => ({
       backgroundColor: theme.colors.onSurfaceVariant,
@@ -147,11 +153,11 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       paddingHorizontal: 24,
       paddingTop: 16,
       paddingBottom: 12,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: sheetSurface,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       alignItems: 'center', // Center the title
-    }), [theme.colors.surface]);
+    }), [sheetSurface]);
 
     const titleStyle = useMemo<TextStyle>(() => ({
       fontWeight: 'bold',
@@ -221,15 +227,17 @@ export const CustomBottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
       >
-        {title && (
-          <View style={headerStyle}>
-            <Text variant="titleLarge" style={titleStyle}>
-              {title}
-            </Text>
-          </View>
-        )}
-        
-        {renderContent()}
+        <ThemeOverrideProvider theme={theme}>
+          {title && (
+            <View style={headerStyle}>
+              <Text variant="titleLarge" style={titleStyle}>
+                {title}
+              </Text>
+            </View>
+          )}
+
+          {renderContent()}
+        </ThemeOverrideProvider>
       </BottomSheetModal>
     );
   }

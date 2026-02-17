@@ -25,6 +25,4 @@ export interface StreamListItem extends Stream {
     _streamKey: string;
     _sourceAddonUrl: string;
     _sourceAddonName?: string;
-    _addonRank: number;
-    _streamRank: number;
 }
