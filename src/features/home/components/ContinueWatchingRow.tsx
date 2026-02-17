@@ -1,4 +1,4 @@
-import { MetaPreview } from '@/src/core/services/AddonService';
+import { MetaPreview } from '@/src/core/types/stremio';
 import { TraktService } from '@/src/core/services/TraktService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';

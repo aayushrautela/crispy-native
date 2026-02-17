@@ -1,4 +1,4 @@
-import { MetaPreview } from '@/src/core/services/AddonService';
+import { MetaPreview } from '@/src/core/types/stremio';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CatalogActionsSheet } from '../components/CatalogActionsSheet';
 

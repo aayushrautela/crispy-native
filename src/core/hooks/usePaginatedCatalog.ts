@@ -1,7 +1,8 @@
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { AddonService, MetaPreview } from '../services/AddonService';
+import { getCatalog } from '../addons/addonClient';
+import { MetaPreview } from '../types/stremio';
 
 const PAGE_SIZE = 20;
 
@@ -50,7 +51,7 @@ export const usePaginatedCatalog = (
             }
 
             const results = await Promise.allSettled(
-                targetUrls.map(url => AddonService.getCatalog(url, type, id, currentExtra))
+                targetUrls.map(url => getCatalog(url, type, id, currentExtra, manifests[url]))
             );
 
             const metas = results.flatMap((r, idx) => {

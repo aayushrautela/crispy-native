@@ -1,13 +1,6 @@
-export interface Stream {
-    url?: string;
-    infoHash?: string;
-    fileIdx?: number;
-    behaviorHints?: {
-        headers?: Record<string, string>;
-        [key: string]: any;
-    };
-    [key: string]: any;
-}
+import type { Stream } from '@/src/features/player/types/streams';
+
+export type { Stream };
 
 export type PlayerStatus =
     | 'idle'

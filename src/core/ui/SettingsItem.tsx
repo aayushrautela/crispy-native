@@ -8,6 +8,7 @@ import { Typography } from './Typography';
 interface SettingsItemProps {
     label: string;
     icon?: React.ElementType; // Better type for Lucide icons
+    iconElement?: React.ReactNode;
     rightElement?: React.ReactNode;
     onPress?: () => void;
     showChevron?: boolean;
@@ -18,6 +19,7 @@ interface SettingsItemProps {
 export function SettingsItem({
     label,
     icon: Icon,
+    iconElement,
     rightElement,
     onPress,
     showChevron = true,
@@ -34,11 +36,11 @@ export function SettingsItem({
             style={styles.container}
         >
             <View style={styles.left}>
-                {Icon && (
-                    <View style={[styles.iconCircle, { backgroundColor: theme.colors.secondaryContainer }]}>
+                {iconElement || (Icon && (
+                    <View style={[styles.iconCircle, { backgroundColor: theme.colors.secondaryContainer }]}> 
                         <Icon size={24} color={theme.colors.onSecondaryContainer} />
                     </View>
-                )}
+                ))}
                 <View style={styles.textContainer}>
                     <Typography
                         variant="body-large" // M3 uses larger body text for lists

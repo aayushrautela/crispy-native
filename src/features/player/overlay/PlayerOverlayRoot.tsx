@@ -1,5 +1,5 @@
 import CrispyNativeCore, { type CrispyMediaMetadata } from '@/modules/crispy-native-core';
-import { AddonService } from '@/src/core/services/AddonService';
+import { fetchAllSubtitles } from '@/src/core/addons/addonClient';
 import { IntroService, type IntroTimestamps } from '@/src/core/services/IntroService';
 import { useProviderStore } from '@/src/core/stores/providerStore';
 import { useUserStore } from '@/src/core/stores/userStore';
@@ -96,6 +96,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
     const { theme } = useTheme();
     const settings = useUserStore((s) => s.settings);
     const addons = useUserStore((s) => s.addons);
+    const manifests = useUserStore((s) => s.manifests);
     const getStreams = useProviderStore((s) => s.getStreams);
 
     const sessionId = useMemo(() => props.sessionId || '', [props.sessionId]);
@@ -440,7 +441,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         let cancelled = false;
         setExternalSubtitlesLoading(true);
 
-        AddonService.fetchAllSubtitles(addonUrls, contentType, contentId)
+        fetchAllSubtitles(addonUrls, manifests, contentType, contentId)
             .then((subs) => {
                 if (cancelled) return;
                 setExternalSubtitles(subs || []);
@@ -457,7 +458,7 @@ export default function PlayerOverlayRoot(props: PlayerOverlayRootProps) {
         return () => {
             cancelled = true;
         };
-    }, [contentId, contentType, addons]);
+    }, [contentId, contentType, addons, manifests]);
 
     useEffect(() => {
         if (!selectedExternalSubtitleUrl) { setSubtitleCues([]); setCurrentSubtitleText(''); return; }

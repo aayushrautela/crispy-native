@@ -18,6 +18,11 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# TorrServer (downloaded binaries)
+modules/crispy-native-core/android/src/main/jniLibs/**/libtorrserver.so
+modules/crispy-native-core/android/src/main/jniLibs/**/libtorrserver.so.tmp
+modules/crispy-native-core/android/src/main/assets/torrserver/
+
 # Metro
 .metro-health-check*
 

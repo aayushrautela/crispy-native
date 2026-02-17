@@ -1,5 +1,5 @@
 import { usePaginatedCatalog } from '@/src/core/hooks/usePaginatedCatalog';
-import { MetaPreview } from '@/src/core/services/AddonService';
+import { MetaPreview } from '@/src/core/types/stremio';
 import { useTheme } from '@/src/core/ThemeContext';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';

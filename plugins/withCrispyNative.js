@@ -20,22 +20,25 @@ const withCrispyNative = (config) => {
     // 3. Android App Configuration (Splits & Packaging)
     config = withAppConfiguration(config);
 
-    // 4. Picture-in-Picture Support
+    // 4. Ensure native libs are extracted (required for TorrServer exec)
+    config = withExtractNativeLibs(config);
+
+    // 5. Picture-in-Picture Support
     config = withAndroidManifestPiP(config);
 
-    // 5. Enable Bridgeless Mode (Required by Reanimated v4)
+    // 6. Enable Bridgeless Mode (Required by Reanimated v4)
     config = withBridgelessEnabled(config);
 
-    // 6. Add Audio Permissions & Media Receiver
+    // 7. Add Audio Permissions & Media Receiver
     config = withAudioConfig(config);
 
-    // 7. Enforce localhost-only cleartext policy for local streaming
+    // 8. Enforce localhost-only cleartext policy for local streaming
     config = withLocalhostCleartextPolicy(config);
 
-    // 8. Add ProGuard Rules
+    // 9. Add ProGuard Rules
     config = withProGuardRules(config);
 
-    // 9. iOS Podfile Configuration (KSPlayer)
+    // 10. iOS Podfile Configuration (KSPlayer)
     config = withIosConfiguration(config);
 
     return config;
@@ -370,6 +373,23 @@ const withAppConfiguration = (config) => {
             }
 
             config.modResults.contents = buildGradle;
+        }
+        return config;
+    });
+};
+
+/**
+ * Force native libraries extraction.
+ *
+ * TorrServer is executed as a native payload from `ApplicationInfo.nativeLibraryDir`.
+ * If native libs aren't extracted (extractNativeLibs=false), the executable may not
+ * exist as a real filesystem path and process spawning will fail.
+ */
+const withExtractNativeLibs = (config) => {
+    return withAndroidManifest(config, (config) => {
+        const mainApplication = config.modResults.manifest.application?.[0];
+        if (mainApplication?.$) {
+            mainApplication.$['android:extractNativeLibs'] = 'true';
         }
         return config;
     });

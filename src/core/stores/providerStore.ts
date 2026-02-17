@@ -1,6 +1,7 @@
 import { useUserStore } from '@/src/core/stores/userStore';
 import { create } from 'zustand';
-import { AddonService, CatalogResponse, MetaPreview } from '../services/AddonService';
+import { getCatalog, getMeta, getStreams, search } from '../addons/addonClient';
+import { CatalogResponse, MetaPreview } from '../types/stremio';
 
 interface ProviderState {
     catalogs: MetaPreview[];
@@ -28,7 +29,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
             const promises = addons.map(addon => {
                 const manifest = manifests[addon.url];
                 if (manifest?.catalogs?.some(c => c.type === type && c.id === id)) {
-                    return AddonService.getCatalog(addon.url, type, id);
+                    return getCatalog(addon.url, type, id, undefined, manifest);
                 }
                 return null;
             }).filter(p => p !== null) as Promise<CatalogResponse>[];
@@ -65,7 +66,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
                 const manifest = manifests[addon.url];
                 const hasSearch = manifest?.catalogs?.some(c => c.type === type);
                 if (hasSearch) {
-                    return AddonService.search(addon.url, type, query);
+                    return search(addon.url, type, query, manifest);
                 }
                 return null;
             }).filter(p => p !== null) as Promise<CatalogResponse>[];
@@ -94,13 +95,13 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
     fetchMeta: async (type, id) => {
         set({ isLoading: true, error: null, selectedMeta: null });
-        const { addons } = useUserStore.getState();
+        const { addons, manifests } = useUserStore.getState();
 
         try {
             // Usually we only need one meta response, prioritizing the "best" addon (e.g. Cinemeta)
             // For now, try sequentially or take first success
             const promises = addons.map(addon => {
-                return AddonService.getMeta(addon.url, type, id);
+                return getMeta(addon.url, type, id, manifests[addon.url]);
             });
 
             const results = await Promise.allSettled(promises);
@@ -145,7 +146,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
             if (!hasStreamResource || !supportsType) return null;
 
             const addonName = manifest.name || addon.url;
-            return AddonService.getStreams(addon.url, normalizedType, id).then((res) => ({
+            return getStreams(addon.url, normalizedType, id, manifest).then((res) => ({
                 streams: (res.streams || []).map(s => ({
                     ...s,
                     addonName,

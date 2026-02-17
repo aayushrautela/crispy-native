@@ -15,7 +15,6 @@ import androidx.core.app.NotificationCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
@@ -38,9 +37,10 @@ class TorrentService : Service() {
         private const val LOCAL_PORT = 8090
 
         private const val RUNTIME_DIR = "torrserver"
-        private const val BIN_DIR = "bin"
         private const val DATA_DIR = "data"
         private const val TORRENTS_DIR = "torrents"
+
+        private const val TORRSERVER_LIB_NAME = "libtorrserver.so"
 
         private fun safeSize(path: File): Long {
             return try {
@@ -203,45 +203,32 @@ class TorrentService : Service() {
     private fun runtimeDataDir(): File = File(runtimeRoot(), DATA_DIR)
     private fun runtimeTorrentsDir(): File = File(runtimeRoot(), TORRENTS_DIR)
 
-    private fun detectAssetAbi(): String? {
-        val supported = Build.SUPPORTED_ABIS?.toList() ?: emptyList()
-        for (abi in supported) {
-            val mapped = when (abi) {
-                "arm64-v8a" -> "arm64"
-                "armeabi-v7a", "armeabi" -> "arm7"
-                "x86_64" -> "amd64"
-                "x86" -> "386"
-                else -> null
-            }
-            if (mapped != null) return mapped
-        }
-        return null
-    }
-
-    private fun ensureBundledBinary(): File? {
-        val assetAbi = detectAssetAbi() ?: run {
-            Log.e(TAG, "Unsupported ABI for TorrServer: ${Build.SUPPORTED_ABIS?.joinToString()}")
+    private fun resolveBundledTorrServerBinary(): File? {
+        val nativeLibDir = applicationInfo.nativeLibraryDir
+        if (nativeLibDir.isNullOrBlank()) {
+            Log.e(TAG, "nativeLibraryDir is empty; cannot locate TorrServer binary")
             return null
         }
 
-        val destination = File(File(runtimeRoot(), BIN_DIR), "torrserver")
-        destination.parentFile?.mkdirs()
-
-        val assetPath = "torrserver/$assetAbi/torrserver"
-        try {
-            assets.open(assetPath).use { input ->
-                FileOutputStream(destination).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            if (!destination.setExecutable(true, true)) {
-                Log.w(TAG, "Failed to set executable bit on ${destination.absolutePath}")
-            }
-            return destination
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed extracting TorrServer binary asset=$assetPath", e)
+        val binary = File(nativeLibDir, TORRSERVER_LIB_NAME)
+        if (!binary.exists()) {
+            Log.e(
+                TAG,
+                "Missing TorrServer binary at ${binary.absolutePath}. " +
+                    "Expected $TORRSERVER_LIB_NAME to be packaged via jniLibs for this ABI. " +
+                    "(CI: run .github/scripts/fetch-torrserver-binaries.sh before building)"
+            )
             return null
         }
+        if (!binary.isFile) {
+            Log.e(TAG, "TorrServer binary path is not a file: ${binary.absolutePath}")
+            return null
+        }
+        if (!binary.canExecute()) {
+            Log.w(TAG, "TorrServer binary is not marked executable: ${binary.absolutePath}")
+        }
+        Log.i(TAG, "Using TorrServer binary: ${binary.absolutePath}")
+        return binary
     }
 
     private fun ensureServerStarted(): Boolean {
@@ -251,7 +238,7 @@ class TorrentService : Service() {
                 return true
             }
 
-            val binary = ensureBundledBinary() ?: return false
+            val binary = resolveBundledTorrServerBinary() ?: return false
             runtimeDataDir().mkdirs()
             runtimeTorrentsDir().mkdirs()
 

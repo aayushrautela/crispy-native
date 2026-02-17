@@ -1,4 +1,4 @@
-import { MetaPreview } from './AddonService';
+import { MetaPreview } from '../types/stremio';
 import { isStrictMediaId, toStrictMediaId } from '../ids/mediaIds';
 
 /**

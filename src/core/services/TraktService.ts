@@ -846,8 +846,8 @@ export class TraktService {
     public async getRatings() {
         if (!this.isAuthenticated()) return [];
         const [movies, shows] = await Promise.all([
-            this.apiRequest<any[]>('/sync/ratings/movies?extended=full'),
-            this.apiRequest<any[]>('/sync/ratings/shows?extended=full')
+            this.apiRequest<any[]>('/sync/ratings/movies?extended=full,images'),
+            this.apiRequest<any[]>('/sync/ratings/shows?extended=full,images')
         ]);
         const all = [
             ...(movies || []).map(i => ({ ...i, type: 'movie' })),

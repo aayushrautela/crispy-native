@@ -1,4 +1,4 @@
-import { AddonService } from '@/src/core/services/AddonService';
+import { searchGrouped } from '@/src/core/addons/addonClient';
 import { TMDBService } from '@/src/core/services/TMDBService';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
@@ -80,7 +80,7 @@ export default function SearchScreen() {
             const sortedTmdb = tmdbResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 
             // 2. Fetch Addon Results Grouped
-            const addonPromises = fetchTypes.map(t => AddonService.searchGrouped(manifests, t, query));
+            const addonPromises = fetchTypes.map(t => searchGrouped(manifests, t, query));
             const addonResponses = await Promise.allSettled(addonPromises);
             const addonGroups = addonResponses
                 .filter((r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled')

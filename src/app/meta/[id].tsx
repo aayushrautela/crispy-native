@@ -18,11 +18,12 @@ import { RatingsSection } from '@/src/features/meta/components/RatingsSection';
 import { useAiInsights } from '@/src/features/meta/hooks/useAiInsights';
 import { useMetaAggregator } from '@/src/features/meta/hooks/useMetaAggregator';
 import { StreamSelector } from '@/src/features/player/components/StreamSelector';
-import { useStreams } from '@/src/features/player/hooks/useStreams';
+import { prefetchStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
 import { makeEpisodeId, toImdbIdForExternalLookup, toStrictBaseMediaId } from '@/src/core/ids/mediaIds';
 import { createMaterial3Theme } from '@pchmn/expo-material3-theme';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Share2, Volume2, VolumeX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -153,7 +154,12 @@ export default function MetaDetailsScreen() {
         return baseId;
     }, [activeSeason, isSeries, strictBaseId, watchState.episode, watchState.state]);
 
-    useStreams(isSeries ? 'series' : 'movie', preFetchId, !!preFetchId);
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (!preFetchId) return;
+        prefetchStreams(queryClient, { type: isSeries ? 'series' : 'movie', id: preFetchId });
+    }, [isSeries, preFetchId, queryClient]);
 
     // Trakt Logic
     const {

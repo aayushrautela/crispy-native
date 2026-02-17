@@ -2,7 +2,7 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { persistQueryClient } from '@tanstack/react-query-persist-client';
 import React, { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
-import { AddonService } from './services/AddonService';
+import { fetchManifest } from './addons/addonClient';
 import { storage } from './storage';
 import { useUserStore } from './stores/userStore';
 
@@ -49,7 +49,7 @@ export const DiscoveryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const refreshAddons = useCallback(async () => {
         for (const addon of addons) {
             try {
-                const manifest = await AddonService.fetchManifest(addon.url);
+                const manifest = await fetchManifest(addon.url);
                 updateManifest(addon.url, manifest);
             } catch (e) {
                 console.error(`Failed to refresh addon: ${addon.url}`, e);

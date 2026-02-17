@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { AddonService } from '../services/AddonService';
+import { getCatalog, getMeta } from '../addons/addonClient';
 import { useUserStore } from '../stores/userStore';
 import { AddonManifest } from '../types/addon-types';
 
@@ -23,8 +23,9 @@ export const useCatalog = (type: string, id: string, extra?: Record<string, any>
     return useQuery({
         queryKey: ['catalog', type, id, extra, targetUrls],
         queryFn: async () => {
+            const safeManifests = manifests as Record<string, AddonManifest>;
             const results = await Promise.allSettled(
-                targetUrls.map(url => AddonService.getCatalog(url, type, id, extra))
+                targetUrls.map(url => getCatalog(url, type, id, extra, safeManifests[url]))
             );
 
             // Filter successful results and log failures
@@ -59,7 +60,7 @@ export const useMeta = (type: string, id: string) => {
             // For meta, we usually try addons in order or if they support the type
             for (const url of addonUrls) {
                 try {
-                    const res = await AddonService.getMeta(url, type, id);
+                    const res = await getMeta(url, type, id, manifests[url]);
                     if (res?.meta) return res.meta;
                 } catch {
                     // Meta fetch failed for this addon, try next

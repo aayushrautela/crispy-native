@@ -1,6 +1,8 @@
-import { AddonService, MetaPreview } from '@/src/core/services/AddonService';
+import { getCatalog } from '@/src/core/addons/addonClient';
 import { useUserStore } from '@/src/core/stores/userStore';
 import { useTheme } from '@/src/core/ThemeContext';
+import { AddonManifest } from '@/src/core/types/addon-types';
+import { MetaPreview } from '@/src/core/types/stremio';
 import { BottomSheetRef, CustomBottomSheet } from '@/src/core/ui/BottomSheet';
 import { EmptyState } from '@/src/core/ui/EmptyState';
 import { ExpressiveSurface } from '@/src/core/ui/ExpressiveSurface';
@@ -104,7 +106,7 @@ export default function DiscoverScreen() {
     const fetchItems = useCallback(async () => {
         setLoading(true);
         try {
-            const catalogsToFetch: { url: string; type: string; id: string }[] = [];
+            const catalogsToFetch: { url: string; type: string; id: string; manifest: AddonManifest }[] = [];
             Object.entries(manifests).forEach(([url, manifest]) => {
                 if (!manifest.catalogs) return;
                 manifest.catalogs.forEach(cat => {
@@ -113,14 +115,14 @@ export default function DiscoverScreen() {
                         : cat.type === selectedType;
 
                     if (isRelevantType) {
-                        catalogsToFetch.push({ url, type: cat.type, id: cat.id });
+                        catalogsToFetch.push({ url, type: cat.type, id: cat.id, manifest });
                     }
                 });
             });
 
             const limitedCatalogs = catalogsToFetch.slice(0, 12);
             const results = await Promise.allSettled(
-                limitedCatalogs.map(c => AddonService.getCatalog(c.url, c.type, c.id))
+                limitedCatalogs.map(c => getCatalog(c.url, c.type, c.id, undefined, c.manifest))
             );
 
             const allMetas: MetaPreview[] = [];
