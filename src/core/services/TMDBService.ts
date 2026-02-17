@@ -18,11 +18,16 @@ const INCLUDE_IMAGE_LANGUAGE = ['en', 'null', 'fr', 'de', 'es', 'it', 'ja', 'ko'
 
 let tmdbClient: TMDB | null = null;
 let tmdbClientToken = '';
+const loggedTmdbNotFound = new Set<string>();
 
 interface TmdbErrorLike {
     status_code?: number;
     status_message?: string;
     message?: string;
+    status?: number;
+    response?: {
+        status?: number;
+    };
 }
 
 function normalizeToken(value: string | null | undefined): string {
@@ -76,6 +81,29 @@ function getErrorMessage(error: unknown): string {
     }
     if (maybe?.message) return maybe.message;
     return String(error);
+}
+
+function getErrorStatus(error: unknown): number | null {
+    const maybe = error as TmdbErrorLike;
+    const status = maybe?.status_code ?? maybe?.status ?? maybe?.response?.status;
+    return typeof status === 'number' ? status : null;
+}
+
+function isTmdbNotFoundError(error: unknown): boolean {
+    const status = getErrorStatus(error);
+    if (status === 34 || status === 404) return true;
+
+    const message = getErrorMessage(error).toLowerCase();
+    return message.includes('resource you requested could not be found') || message.includes('not found');
+}
+
+function logTmdbNotFoundOnce(scope: string, key: string, error: unknown): void {
+    const dedupeKey = `${scope}:${key}`;
+    if (loggedTmdbNotFound.has(dedupeKey)) return;
+    if (loggedTmdbNotFound.size > 500) loggedTmdbNotFound.clear();
+
+    loggedTmdbNotFound.add(dedupeKey);
+    console.warn(`[TMDBService] ${scope} not found (${key}):`, getErrorMessage(error));
 }
 
 export interface TMDBCast {
@@ -434,6 +462,10 @@ export class TMDBService {
             StorageService.setGlobal(persistentKey, enriched);
             return enriched;
         } catch (e) {
+            if (isTmdbNotFoundError(e)) {
+                logTmdbNotFoundOnce('enrichment', String(stremioId), e);
+                return {};
+            }
             console.error('[TMDBService] Failed to enrich:', stremioId, getErrorMessage(e));
             return {};
         }
@@ -476,6 +508,10 @@ export class TMDBService {
                 runtime: e.runtime ? `${e.runtime}m` : null,
             };
         } catch (e) {
+            if (isTmdbNotFoundError(e)) {
+                logTmdbNotFoundOnce('episode details', `${tmdbId}:S${seasonNumber}E${episodeNumber}`, e);
+                return null;
+            }
             console.error('[TMDBService] Failed to fetch episode details:', getErrorMessage(e));
             return null;
         }

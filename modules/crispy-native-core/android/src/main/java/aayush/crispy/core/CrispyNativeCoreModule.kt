@@ -222,8 +222,10 @@ class CrispyNativeCoreModule : Module() {
       val intent = Intent(activity ?: ctx, PlayerActivity::class.java)
       if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-      if (params.sessionId.isBlank() || params.url.isBlank()) {
-        Log.e("CrispyModule", "openPlayerActivity missing sessionId/url")
+      val hasUrl = params.url.isNotBlank()
+      val hasTorrentSource = !params.infoHash.isNullOrBlank()
+      if (params.sessionId.isBlank() || (!hasUrl && !hasTorrentSource)) {
+        Log.e("CrispyModule", "openPlayerActivity missing sessionId and/or source (url/infoHash)")
         return@AsyncFunction false
       }
 

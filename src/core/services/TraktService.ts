@@ -292,6 +292,8 @@ export class TraktService {
             ...item,
             ...episodeInfo,
             ids: core.ids,
+            showIds: core.showIds,
+            episodeIds: core.episodeIds,
             id: core.id,
             name: core.showTitle || core.title,
             type: core.type,

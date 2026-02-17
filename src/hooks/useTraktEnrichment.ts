@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EnrichmentCache } from '../core/services/EnrichmentCache';
 import { TMDBService } from '../core/services/TMDBService';
-import { toStrictMediaId } from '../core/ids/mediaIds';
+import { toStrictBaseMediaId, toStrictMediaId } from '../core/ids/mediaIds';
 
 export function useTraktEnrichment(item: any, skip: boolean = false) {
     // 1. Stable Key Generation
@@ -23,6 +23,12 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
     const currentIdRef = useRef(cacheKey);
 
     useEffect(() => {
+        if (skip) {
+            currentIdRef.current = null;
+            setEnriched(item);
+            return;
+        }
+
         // If the item prop changed completely, we need to reset or re-enrich
         const newKey = EnrichmentCache.getKey(item);
 
@@ -46,8 +52,11 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
 
         const enrich = async () => {
             // Skip TMDB when Continue Watching already has display-ready visuals.
-            const hasDisplayImage = !!(item.thumbnail || item.backdrop || item.poster);
-            const hasLogo = !!item.logo;
+            const isLandscapeCard = item.posterShape === 'landscape';
+            const hasDisplayImage = isLandscapeCard
+                ? !!(item.thumbnail || item.backdrop)
+                : !!item.poster;
+            const hasLogo = !isLandscapeCard || !!item.logo;
             const needsEpisodeMeta =
                 item.type === 'series' &&
                 item.season !== undefined &&
@@ -64,7 +73,8 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
             try {
                 await EnrichmentCache.getOrFetch(newKey, async () => {
 
-                    const ids = item.ids || {};
+                    const isEpisode = item.season !== undefined && item.episodeNumber !== undefined;
+                    const ids = (isEpisode ? item.showIds : undefined) || item.ids || {};
                     const candidateId =
                         ids.tmdb
                             ? `tmdb:${ids.tmdb}`
@@ -75,9 +85,16 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
                                     : item.id;
 
                     const type = item.type === 'movie' ? 'movie' : 'series';
-                    const finalId = candidateId ? toStrictMediaId(candidateId, type) : null;
+                    const strictId = candidateId ? toStrictMediaId(candidateId, type) : null;
+                    const finalId = strictId ? (toStrictBaseMediaId(strictId, type) || strictId) : null;
 
-                    if (!finalId) return null;
+                    if (!finalId) {
+                        EnrichmentCache.set(newKey, item);
+                        if (mounted && currentIdRef.current === newKey) {
+                            setEnriched(item);
+                        }
+                        return item;
+                    }
                     const enrichedMeta = await TMDBService.getEnrichedMeta(finalId, type);
 
                     // Episode Logic
@@ -97,7 +114,7 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
                                     episodeTitle: epDetails.name || item.episodeTitle
                                 };
                             }
-                        } catch (e) {
+                        } catch {
                             // ignore episode failures
                         }
                     }
@@ -125,10 +142,18 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
                         }
                         return finalResult;
                     }
-                    return null;
+
+                    EnrichmentCache.set(newKey, item);
+                    if (mounted && currentIdRef.current === newKey) {
+                        setEnriched(item);
+                    }
+                    return item;
                 });
-            } catch (e) {
-                // Fail silently
+            } catch {
+                EnrichmentCache.set(newKey, item);
+                if (mounted && currentIdRef.current === newKey) {
+                    setEnriched(item);
+                }
             }
         };
 
@@ -137,7 +162,7 @@ export function useTraktEnrichment(item: any, skip: boolean = false) {
         return () => {
             mounted = false;
         };
-    }, [item, cacheKey]); // Rely on stable serialized key or item changes
+    }, [item, cacheKey, skip]); // Rely on stable serialized key or item changes
 
     return enriched;
 }

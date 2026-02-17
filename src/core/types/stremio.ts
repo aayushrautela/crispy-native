@@ -1,3 +1,10 @@
+interface ExternalIds {
+    trakt?: number;
+    imdb?: string;
+    tmdb?: number;
+    slug?: string;
+}
+
 export interface MetaPreview {
     id: string;
     type: string;
@@ -19,12 +26,9 @@ export interface MetaPreview {
     rating?: string;
     imdbRating?: string;
     numericRating?: number;
-    ids?: {
-        trakt?: number;
-        imdb?: string;
-        tmdb?: number;
-        slug?: string;
-    };
+    ids?: ExternalIds;
+    showIds?: ExternalIds;
+    episodeIds?: ExternalIds;
 }
 
 export interface CatalogResponse {
