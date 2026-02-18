@@ -1,7 +1,21 @@
 import { useUserStore } from '@/src/core/stores/userStore';
 import { create } from 'zustand';
-import { getCatalog, getMeta, getStreams, search } from '../addons/addonClient';
+import { getCatalog, getMeta, getStreams as fetchStreams, search } from '../addons/addonClient';
 import { CatalogResponse, MetaPreview } from '../types/stremio';
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+            reject(new Error(`[providerStore] Timeout (${ms}ms): ${label}`));
+        }, ms);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        if (timer) clearTimeout(timer);
+    });
+}
 
 interface ProviderState {
     catalogs: MetaPreview[];
@@ -128,6 +142,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         const { addons, manifests } = useUserStore.getState();
 
         const normalizedType = type === 'show' ? 'series' : type;
+        const perAddonTimeoutMs = 30_000;
 
         const promises = addons.map(addon => {
             const manifest = manifests[addon.url];
@@ -146,7 +161,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
             if (!hasStreamResource || !supportsType) return null;
 
             const addonName = manifest.name || addon.url;
-            return getStreams(addon.url, normalizedType, id, manifest).then((res) => ({
+            const label = `${addon.url} (${normalizedType}:${id})`;
+            return withTimeout(fetchStreams(addon.url, normalizedType, id, manifest), perAddonTimeoutMs, label).then((res) => ({
                 streams: (res.streams || []).map(s => ({
                     ...s,
                     addonName,

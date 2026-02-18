@@ -158,7 +158,7 @@ function createStreamsQueryFn(args: {
     const { queryClient, queryKey, type, requestIds, streamAddons, manifests } = args;
 
     return async ({ signal }: QueryFunctionContext<QueryKey>): Promise<StreamListItem[]> => {
-        const perAddonTimeoutMs = 12_000;
+        const perAddonTimeoutMs = 30_000;
 
         const fetches = streamAddons.map(async (addon) => {
             if (signal.aborted) return;
