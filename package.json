@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@crispy-streaming/crispy-addon-client": "^2.0.0",
-    "@crispy-streaming/media-core": "^0.4.0",
+    "@crispy-streaming/media-core": "^0.4.1",
     "@crispy-streaming/supabase-contract": "^0.2.4",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.2.8",
