@@ -21,7 +21,7 @@ import { StreamSelector } from '@/src/features/player/components/StreamSelector'
 import { prefetchStreams } from '@/src/features/player/hooks/useStreams';
 import { useTraktContext } from '@/src/features/trakt/context/TraktContext';
 import { useTraktWatchState } from '@/src/features/trakt/hooks/useTraktWatchState';
-import { makeEpisodeId, toImdbIdForExternalLookup, toStrictBaseMediaId } from '@/src/core/ids/mediaIds';
+import { makeEpisodeId, parseAppEpisodeSuffix, toImdbIdForExternalLookup, toStrictBaseMediaId } from '@/src/core/ids/mediaIds';
 import { createMaterial3Theme } from '@pchmn/expo-material3-theme';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -104,6 +104,7 @@ export default function MetaDetailsScreen() {
     });
 
     const isSeries = type === 'series' || type === 'tv' || enriched.type === 'series';
+    const streamType = isSeries ? 'series' : 'movie';
 
     const strictBaseId = useMemo(() => {
         const candidate = (enriched?.id as string | undefined) || routeStrictBaseId || (id as string);
@@ -116,8 +117,13 @@ export default function MetaDetailsScreen() {
             return enriched.imdbId;
         }
         if (!strictBaseId) return null;
-        return toImdbIdForExternalLookup(strictBaseId, isSeries ? 'series' : 'movie');
-    }, [enriched?.imdbId, isSeries, strictBaseId]);
+        return toImdbIdForExternalLookup(strictBaseId, streamType);
+    }, [enriched?.imdbId, streamType, strictBaseId]);
+
+    const strictImdbBaseId = useMemo(() => {
+        if (!externalImdbId) return null;
+        return toStrictBaseMediaId(externalImdbId, streamType);
+    }, [externalImdbId, streamType]);
 
     // 1. Lifted Watch State
     const watchState = useTraktWatchState(
@@ -154,12 +160,55 @@ export default function MetaDetailsScreen() {
         return baseId;
     }, [activeSeason, isSeries, strictBaseId, watchState.episode, watchState.state]);
 
+    const streamSheetId = useMemo(() => {
+        if (!strictBaseId) return '';
+        if (isSeries && selectedEpisode) return makeEpisodeId(strictBaseId, activeSeason, selectedEpisode.episode);
+        return strictBaseId;
+    }, [activeSeason, isSeries, selectedEpisode, strictBaseId]);
+
+    const buildStreamIdCandidates = useCallback(
+        (requestId: string): string[] => {
+            const candidates: string[] = [];
+            const seen = new Set<string>();
+
+            const pushCandidate = (value: string | null | undefined) => {
+                if (typeof value !== 'string') return;
+                const trimmed = value.trim();
+                if (!trimmed || seen.has(trimmed)) return;
+                seen.add(trimmed);
+                candidates.push(trimmed);
+            };
+
+            pushCandidate(requestId);
+
+            if (!externalImdbId) return candidates;
+
+            const { season, episode } = parseAppEpisodeSuffix(requestId);
+            if (typeof season === 'number' && typeof episode === 'number') {
+                if (strictImdbBaseId) {
+                    pushCandidate(makeEpisodeId(strictImdbBaseId, season, episode));
+                }
+                pushCandidate(`${externalImdbId}:${season}:${episode}`);
+                return candidates;
+            }
+
+            pushCandidate(strictImdbBaseId);
+            pushCandidate(externalImdbId);
+
+            return candidates;
+        },
+        [externalImdbId, strictImdbBaseId]
+    );
+
+    const preFetchIdCandidates = useMemo(() => buildStreamIdCandidates(preFetchId), [buildStreamIdCandidates, preFetchId]);
+    const streamSheetIdCandidates = useMemo(() => buildStreamIdCandidates(streamSheetId), [buildStreamIdCandidates, streamSheetId]);
+
     const queryClient = useQueryClient();
 
     useEffect(() => {
         if (!preFetchId) return;
-        prefetchStreams(queryClient, { type: isSeries ? 'series' : 'movie', id: preFetchId });
-    }, [isSeries, preFetchId, queryClient]);
+        prefetchStreams(queryClient, { type: streamType, id: preFetchId, idCandidates: preFetchIdCandidates });
+    }, [preFetchId, preFetchIdCandidates, queryClient, streamType]);
 
     // Trakt Logic
     const {
@@ -745,12 +794,9 @@ export default function MetaDetailsScreen() {
                 }}
             >
                 <StreamSelector
-                    type={isSeries ? 'series' : 'movie'}
-                    id={(() => {
-                        if (!strictBaseId) return '';
-                        if (isSeries && selectedEpisode) return makeEpisodeId(strictBaseId, activeSeason, selectedEpisode.episode);
-                        return strictBaseId;
-                    })()}
+                    type={streamType}
+                    id={streamSheetId}
+                    idCandidates={streamSheetIdCandidates}
                     onSelect={handleStreamSelect}
                     hideHeader
                     onStreamsLoaded={setAvailableStreams}

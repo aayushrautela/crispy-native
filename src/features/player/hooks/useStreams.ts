@@ -85,21 +85,77 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     });
 }
 
-// computeStreamAddons moved to src/features/player/streams/streamAddons.ts
+function logStreamsDebug(message: string, payload?: unknown) {
+    if (!__DEV__) return;
+    if (payload === undefined) {
+        console.log(`[useStreams] ${message}`);
+        return;
+    }
+    console.log(`[useStreams] ${message}`, payload);
+}
 
-export function streamsQueryKey(params: { type: StremioType; id: string; addonFingerprints: string[] }): QueryKey {
-    return ['streams', params.type, params.id, params.addonFingerprints];
+function normalizeRequestIds(id: string, idCandidates?: readonly string[]): string[] {
+    const values: string[] = [];
+    const seen = new Set<string>();
+
+    const push = (value: string | null | undefined) => {
+        if (typeof value !== 'string') return;
+        const trimmed = value.trim();
+        if (!trimmed || seen.has(trimmed)) return;
+        seen.add(trimmed);
+        values.push(trimmed);
+    };
+
+    push(id);
+
+    if (Array.isArray(idCandidates)) {
+        for (const candidate of idCandidates) push(candidate);
+    }
+
+    return values;
+}
+
+function formatFirstCompatibleId(
+    requestIds: readonly string[],
+    type: StremioType,
+    idPrefixes?: readonly string[]
+): string | null {
+    for (const requestId of requestIds) {
+        const formatted = formatIdForIdPrefixes(requestId, type, idPrefixes);
+        if (formatted) return formatted;
+    }
+
+    return null;
+}
+
+function resolveAddonRequestId(addon: StreamAddon, type: StremioType, requestIds: readonly string[]): string | null {
+    if (requestIds.length === 0) return null;
+
+    if (Array.isArray(addon.idPrefixes) && addon.idPrefixes.length > 0) {
+        return formatFirstCompatibleId(requestIds, type, addon.idPrefixes);
+    }
+
+    return formatFirstCompatibleId(requestIds, type) || requestIds[0] || null;
+}
+
+export function streamsQueryKey(params: {
+    type: StremioType;
+    id: string;
+    addonFingerprints: string[];
+    requestIds: readonly string[];
+}): QueryKey {
+    return ['streams', params.type, params.id, params.addonFingerprints, params.requestIds];
 }
 
 function createStreamsQueryFn(args: {
     queryClient: QueryClient;
     queryKey: QueryKey;
     type: StremioType;
-    id: string;
+    requestIds: string[];
     streamAddons: StreamAddon[];
     manifests: Record<string, AddonManifest>;
 }) {
-    const { queryClient, queryKey, type, id, streamAddons, manifests } = args;
+    const { queryClient, queryKey, type, requestIds, streamAddons, manifests } = args;
 
     return async ({ signal }: QueryFunctionContext<QueryKey>): Promise<StreamListItem[]> => {
         const perAddonTimeoutMs = 12_000;
@@ -107,41 +163,76 @@ function createStreamsQueryFn(args: {
         const fetches = streamAddons.map(async (addon) => {
             if (signal.aborted) return;
 
-            const formattedId =
-                formatIdForIdPrefixes(id, type, addon.idPrefixes) ||
-                formatIdForIdPrefixes(id, type) ||
-                id;
+            const formattedId = resolveAddonRequestId(addon, type, requestIds);
+            if (!formattedId) {
+                logStreamsDebug('Skipping addon: no compatible id', {
+                    addonUrl: addon.url,
+                    addonName: addon.name,
+                    type,
+                    idPrefixes: addon.idPrefixes,
+                    requestIds,
+                });
+                return;
+            }
 
             const label = `${addon.url} (${type}:${formattedId})`;
 
-            const result = await withTimeout(
-                getStreams(addon.url, type, formattedId, manifests[addon.url]),
-                perAddonTimeoutMs,
-                label
-            );
-
-            if (signal.aborted) return;
-
-            const rawStreams = Array.isArray(result?.streams) ? result.streams.filter(Boolean) : [];
-
-            const items: StreamListItem[] = rawStreams.map((s: Stream, streamIndex: number) => {
-                const baseKey = computeBaseStreamKey(s, streamIndex);
-                const streamKey = `${addon.url}::${baseKey}`;
-                const addonName = typeof s.addonName === 'string' && s.addonName.length > 0 ? s.addonName : addon.name;
-
-                return {
-                    ...s,
-                    addonName,
-                    _streamKey: streamKey,
-                    _sourceAddonUrl: addon.url,
-                    _sourceAddonName: addon.name,
-                };
+            logStreamsDebug('Requesting streams', {
+                addonUrl: addon.url,
+                addonName: addon.name,
+                type,
+                selectedId: formattedId,
+                idPrefixes: addon.idPrefixes,
+                requestIds,
             });
 
-            queryClient.setQueryData<StreamListItem[]>(queryKey, (prev) => {
-                const safePrev = Array.isArray(prev) ? prev : [];
-                return mergeStreams(safePrev, items);
-            });
+            try {
+                const result = await withTimeout(
+                    getStreams(addon.url, type, formattedId, manifests[addon.url]),
+                    perAddonTimeoutMs,
+                    label
+                );
+
+                if (signal.aborted) return;
+
+                const rawStreams = Array.isArray(result?.streams) ? result.streams.filter(Boolean) : [];
+
+                logStreamsDebug('Received streams', {
+                    addonUrl: addon.url,
+                    addonName: addon.name,
+                    type,
+                    selectedId: formattedId,
+                    count: rawStreams.length,
+                });
+
+                const items: StreamListItem[] = rawStreams.map((s: Stream, streamIndex: number) => {
+                    const baseKey = computeBaseStreamKey(s, streamIndex);
+                    const streamKey = `${addon.url}::${baseKey}`;
+                    const addonName = typeof s.addonName === 'string' && s.addonName.length > 0 ? s.addonName : addon.name;
+
+                    return {
+                        ...s,
+                        addonName,
+                        _streamKey: streamKey,
+                        _sourceAddonUrl: addon.url,
+                        _sourceAddonName: addon.name,
+                    };
+                });
+
+                queryClient.setQueryData<StreamListItem[]>(queryKey, (prev) => {
+                    const safePrev = Array.isArray(prev) ? prev : [];
+                    return mergeStreams(safePrev, items);
+                });
+            } catch (error) {
+                logStreamsDebug('Addon stream request failed', {
+                    addonUrl: addon.url,
+                    addonName: addon.name,
+                    type,
+                    selectedId: formattedId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+            }
         });
 
         await Promise.allSettled(fetches);
@@ -151,7 +242,7 @@ function createStreamsQueryFn(args: {
     };
 }
 
-export async function prefetchStreams(queryClient: QueryClient, params: { type: string; id: string }) {
+export async function prefetchStreams(queryClient: QueryClient, params: { type: string; id: string; idCandidates?: string[] }) {
     const id = params.id;
     if (!id) return;
 
@@ -160,15 +251,16 @@ export async function prefetchStreams(queryClient: QueryClient, params: { type: 
     const enabledAddons = state.addons.filter((a) => a.enabled !== false);
     const { streamAddons, addonFingerprints } = computeStreamAddons(enabledAddons, state.manifests, stremioType);
     if (streamAddons.length === 0) return;
+    const requestIds = normalizeRequestIds(id, params.idCandidates);
 
-    const queryKey = streamsQueryKey({ type: stremioType, id, addonFingerprints });
+    const queryKey = streamsQueryKey({ type: stremioType, id, addonFingerprints, requestIds });
     await queryClient.prefetchQuery({
         queryKey,
         queryFn: createStreamsQueryFn({
             queryClient,
             queryKey,
             type: stremioType,
-            id,
+            requestIds,
             streamAddons,
             manifests: state.manifests,
         }),
@@ -178,7 +270,7 @@ export async function prefetchStreams(queryClient: QueryClient, params: { type: 
     });
 }
 
-export function useStreams(type: string, id: string, enabled: boolean = true) {
+export function useStreams(type: string, id: string, enabled: boolean = true, idCandidates?: string[]) {
     const queryClient = useQueryClient();
     const addons = useUserStore((state) => state.addons);
     const manifests = useUserStore((state) => state.manifests);
@@ -191,9 +283,11 @@ export function useStreams(type: string, id: string, enabled: boolean = true) {
         [enabledAddons, manifests, stremioType]
     );
 
+    const requestIds = useMemo(() => normalizeRequestIds(id, idCandidates), [id, idCandidates]);
+
     const queryKey = useMemo(
-        () => streamsQueryKey({ type: stremioType, id, addonFingerprints }),
-        [addonFingerprints, id, stremioType]
+        () => streamsQueryKey({ type: stremioType, id, addonFingerprints, requestIds }),
+        [addonFingerprints, id, requestIds, stremioType]
     );
 
     const query = useQuery<StreamListItem[]>({
@@ -202,7 +296,7 @@ export function useStreams(type: string, id: string, enabled: boolean = true) {
             queryClient,
             queryKey,
             type: stremioType,
-            id,
+            requestIds,
             streamAddons,
             manifests,
         }),

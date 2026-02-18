@@ -21,6 +21,7 @@ export interface StreamMetadata {
 interface StreamSelectorProps {
     type: string;
     id: string;
+    idCandidates?: string[];
     onSelect: (stream: Stream) => void;
     hideHeader?: boolean;
     onStreamsLoaded?: (streams: Stream[]) => void;
@@ -117,11 +118,11 @@ function AddonFilterRow({
     );
 }
 
-export const StreamSelector = ({ type, id, onSelect, hideHeader = false, onStreamsLoaded, isVisible = true, metadata }: StreamSelectorProps) => {
+export const StreamSelector = ({ type, id, idCandidates, onSelect, hideHeader = false, onStreamsLoaded, isVisible = true, metadata }: StreamSelectorProps) => {
     const { theme } = useTheme();
     const { bottom } = useSafeAreaInsets();
 
-    const streamsQuery = useStreams(type, id, isVisible);
+    const streamsQuery = useStreams(type, id, isVisible, idCandidates);
     const streams = streamsQuery.data;
 
     const isSearching = React.useMemo(() => {
